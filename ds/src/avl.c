@@ -64,8 +64,13 @@ static node_tree_t* RecInsert(node_tree_t* node, avl_cmp_t cmp,
 static void InsertCompareAndRecurse(avl_cmp_t cmp, const void* data,
                                     node_tree_t* node);
 
+static node_tree_t* RecInsertNoBalance(node_tree_t* node, avl_cmp_t cmp,
+                                       const void* data);
+
 static node_tree_t* RecRemove(node_tree_t* subroot, avl_cmp_t cmp,
                               const void* data_to_remove, void** found_object);
+static void* RecRemoveNoBalance(node_tree_t* node, avl_cmp_t cmp,
+                                void* data_to_remove, void** found_object);
 static node_tree_t* RemoveNodeWithZeroOrOneChild(node_tree_t* node);
 
 static node_tree_t* RemoveNodeWithTwoChildren(node_tree_t* node, avl_cmp_t cmp);
@@ -163,7 +168,7 @@ size_t AVLSize(const avl_t* tree)
 {
     size_t count = 0;
 
-    assert((NULL != tree) && "assertion failed at __LINE__");
+    assert(NULL != tree);
 
     AVLForEach((avl_t*) tree, CountHelper, IN_ORDER, &count);
 
@@ -179,7 +184,7 @@ void* AVLFind(const avl_t* tree, const void* data)
 {
     node_tree_t* found = NULL;
 
-    assert((NULL != tree) && "assertion failed at __LINE__");
+    assert(NULL != tree);
 
     found = RecFind(tree->root, tree->cmp, data);
 
@@ -189,11 +194,10 @@ void* AVLFind(const avl_t* tree, const void* data)
 int AVLForEach(avl_t* tree, avl_callback_t callback, traversal_t order,
                void* param)
 {
-    assert((NULL != tree) && "assertion failed at __LINE__");
-    assert((2 >= order) && "assertion failed at __LINE__");
-    assert((order >= 0) && "assertion failed at __LINE__");
-
-    assert((NULL != callback) && "assertion failed at __LINE__");
+    assert(NULL != tree);
+    assert(2 >= order);
+    assert(order >= 0);
+    assert(NULL != callback);
 
     RecForEach(tree->root, order, callback, param);
 
@@ -215,6 +219,9 @@ int BSTInsertRec(avl_t* tree, const void* data)
 void* BSTRemoveRec(avl_t* tree, void* data)
 {
     void* found = NULL;
+
+    assert(NULL != tree);
+
     tree->root = RecRemoveNoBalance(tree->root, tree->cmp, data, &found);
     return found;
 }
@@ -260,6 +267,8 @@ static void InitNode(node_tree_t* node, const void* data, node_tree_t* left,
 static node_tree_t* RecInsert(node_tree_t* node, avl_cmp_t cmp,
                               const void* data)
 {
+    assert(NULL != cmp);
+
     if (NULL == node)
     {
         return CreateNode(data);
@@ -277,6 +286,7 @@ static void InsertCompareAndRecurse(avl_cmp_t cmp, const void* data,
 {
     int direction = 0;
 
+    assert(NULL != cmp);
     assert(NULL != node);
 
     direction = cmp(data, node->data);
@@ -289,6 +299,8 @@ static node_tree_t* RecInsertNoBalance(node_tree_t* node, avl_cmp_t cmp,
 {
     node_tree_t* new_node = NULL;
     int direction = 0;
+
+    assert(NULL != cmp);
 
     if (NULL == node)
     {
@@ -315,6 +327,7 @@ static void* RecRemoveNoBalance(node_tree_t* node, avl_cmp_t cmp,
     int direction = 0;
 
     assert(NULL != cmp);
+    assert(NULL != found_object);
 
     if (NULL == node)
     {
@@ -368,6 +381,7 @@ static node_tree_t* BSTRemoveNodeWithTwoChildren(node_tree_t* node,
     void* dummy = NULL;
 
     assert(NULL != node);
+    assert(NULL != cmp);
 
     successor = GetMinNode(RIGHT_CHILD_OF(node));
 
@@ -385,6 +399,7 @@ static node_tree_t* RemoveNodeWithTwoChildren(node_tree_t* node, avl_cmp_t cmp)
     void* dummy = NULL;
 
     assert(NULL != node);
+    assert(NULL != cmp);
 
     successor = GetMinNode(RIGHT_CHILD_OF(node));
 
@@ -402,6 +417,7 @@ static node_tree_t* RecRemove(node_tree_t* node, avl_cmp_t cmp,
     int direction = 0;
 
     assert(NULL != cmp);
+    assert(NULL != found_object);
 
     if (NULL == node)
     {
@@ -539,6 +555,7 @@ static int RecForEach(node_tree_t* node, traversal_t order,
     assert(order <= 2);
     assert(order >= 0);
 
+
     switch (order)
     {
     case PRE_ORDER:
@@ -574,6 +591,7 @@ static void UpdateHeight(node_tree_t* node)
 static int GetBalanceFactor(node_tree_t* node)
 {
     assert(NULL != node);
+    
     return GetHeight(LEFT_CHILD_OF(node)) - GetHeight(RIGHT_CHILD_OF(node));
 }
 
