@@ -475,14 +475,14 @@ static void Test_StressLoad(void)
     while (i < SIZE)
     {
         big_arr[i] = i;
-        /*
-        completed = (float)i / SIZE * 100;
-        printf("50K INSERTIONS: %.2f%% Completed\n", completed);
-        */
-
+        
         AVLInsert(avl, big_arr + i);
         BSTInsertRec(bst_rec, big_arr + i);
         BSTInsert(bst, big_arr + i);
+        
+        
+        completed = (float)i / SIZE * 100;
+        printf("50K INSERTIONS: %.2f%% Completed\n", completed);
         
         ++i;
     }
