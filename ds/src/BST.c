@@ -54,7 +54,7 @@ static void* GetData(const node_t* node);
 static int CompareNodes(const bst_t* tree, const void* data1,
                         const void* data2);
 static int IsDummyNode(const node_t* node);
-static void GoLeftAsMuchAsYouCan(node_t** node);
+static void GetMinNode(node_t** node);
 static void GoRightAsMuchAsYouCan(node_t** node);
 static int IsLeaf(const node_t* node);
 static int IsRightChild(const node_t* node);
@@ -281,7 +281,7 @@ bst_iter_t BSTBegin(const bst_t* tree)
 
     curr = tree->dummy;
 
-    GoLeftAsMuchAsYouCan(&curr);
+    GetMinNode(&curr);
 
     return curr;
 }
@@ -306,7 +306,7 @@ bst_iter_t BSTNext(bst_iter_t iter)
     if (GetRightChild(curr))
     {
         curr = GetRightChild(curr);
-        GoLeftAsMuchAsYouCan(&curr);
+        GetMinNode(&curr);
     }
     else
     {
@@ -424,7 +424,7 @@ static int IsDummyNode(const node_t* node)
     return GetParent(node) == node;
 }
 
-static void GoLeftAsMuchAsYouCan(node_t** node)
+static void GetMinNode(node_t** node)
 {
     while (GetLeftChild(*node))
     {

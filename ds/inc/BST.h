@@ -151,8 +151,7 @@ int BSTIterIsEqual(bst_iter_t iter1, bst_iter_t iter2);
  *
  * @return An Iterator to the minimum node in *tree*.
  *
- * @note  complexity Time: Average: O(logN), Worst: O(n) if data is inserted
- *                         monotonically.
+ * @note  complexity Time: Average: O(logN), Worst: O(n) if data is inserted monotonically.
  *                         Space : O(1)
  */
 bst_iter_t BSTBegin(const bst_t* tree);
@@ -162,39 +161,33 @@ bst_iter_t BSTBegin(const bst_t* tree);
  *
  * @param tree 	  A pointer to the Binary Search Tree to assess.
  *
- * @return Return value description.
+ * @return an Iterator to the end of *tree*.
  *
- * @note  complexity Time: O(n)		Space: O(1)
+ * @note  complexity Time: O(1)		Space: O(1)
  */
 bst_iter_t BSTEnd(const bst_t* tree);
 
-    /**
-   * @brief Brief description.
-   *
-   * @param param1 	Description of param1.
-   * @param param2 	Description of param2.
-   * @param param3 	Description of param3.
-   * @param param4 	Description of param4.
-   * @param param5 	Description of param5.
-   *
-   * @return Return value description.
-   *
-   * @note  complexity Time: O(n)		Space: O(1)
-   */
+  /**
+ * @brief Advances the iterator to the next node in the Binary Search Tree™.
+ *
+ * @param iter 	An iterator to advance.
+ *
+ * @return An iterator to the next node in in-order traversal.
+ *
+ * @note  complexity Time: Average: O(logN)
+ *                         Space : O(1)
+ */
 bst_iter_t BSTNext(bst_iter_t iter);  /* in order */
 
   /**
- * @brief Brief description.
+ * @brief Moves the iterator to the previous node in the Binary Search Tree™.
  *
- * @param param1 	Description of param1.
- * @param param2 	Description of param2.
- * @param param3 	Description of param3.
- * @param param4 	Description of param4.
- * @param param5 	Description of param5.
+ * @param iter 	An iterator to move back.
  *
- * @return Return value description.
+ * @return An iterator to the previous node in in-order traversal.
  *
- * @note  complexity Time: O(n)		Space: O(1)
+ * @note  complexity Time: Average: O(logN)
+ *                         Space : O(1)
  */
 bst_iter_t BSTPrev(bst_iter_t iter);
 
