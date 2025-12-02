@@ -147,9 +147,9 @@ size_t AVLSize(const avl_t* tree);
  *  Time Complexity: O(1)
  *
  * Returns:
- *  ssize_t representing height of tree (-1 if there's no root)
+ *  ssize_t representing height of tree (0 if there's no root)
  */
-ssize_t AVLHeight(const avl_t* tree);
+size_t AVLHeight(const avl_t* tree);
 
 /**
  * Name: AVLFind

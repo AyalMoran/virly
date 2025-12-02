@@ -464,7 +464,7 @@ static void Test_StressLoad(void)
     clock_t start = 0;
     clock_t end = 0;
     double time_taken = 0;
-    avl_t* avl = AVLCreate(IntCmp);
+    avl_t* bst_rec = AVLCreate(IntCmp);
     bst_t* bst = BSTCreate(IntCmp);
     volatile int* sink = NULL;
     volatile bst_iter_t sink_iter = NULL;
@@ -472,7 +472,7 @@ static void Test_StressLoad(void)
     while (i < SIZE)
     {
         big_arr[i] = i;
-        BSTInsertRec(avl, big_arr + i);
+        BSTInsertRec(bst_rec, big_arr + i);
         BSTInsert(bst, big_arr + i);
         ++i;
     }
@@ -483,7 +483,7 @@ static void Test_StressLoad(void)
         start = clock();
         for (i = 0; i < NUM_QUERIES; ++i)
         {
-            sink = AVLFind(avl, &to_find);
+            sink = AVLFind(bst_rec, &to_find);
         }
         end = clock();
         time_taken = (double) (end - start) / CLOCKS_PER_SEC;
@@ -507,6 +507,10 @@ static void Test_StressLoad(void)
 
     (void) sink;
     (void) sink_iter;
+    AVLDestroy(bst_rec);
+    printf("Destroyed AVL\n");
+    BSTDestroy(bst);
+    printf("Destroyed BST\n");
 }
 
 int main(void)

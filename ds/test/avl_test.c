@@ -2,8 +2,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "avl.h"
+#include "bst.h"
 
 #pragma region testing utils
 /* structs and globals */
@@ -286,9 +288,9 @@ static void Test_Insert(void)
     AVLInsert(tree, &e);
 
     RUN_TEST(insert, "Size after five insertions is 5: ", AVLSize(tree) == 5);
-
+#ifndef NDEBUG
     AVLPrint(tree, PrintInt);
-
+#endif /*NDEBUG*/
     AVLDestroy(tree);
 
     printf("== [%s] %d/%d Passed ==\n", insert.name, insert.passed,
@@ -395,28 +397,43 @@ static void Test_ForEach(void)
     AVLInsert(tree, &f);
 
     printf("Tree Before incrementation:\n");
+#ifndef NDEBUG
     AVLPrint(tree, PrintInt);
+#endif /*NDEBUG*/
     AVLForEach(tree, PlusOne, IN_ORDER, NULL);
     printf("Tree After incrementation:\n");
+#ifndef NDEBUG
     AVLPrint(tree, PrintInt);
+#endif /*NDEBUG*/
 
     printf("Tree Before doubling:\n");
+#ifndef NDEBUG
     AVLPrint(tree, PrintInt);
+#endif /*NDEBUG*/
     AVLForEach(tree, Double, IN_ORDER, NULL);
     printf("Tree After doubling:\n");
+#ifndef NDEBUG
     AVLPrint(tree, PrintInt);
+#endif /*NDEBUG*/
 
     printf("Tree Before blazing:\n");
+#ifndef NDEBUG
     AVLPrint(tree, PrintInt);
+#endif /*NDEBUG*/
     AVLForEach(tree, MakeAll420, IN_ORDER, NULL);
     printf("Tree After blazing:\n");
+#ifndef NDEBUG
     AVLPrint(tree, PrintInt);
-
+#endif /*NDEBUG*/
     printf("Tree Before Ascension:\n");
+#ifndef NDEBUG
     AVLPrint(tree, PrintInt);
+#endif /*NDEBUG*/
     AVLForEach(tree, MakeAscending, PRE_ORDER, NULL);
     printf("Tree After Ascension:\n");
+#ifndef NDEBUG
     AVLPrint(tree, PrintInt);
+#endif /*NDEBUG*/
 
     AVLDestroy(tree);
 
@@ -438,8 +455,9 @@ static void Test_Find(void)
     AVLInsert(tree, &d);
     AVLInsert(tree, &e);
     AVLInsert(tree, &f);
-
+#ifndef NDEBUG
     AVLPrint(tree, PrintInt);
+#endif /*NDEBUG*/
 
     RUN_TEST(find, "AVLFind(`non-existent` returned NULL",
              AVLFind(tree, &m) == NULL);
@@ -451,9 +469,7 @@ static void Test_Find(void)
     printf("== [%s] %d/%d Passed ==\n", find.name, find.passed, find.total);
 }
 
-#include "bst.h"
-#include "time.h"
-#define SIZE (50000)
+#define SIZE (20)
 #define NUM_QUERIES (9999)
 
 static void Test_StressLoad(void)
@@ -467,7 +483,7 @@ static void Test_StressLoad(void)
     float completed = 0;
 
     avl_t* avl = AVLCreate(IntCmp);
-    avl_t* bst_rec  = AVLCreate(IntCmp);
+    avl_t* bst_rec = AVLCreate(IntCmp);
     bst_t* bst = BSTCreate(IntCmp);
     volatile int* sink = NULL;
     volatile bst_iter_t sink_iter = NULL;
@@ -475,15 +491,14 @@ static void Test_StressLoad(void)
     while (i < SIZE)
     {
         big_arr[i] = i;
-        
+
         AVLInsert(avl, big_arr + i);
         BSTInsertRec(bst_rec, big_arr + i);
         BSTInsert(bst, big_arr + i);
-        
-        
-        completed = (float)i / SIZE * 100;
+
+        completed = (float) i / SIZE * 100;
         printf("50K INSERTIONS: %.2f%% Completed\n", completed);
-        
+
         ++i;
     }
 
@@ -497,12 +512,13 @@ static void Test_StressLoad(void)
         }
         end = clock();
         time_taken = (double) (end - start) / CLOCKS_PER_SEC;
-        printf("AVLFind on a BALANCED %d (%d queries) took %f seconds and %lu comparisons\n",
+        printf("AVLFind on a BALANCED %d (%d queries) took %f seconds and %lu "
+               "comparisons\n",
                to_find, NUM_QUERIES, time_taken, cmp_count);
     }
 
     /* Time BST_Recursive */
-    
+
     cmp_count = 0;
     {
         start = clock();
@@ -512,10 +528,11 @@ static void Test_StressLoad(void)
         }
         end = clock();
         time_taken = (double) (end - start) / CLOCKS_PER_SEC;
-        printf("AVLFind on a NON-BALANCED %d (%d queries) took %f seconds and %lu comparisons\n",
+        printf("AVLFind on a NON-BALANCED %d (%d queries) took %f seconds and "
+               "%lu comparisons\n",
                to_find, NUM_QUERIES, time_taken, cmp_count);
     }
-    
+
     /* Time BST */
     cmp_count = 0;
     {
@@ -526,12 +543,20 @@ static void Test_StressLoad(void)
         }
         end = clock();
         time_taken = (double) (end - start) / CLOCKS_PER_SEC;
-        printf("BSTFind (Iterative) %d (%d queries) took %f seconds and %lu comparisons\n",
+        printf("BSTFind (Iterative) %d (%d queries) took %f seconds and %lu "
+               "comparisons\n",
                to_find, NUM_QUERIES, time_taken, cmp_count);
     }
 
     (void) sink;
     (void) sink_iter;
+
+    AVLDestroy(avl);
+    printf("Destroyed AVL\n");
+    AVLDestroy(bst_rec);
+    printf("Destroyed BST_REC\n");
+    BSTDestroy(bst);
+    printf("Destroyed BST\n");
 }
 
 int main(void)

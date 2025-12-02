@@ -1,8 +1,4 @@
-/******************
- Author : Ayal Moran
- Reviewer: Or Caraco
- Date: 8.5.25
- *****************/
+
 #ifndef __ILRD_BST_H__
 #define __ILRD_BST_H__
 

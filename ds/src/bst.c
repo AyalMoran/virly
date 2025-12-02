@@ -1,14 +1,13 @@
-/******************
- Author  : Ayal Moran
- Reviewer: Or Caraco
- Date    : 8.5.25
- *****************/
+
 #include <assert.h> /* assert      */
 #include <stdint.h> /* int32_t     */
 #include <stdlib.h> /* malloc      */
 
-#include "bst.h" /* bst_t       */
+#ifndef NDEBUG
+#include <stdio.h>
+#endif /*NDEBUG*/
 
+#include "bst.h" /* bst_t       */
 #define MAX(a, b) ((a) < (b) ? (b) : (a))
 
 struct bst
@@ -73,7 +72,7 @@ static void TransplantNode(node_t* parent, const node_t* node,
 bst_t* BSTCreate(int (*cmp_func)(const void* val1, const void* val2))
 {
     bst_t* tree = NULL;
-    int    data = INT32_MAX;
+    int data = INT32_MAX;
 
     assert((cmp_func) && "assertion failed at __LINE__");
 
@@ -102,8 +101,8 @@ void BSTDestroy(bst_t* tree)
 {
     bst_iter_t iter = 0;
     bst_iter_t next = {0};
+    size_t i = 0;
     assert((tree) && "assertion failed at __LINE__");
-
     iter = BSTBegin(tree);
 
     while (!BSTIsEmpty(tree))
@@ -111,6 +110,10 @@ void BSTDestroy(bst_t* tree)
         next = BSTNext(iter);
         BSTRemove((iter));
         iter = next;
+        #ifndef NDEBUG
+        printf("Remove No.%d\n", ++i);
+        fflush(stdout);
+        #endif /*NDEBUG*/
     }
 
     free(tree->dummy);
@@ -119,10 +122,10 @@ void BSTDestroy(bst_t* tree)
 
 bst_iter_t BSTInsert(bst_t* tree, void* data)
 {
-    node_t* parent    = NULL;
+    node_t* parent = NULL;
     node_t* traverser = NULL;
-    node_t* node      = NULL;
-    int     direction = 0;
+    node_t* node = NULL;
+    int direction = 0;
 
     assert(tree && "assertion failed");
 
@@ -219,7 +222,7 @@ int BSTForEach(bst_iter_t from, bst_iter_t to,
                void* param) /* in order */
 {
     int action_return_status = 0;
-    
+
     assert(IterToNode(from));
     assert(IterToNode(to));
     assert(action_func);
@@ -235,13 +238,12 @@ int BSTForEach(bst_iter_t from, bst_iter_t to,
 
 int BSTIsEmpty(const bst_t* tree)
 {
-     return (NULL == GetLeftChild(tree->dummy));
+    return (NULL == GetLeftChild(tree->dummy));
 }
 
 size_t BSTSize(const bst_t* tree)
 {
     size_t count_nodes = 0;
-    
 
     BSTForEach(BSTBegin(tree), BSTEnd(tree), CountFunc, &count_nodes);
 

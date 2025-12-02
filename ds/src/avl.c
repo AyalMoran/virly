@@ -94,7 +94,7 @@ static node_tree_t* RotateLeft(node_tree_t* to_rotate);
 static node_tree_t* RotateRight(node_tree_t* to_rotate);
 
 static void UpdateHeight(node_tree_t* node);
-static ssize_t GetHeight(const node_tree_t* node);
+static size_t GetHeight(const node_tree_t* node);
 static int GetBalanceFactor(node_tree_t* node);
 static int IsRightHeavy(int bf);
 static int IsLeftHeavy(int bf);
@@ -175,8 +175,12 @@ size_t AVLSize(const avl_t* tree)
     return count;
 }
 
-ssize_t AVLHeight(const avl_t* tree)
+size_t AVLHeight(const avl_t* tree)
 {
+    if(AVLIsEmpty(tree))
+    {
+       return 0; 
+    }
     return tree->root->height;
 }
 
@@ -188,7 +192,7 @@ void* AVLFind(const avl_t* tree, const void* data)
 
     found = RecFind(tree->root, tree->cmp, data);
 
-    return found;
+    return found->data;
 }
 
 int AVLForEach(avl_t* tree, avl_callback_t callback, traversal_t order,
@@ -259,7 +263,7 @@ static void InitNode(node_tree_t* node, const void* data, node_tree_t* left,
     assert(NULL != node);
 
     node->data = (void*) data;
-    node->height = 0;
+    node->height = 1;
     node->children[LEFT] = left;
     node->children[RIGHT] = right;
 }
@@ -567,15 +571,15 @@ static int RecForEach(node_tree_t* node, traversal_t order,
     }
 }
 
-static ssize_t GetHeight(const node_tree_t* node)
+static size_t GetHeight(const node_tree_t* node)
 {
-    return (NULL == node) ? -1 : node->height;
+    return (NULL == node) ? 0 : node->height;
 }
 
 static void UpdateHeight(node_tree_t* node)
 {
-    ssize_t left = 0;
-    ssize_t right = 0;
+    size_t left = 0;
+    size_t right = 0;
 
     if (NULL == node)
     {
@@ -591,7 +595,7 @@ static void UpdateHeight(node_tree_t* node)
 static int GetBalanceFactor(node_tree_t* node)
 {
     assert(NULL != node);
-    
+
     return GetHeight(LEFT_CHILD_OF(node)) - GetHeight(RIGHT_CHILD_OF(node));
 }
 

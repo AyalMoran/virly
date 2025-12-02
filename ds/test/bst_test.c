@@ -378,6 +378,8 @@ static void Test_Traversal(void)
     }
 
     BSTDestroy(tree);
+    BSTDestroy(tree2);
+
     PRINT_SUITE_SUMMARY(traversal);
 }
 /************* Test: Remove *************************/
