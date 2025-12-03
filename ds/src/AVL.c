@@ -15,7 +15,7 @@
 #endif /* !NDEBUG */
 
 /*============================ INCLUDES ============================*/
-#include "avl.h"
+#include "AVL.h"
 
 /*========================== DEFINITIONS ===========================*/
 #define TRUE (1)
@@ -126,7 +126,7 @@ void AVLDestroy(avl_t* tree)
     assert(NULL != tree);
 
     DestroySubTree(tree->root);
-
+    tree->root = NULL;
     free(tree);
 
     return;
