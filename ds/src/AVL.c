@@ -1,21 +1,19 @@
 /**************************************************************
  *  File        : avl.c
  *  Author      : Ayal Moran
- *  Reviewer    :
+ *  Reviewer    : Yohai Shohet
  *  Date        : 01-12-2025
  **************************************************************/
 
 #include <assert.h> /* assert */
-#include <stddef.h> /* size_t   */
 #include <stdlib.h> /* malloc */
-#include <string.h> /* memset */
 
 #ifndef NDEBUG
 #    include <stdio.h>
 #endif /* !NDEBUG */
 
 /*============================ INCLUDES ============================*/
-#include "avl.h"
+#include "AVL.h"
 
 /*========================== DEFINITIONS ===========================*/
 #define TRUE (1)
@@ -43,7 +41,7 @@ typedef struct node_tree
 {
     void* data;
     struct node_tree* children[NUM_OF_CHILDREN];
-    ssize_t height;
+    size_t height;
 } node_tree_t;
 
 struct AVL
@@ -126,7 +124,7 @@ void AVLDestroy(avl_t* tree)
     assert(NULL != tree);
 
     DestroySubTree(tree->root);
-
+    tree->root = NULL;
     free(tree);
 
     return;
@@ -177,11 +175,7 @@ size_t AVLSize(const avl_t* tree)
 
 size_t AVLHeight(const avl_t* tree)
 {
-    if(AVLIsEmpty(tree))
-    {
-       return 0; 
-    }
-    return tree->root->height;
+    return tree->root != NULL ? tree->root->height : 0;
 }
 
 void* AVLFind(const avl_t* tree, const void* data)
@@ -199,9 +193,8 @@ int AVLForEach(avl_t* tree, avl_callback_t callback, traversal_t order,
                void* param)
 {
     assert(NULL != tree);
-    assert(2 >= order);
-    assert(order >= 0);
     assert(NULL != callback);
+    assert(IN_ORDER == order || POST_ORDER == order || PRE_ORDER == order);
 
     RecForEach(tree->root, order, callback, param);
 
@@ -294,6 +287,9 @@ static void InsertCompareAndRecurse(avl_cmp_t cmp, const void* data,
     assert(NULL != node);
 
     direction = cmp(data, node->data);
+
+    assert(0 != direction);
+
     node->children[0 < direction] =
         RecInsert(node->children[0 < direction], cmp, data);
 }
@@ -556,9 +552,7 @@ static int RecForEach(node_tree_t* node, traversal_t order,
                       int (*callback_t)(void*, void*), void* param)
 {
     assert(NULL != callback_t);
-    assert(order <= 2);
-    assert(order >= 0);
-
+    assert(IN_ORDER == order || POST_ORDER == order || PRE_ORDER == order);
 
     switch (order)
     {
