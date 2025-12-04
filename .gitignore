@@ -1,0 +1,20 @@
+#IGNORE EVERYTHING
+*
+
+#folders
+!/**/
+
+*/SDL_bgi
+
+# FILE EXTENSIONS
+!*.c
+!*.h
+!*.md
+
+# MAKEFILES
+!*.mk
+
+# CONFIG(?) FILES
+!.gitignore
+!.myfuncs
+
