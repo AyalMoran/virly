@@ -2,27 +2,33 @@
  *  File        : Heap.c
  *  Author      : Ayal Moran
  *  Reviewer    :
- *  Date        :
+ *  Date        : 06-12-2025
  **************************************************************/
 
+/*
+ *============================ INCLUDES ============================*/
 #include <assert.h> /* assert       */
 #include <stdlib.h> /* malloc       */
 
-#include "d_vector.h" /* d_vector_t   */
 #include "Heap.h"     /* heap_t       */
+#include "d_vector.h" /* d_vector_t   */
 
-#define FAIL (1)
+/*
+ *========================== MACRO UTILS ===========================*/
+#define FAILURE (1)
 #define SUCCESS (0)
-
 #define FALSE (0)
+#define INIT_UNUSED_VALUE (0)
+#define DEFAULT_CAPACITY (8)
 
 #define CELL(vec, i) ((void**) DVectorGetAccessToElement((vec), (i)))
 #define DATA(vec, i) (*(void**) DVectorGetAccessToElement((vec), (i)))
 #define PARENT(index) ((size_t) ((0 == (index)) ? 0 : (((index) - 1) / 2)))
 #define LEFT_CHILD(index) ((size_t) (((index) * 2) + 1))
 #define RIGHT_CHILD(index) ((size_t) (((index) * 2) + 2))
-#define DEFAULT_CAPACITY (8)
 
+/*
+ *========================= TYPEDEFS/ENUMS =========================*/
 typedef enum direction
 {
     LEFT = 0,
@@ -35,12 +41,14 @@ struct heap
     d_vector_t* heap;
 };
 
-/*--- static decs ---*/
+/*
+ *====================== STATIC DECLARATIONS =======================*/
 static void HeapifyUp(heap_t* heap, size_t index);
 static void HeapifyDown(heap_t* heap, size_t index);
 static void Swap(void** a, void** b);
 
-/*--- API ---*/
+/*
+ *========================= API FUNCTIONS ==========================*/
 heap_t* HeapCreate(heap_cmp_t cmp)
 {
     heap_t* heap = NULL;
@@ -76,14 +84,14 @@ void HeapDestroy(heap_t* heap)
 int HeapPush(heap_t* heap, void* data)
 {
     int ret = SUCCESS;
-    size_t push_index = 0;
+    size_t push_index = INIT_UNUSED_VALUE;
 
     assert(NULL != heap);
 
     ret = DVectorPushBack(heap->heap, &data);
     if (SUCCESS != ret)
     {
-        return FAIL;
+        return FAILURE;
     }
 
     push_index = HeapSize(heap);
@@ -95,20 +103,10 @@ int HeapPush(heap_t* heap, void* data)
     return SUCCESS;
 }
 
-#ifndef NDEBUG
-void* HeapPeekAtIndex(const heap_t* heap, size_t index)
-{
-    assert(NULL != heap);
-    assert(index < HeapSize(heap));
-
-    return DATA(heap->heap, index);
-}
-#endif
-
 void HeapPop(heap_t* heap)
 {
     d_vector_t* vec = NULL;
-    size_t last_index = 0;
+    size_t last_index = INIT_UNUSED_VALUE;
 
     assert(NULL != heap);
     assert(0 == HeapIsEmpty(heap));
@@ -134,7 +132,7 @@ void HeapPop(heap_t* heap)
 void* HeapPeek(const heap_t* heap)
 {
     assert(NULL != heap);
-    assert(!HeapIsEmpty(heap));
+    assert(FALSE == HeapIsEmpty(heap));
 
     return DATA(heap->heap, 0);
 }
@@ -154,21 +152,19 @@ size_t HeapSize(const heap_t* heap)
 }
 
 void* HeapRemove(heap_t* heap, heap_is_match_t callback, void* param)
-
 {
-    void* removed = NULL;
     d_vector_t* vec = NULL;
-    size_t size = 0;
+    void* removed = NULL;
+    size_t size = INIT_UNUSED_VALUE;
+    size_t parent_idx = INIT_UNUSED_VALUE;
     size_t i = 0;
-    size_t parent_idx = 0;
 
     assert(NULL != heap);
     assert(NULL != callback);
-    assert(0 == HeapIsEmpty(heap));
+    assert(FALSE == HeapIsEmpty(heap));
 
     vec = heap->heap;
     size = HeapSize(heap);
-    i = 0;
 
     while (i < size && FALSE == callback(DATA(vec, i), param))
     {
@@ -182,82 +178,101 @@ void* HeapRemove(heap_t* heap, heap_is_match_t callback, void* param)
 
     removed = DATA(vec, i);
 
-    Swap(CELL(vec, i), CELL(vec, size - 1));
-    DVectorPopBack(vec);
-
-    if (i < HeapSize(heap))
+    if (i == size - 1)
     {
-        parent_idx = Parent(i);
+        DVectorPopBack(vec);
+    }
+    else
+    {
+        Swap(CELL(vec, i), CELL(vec, size - 1));
+        DVectorPopBack(vec);
 
-        if (0 < heap->cmp(DATA(vec, i), DATA(vec, parent_idx)))
+        if (i < HeapSize(heap))
         {
-            HeapifyUp(heap, i);
-        }
-        else
-        {
-            HeapifyDown(heap, i);
+            parent_idx = PARENT(i);
+
+            if (0 < heap->cmp(DATA(vec, i), DATA(vec, parent_idx)))
+            {
+                HeapifyUp(heap, i);
+            }
+            else
+            {
+                HeapifyDown(heap, i);
+            }
         }
     }
 
     return removed;
 }
 
-/*--- helpers ---*/
+#ifndef NDEBUG
+void* HeapPeekAtIndex(const heap_t* heap, size_t index)
+{
+    assert(NULL != heap);
+    assert(index < HeapSize(heap));
+
+    return DATA(heap->heap, index);
+}
+#endif
+
+/*
+ *======================= STATIC FUNCTIONS ========================*/
 static void HeapifyUp(heap_t* heap, size_t index)
 {
     d_vector_t* vec = NULL;
-    size_t parent = 0;
+    size_t parent = INIT_UNUSED_VALUE;
 
     assert(NULL != heap);
 
     vec = heap->heap;
+    parent = PARENT(index);
 
-    while (0 < index)
+    if (0 == index)
     {
-        parent = Parent(index);
-
-        if (0 <= heap->cmp(DATA(vec, parent), DATA(vec, index)))
-        {
-            return;
-        }
-
-        Swap(CELL(vec, parent), CELL(vec, index));
-        index = parent;
+        return;
     }
+
+    if (0 < heap->cmp(DATA(vec, parent), DATA(vec, index)))
+    {
+        return;
+    }
+
+    Swap(CELL(vec, parent), CELL(vec, index));
+    HeapifyUp(heap, parent);
 }
 
 static void HeapifyDown(heap_t* heap, size_t index)
 {
     d_vector_t* vec = NULL;
     size_t size = HeapSize(heap);
-    size_t right = RIGHT_CHILD(index);
     size_t left = LEFT_CHILD(index);
-    size_t child = left;
+    size_t right = RIGHT_CHILD(index);
+    size_t child = INIT_UNUSED_VALUE;
 
     assert(NULL != heap);
 
     vec = heap->heap;
 
-    while (left < size)
+    if (left >= size)
     {
-        right = RIGHT_CHILD(index);
-        child = left;
-
-        if (right < size &&
-            0 < heap->cmp(DATA(vec, right), DATA(vec, left)))
-        {
-            child = right;
-        }
-
-        if (0 >= heap->cmp(DATA(vec, child), DATA(vec, index)))
-        {
-            return;
-        }
-
-        Swap(CELL(vec, child), CELL(vec, index));
-        index = child;
-        left = LEFT_CHILD(index);
+        return;
     }
+
+    if (right < size && 0 < heap->cmp(DATA(vec, right), DATA(vec, left)))
+    {
+        child = right;
+    }
+    else{
+        child = left;
+    }
+
+    if (0 > heap->cmp(DATA(vec, child), DATA(vec, index)))
+    {
+        return;
+    }
+
+    Swap(CELL(vec, child), CELL(vec, index));
+    HeapifyDown(heap, child);
 }
 
 static void Swap(void** a, void** b)

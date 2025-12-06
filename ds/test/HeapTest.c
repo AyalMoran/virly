@@ -1,221 +1,294 @@
 /**************************************************************
- * File    : ${NAME}_test.c
+ * File    : HeapTest.c
  * Author  : Ayal Moran
  * Reviewer: 
- * Date    : 
+ * Date    : 06-12-2025
 **************************************************************/
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
 
-#include "file.h"
+#include "Heap.h"
+#include "test_utils.h"
 
-/* structs and globals */
-#define MAX_TESTS 30
-
-typedef struct {
-    const char *name;
-    int total;
-    int passed;
-} test_suite_t;
-
-typedef void (*test_func_t)(void);
-
-typedef struct {
-    const char *name;
-    test_func_t func;
-} named_test_t;
-
-int total_tests = 0;
-int passed_tests = 0;
-static named_test_t test_registry[MAX_TESTS];
-static int test_count = 0;
-
-/*output and colors*/
-/* General Formatting */
-#define RESET                    (0)
-#define BRIGHT                   (1)
-#define DIM                      (2)
-#define UNDERSCORE               (3)
-#define BLINK                    (4)
-#define REVERSE                  (5)
-#define HIDDEN                   (6)
-
-/* Foreground Colors */
-#define FG_BLACK                 (30)
-#define FG_RED                   (31)
-#define FG_GREEN                 (32)
-#define FG_YELLOW                (33)
-#define FG_BLUE                  (34)
-#define FG_MAGENTA               (35)
-#define FG_CYAN                  (36)
-#define FG_WHITE                 (37)
-
-/* Background Colors */
-#define BG_BLACK                 (40)
-#define BG_RED                   (41)
-#define BG_GREEN                 (42)
-#define BG_YELLOW                (43)
-#define BG_BLUE                  (44)
-#define BG_MAGENTA               (45)
-#define BG_CYAN                  (46)
-#define BG_WHITE                 (47)
-
-#define SET_PRINT_COLOR(X) printf("\x1b[%dm", X)
-
-#define PRINT_TEST_HEADER(name) 						\
-	do {												\
-		SET_PRINT_COLOR(BRIGHT);						\
-		SET_PRINT_COLOR(FG_BLUE);						\
-		SET_PRINT_COLOR(BG_YELLOW);						\
-        printf("=====STARTING %s TESTS=====", name);	\
-        printf("===================\n");                \
-		SET_PRINT_COLOR(RESET);							\
-		printf("\n");									\
-    } while(0)
-
-/* value prints and debugging */
-#define TRACE() printf("[TRACE] %s:%d\n", __FILE__, __LINE__)
-#define SHOW_INT(x) printf("Value of " #x " is %d\n", x)
-#define SHOW_CHAR(x) printf("Value of " #x " is %c\n", x)
-#define SHOW_SIZE(x) printf("Size of " #x " is %lu\n", sizeof(x))
-#define SHOW_SIZET(x) printf("Value of " #x " is %lu\n", x)
-#define SHOW_PTR(x) printf("Value of " #x " is %p\n", (void*)x)
-#define SHOW_STR(x) printf("Value of " #x " is %s\n", x)
-#define SHOW_FLOAT(x) printf("Value of " #x " is %f\n", x)
-#define SHOW_DOUBLE(x) printf("Value of " #x " is %lf\n", x)
-#define SHOW_LONG(x) printf("Value of " #x " is %ld\n", x)
-#define SHOW_ULONG(x) printf("Value of " #x " is %lu\n", x)
-
-/* assertions */
-#define ASSERT_TRUE(suite, expr) \
-    RUN_TEST(suite, #expr, (expr))
-
-#define ASSERT_FALSE(suite, expr) \
-    RUN_TEST(suite, #expr, !(expr))
-
-#define ASSERT_EQ(suite, expected, actual) \
-    RUN_TEST(suite, #expected " == " #actual, (expected) == (actual))
-
-#define ASSERT_NEQ(suite, expected, actual) \
-    RUN_TEST(suite, #expected " != " #actual, (expected) != (actual))
-
-#define ASSERT_NULL(suite, ptr) \
-    RUN_TEST(suite, #ptr " == NULL", (ptr) == NULL)
-
-#define ASSERT_NOT_NULL(suite, ptr) \
-    RUN_TEST(suite, #ptr " != NULL", (ptr) != NULL)
-
-#define ASSERT_STR_EQ(suite, expected, actual) \
-    RUN_TEST(suite, #expected " == " #actual, strcmp((expected), (actual)) == 0)
-
-#define ASSERT_MEM_EQ(suite, ptr1, ptr2, size) \
-    RUN_TEST(suite, "memcmp(" #ptr1 ", " #ptr2 ", " #size ") == 0", memcmp(ptr1, ptr2, size) == 0)
-
-/*test suites*/
-
-#define TEST_CASE(name) \
-    do { printf("\n--- Running Test: %s ---\n", name); } while (0)
-
-#define BEGIN_SUITE(name) \
-    do { \
-        SET_PRINT_COLOR(BRIGHT); \
-        SET_PRINT_COLOR(FG_BLUE); \
-        printf("\n========== BEGIN SUITE: %s ==========\n\n", name); \
-        SET_PRINT_COLOR(RESET); \
-    } while(0)
-
-#define END_SUITE(name) \
-    do { \
-        SET_PRINT_COLOR(BRIGHT); \
-        SET_PRINT_COLOR(FG_BLUE); \
-        printf("\n========== END SUITE: %s ==========\n\n", name); \
-        SET_PRINT_COLOR(RESET); \
-    } while(0)
-
-#define INIT_SUITE(suite, suite_name)  \
-    test_suite_t suite = {suite_name, 0, 0}
-
-#define RUN_TEST(suite, desc, expr)       \
-    do {                                        \
-        ++suite.total;                          \
-        ++total_tests;                          \
-        if (expr)                               \
-        {                                       \
-            ++suite.passed;                     \
-            ++passed_tests;                     \
-            SET_PRINT_COLOR(FG_GREEN);          \
-            SET_PRINT_COLOR(BRIGHT);            \
-            printf("[PASS] %s [line %d]\n", desc, __LINE__); \
-        }                                       \
-        else                                    \
-        {                                       \
-            SET_PRINT_COLOR(FG_RED);            \
-            SET_PRINT_COLOR(BRIGHT);            \
-            printf("[FAIL] %s [line %d]\n", desc, __LINE__); \
-        }                                       \
-        SET_PRINT_COLOR(RESET);                 \
-    } while (0)
-
-
-#define PRINT_SUITE_SUMMARY(suite) \
-    printf("== [%s] %d/%d Passed ==\n", suite.name, suite.passed, suite.total)
-
-
-#define REGISTER_TEST(funct)                          \
-    do {                                              \
-        if (test_count < MAX_TESTS) {                \
-            test_registry[test_count].name = #funct;  \
-            test_registry[test_count].func = funct;   \
-            ++test_count;                            \
-        } else {                                      \
-            fprintf(stderr, "[ERROR] Max test limit reached\n"); \
-            exit(1);                                  \
-        }                                             \
-    } while (0)
-
-#define PRINT_SUMMARY()                                         \
-    do {                                                        \
-        SET_PRINT_COLOR(BRIGHT);                                \
-        if (passed_tests == total_tests)                        \
-        {                                                       \
-            SET_PRINT_COLOR(FG_GREEN);                          \
-            printf("=== All tests passed (%d/%d) ===\n",        \
-                    passed_tests, total_tests);                 \
-        }                                                       \
-        else                                                    \
-        {                                                       \
-            SET_PRINT_COLOR(FG_YELLOW);                         \
-            printf("=== Partial success (%d/%d) ===\n",         \
-                    passed_tests, total_tests);                 \
-        }                                                       \
-        SET_PRINT_COLOR(RESET);                                 \
-    } while (0)
+#define NUM_ELEMENTS (20)
 
 static void RegisterTests(void);
 
-/******************************************************
- * START OF ACTUAL TESTS
- ******************************************************/
+static int IntCmp(const void* lhs, const void* rhs)
+{
+    int l = *(const int*)lhs;
+    int r = *(const int*)rhs;
+
+    return (l > r) - (l < r);
+}
+
+static int IsMatchInt(const void * data, void * param)
+{
+    return (*(const int *)data == *(int *)param);
+}
+
+static void PrintVector(const heap_t* heap)
+{
+    size_t i    = 0;
+    size_t size = HeapSize(heap);
+
+    printf("Heap contents: ");
+    for (i = 0; i < size; ++i)
+    {
+        printf("%d ", *(int*) HeapPeekAtIndex(heap, i));
+    }
+    printf("\n");
+}
+
+/*
+ * Primary Functions Tests*/
 static void Test_Create(void)
 {
     INIT_SUITE(create, "CREATE");
 
-    data_structure_t *ds = DSCreate();
+    heap_t* heap = HeapCreate(IntCmp);
 
-    RUN_TEST(create, "Create returns non-NULL", ds != NULL);
+    RUN_TEST(create, "Create returns non-NULL", heap != NULL);
 
-    DSDestroy(ds);
+    HeapDestroy(heap);
 
-    printf("== [%s] %d/%d Passed ==\n", create.name,
-        create.passed, create.total);
+    printf("== [%s] %d/%d Passed ==\n", create.name, create.passed,
+           create.total);
+}
+
+static void Test_Insert(void)
+{
+    INIT_SUITE(insert, "INSERT");
+
+    heap_t* heap = HeapCreate(IntCmp);
+    int vals[15];
+    size_t i = 0;
+    int j = 9999;
+    for (i = 0; i < 15; ++i)
+    {
+        vals[i] = (int) i + 1;
+    }
+
+    for (i = 0; i < 10; ++i)
+    {
+        char desc[64];
+        sprintf(desc, "Insert %d", vals[i]);
+        RUN_TEST(insert, desc, HeapPush(heap, &vals[i]) == 0);
+
+        sprintf(desc, "Heap size is %lu", (unsigned long) (i + 1));
+        RUN_TEST(insert, desc, HeapSize(heap) == (size_t) (i + 1));
+
+        sprintf(desc, "Peek is %d", vals[i]);
+        RUN_TEST(insert, desc, *(int*) HeapPeek(heap) == vals[i]);
+    }
+
+    RUN_TEST(insert, "Insert 0", HeapPush(heap, &vals[0]) == 0);
+    RUN_TEST(insert, "Heap size is 11", HeapSize(heap) == 11);
+    RUN_TEST(insert, "Peek still max (10)", *(int*) HeapPeek(heap) == 10);
+
+    vals[11] = 100;
+    RUN_TEST(insert, "Insert 100", HeapPush(heap, &vals[11]) == 0);
+    RUN_TEST(insert, "Heap size is 12", HeapSize(heap) == 12);
+    RUN_TEST(insert, "Peek is now 100", *(int*) HeapPeek(heap) == 100);
+
+    vals[12] = 100;
+    RUN_TEST(insert, "Insert duplicate max (100)",
+             HeapPush(heap, &vals[12]) == 0);
+    RUN_TEST(insert, "Heap size is 13", HeapSize(heap) == 13);
+    RUN_TEST(insert, "Peek still 100", *(int*) HeapPeek(heap) == 100);
+
+    for (i = 14; i >= 13; --i)
+    {
+        char desc[64];
+        vals[i] = (int) (14 - i);
+        sprintf(desc, "Insert descending %d", vals[i]);
+        RUN_TEST(insert, desc, HeapPush(heap, &vals[i]) == 0);
+    }
+
+    RUN_TEST(insert, "Heap size is 15", HeapSize(heap) == 15);
+    RUN_TEST(insert, "Peek still 100", *(int*) HeapPeek(heap) == 100);
+
+    RUN_TEST(insert, "Insert invalid value (9999)", HeapPush(heap, &j) == 0);
+    RUN_TEST(insert, "Heap size is 16", HeapSize(heap) == 16);
+    RUN_TEST(insert, "Peek is now 9999", *(int*) HeapPeek(heap) == 9999);
+
+
+    PrintVector(heap);
+
+    HeapDestroy(heap);
+    printf("== [%s] %d/%d Passed ==\n", insert.name, insert.passed,
+           insert.total);
+}
+static void Test_Remove(void)
+{
+    INIT_SUITE(remove, "REMOVE");
+
+    heap_t * heap      = HeapCreate(IntCmp);
+    int      vals[20]  = {0};
+    size_t   i         = 0;
+    int      param     = 0;
+    void   * ret_ptr   = NULL;
+
+    for (i = 0; i < 15; ++i)
+    {
+        vals[i] = (int)i + 1;
+        HeapPush(heap, &vals[i]);
+    }
+
+    RUN_TEST(remove, "Heap size 15 after inserts", 15 == HeapSize(heap));
+    RUN_TEST(remove, "Peek is 15",                15 == *(int *)HeapPeek(heap));
+
+    param   = 15;
+    ret_ptr = HeapRemove(heap, IsMatchInt, &param);
+
+    RUN_TEST(remove, "Remove root returns ptr",   NULL != ret_ptr);
+    RUN_TEST(remove, "Returned value is 15",      15   == *(int *)ret_ptr);
+    RUN_TEST(remove, "Size 14 after root remove", 14   == HeapSize(heap));
+    RUN_TEST(remove, "New peek is 14",            14   == *(int *)HeapPeek(heap));
+
+    param   = 7;
+    ret_ptr = HeapRemove(heap, IsMatchInt, &param);
+
+    RUN_TEST(remove, "Remove middle returns ptr", NULL != ret_ptr);
+    RUN_TEST(remove, "Returned value is 7",       7    == *(int *)ret_ptr);
+    RUN_TEST(remove, "Size 13 after remove 7",    13   == HeapSize(heap));
+    RUN_TEST(remove, "Peek still 14",             14   == *(int *)HeapPeek(heap));
+
+    param   = 99;
+    ret_ptr = HeapRemove(heap, IsMatchInt, &param);
+
+    RUN_TEST(remove, "Remove missing returns NULL", NULL == ret_ptr);
+    RUN_TEST(remove, "Size unchanged (13)",        13   == HeapSize(heap));
+    RUN_TEST(remove, "Peek unchanged (14)",        14   == *(int *)HeapPeek(heap));
+
+    vals[15] = 10;
+    vals[16] = 10;
+    HeapPush(heap, &vals[15]);
+    HeapPush(heap, &vals[16]);
+
+    RUN_TEST(remove, "Size 15 after pushing dups", 15 == HeapSize(heap));
+
+    param   = 10;
+    ret_ptr = HeapRemove(heap, IsMatchInt, &param);
+
+    RUN_TEST(remove, "Remove first 10 returns ptr", NULL != ret_ptr);
+    RUN_TEST(remove, "Returned value is 10",        10   == *(int *)ret_ptr);
+    RUN_TEST(remove, "Size 14 after first dup",     14   == HeapSize(heap));
+
+    param   = 10;
+    ret_ptr = HeapRemove(heap, IsMatchInt, &param);
+
+    RUN_TEST(remove, "Remove second 10 returns ptr", NULL != ret_ptr);
+    RUN_TEST(remove, "Returned value is 10",         10   == *(int *)ret_ptr);
+    RUN_TEST(remove, "Size 13 after second dup",     13   == HeapSize(heap));
+
+    HeapDestroy(heap);
+
+    PRINT_SUITE_SUMMARY(remove);
+}
+
+
+static void Test_HeapPop(void)
+{
+    INIT_SUITE(pop, "HEAP POP");
+
+    heap_t* heap = HeapCreate(IntCmp);
+    int vals[10];
+    size_t i      = 0;
+    int*   peeked = NULL;
+
+    for (i = 0; i < 10; ++i)
+    {
+        vals[i] = (int) (i + 1); /* Fill with 1..10 */
+        HeapPush(heap, &vals[i]);
+    }
+
+    RUN_TEST(pop, "Heap size is 10 after insertions", HeapSize(heap) == 10);
+    RUN_TEST(pop, "Peek returns max (10)", *(int*) HeapPeek(heap) == 10);
+
+    /* Pop elements and check max order */
+    for (i = 0; i < 10; ++i)
+    {
+        int expected = 10 - i;
+        char desc1[64], desc2[64];
+        
+        peeked = (int*) HeapPeek(heap);
+        printf("heap in iteration %lu: ", i + 1);
+        PrintVector(heap);
+
+        sprintf(desc1, "Peek is %ld before pop", (long) expected);
+        sprintf(desc2, "Size after pop is %lu", (unsigned long) (9 - i));
+
+        RUN_TEST(pop, desc1, NULL != peeked && *peeked == expected);
+
+        HeapPop(heap);
+
+        RUN_TEST(pop, desc2, HeapSize(heap) == (size_t) (9 - i));
+    }
+
+    RUN_TEST(pop, "Heap is empty", HeapIsEmpty(heap));
+
+    HeapDestroy(heap);
+
+    printf("== [%s] %d/%d Passed ==\n", pop.name, pop.passed, pop.total);
+}
+
+static void Test_HeapPop_Random(void)
+{
+    INIT_SUITE(pop_rand, "HEAP POP - RANDOM");
+
+    heap_t *heap = HeapCreate(IntCmp);
+    int     vals[NUM_ELEMENTS];
+    size_t  i        = 0;
+    int prev_max = 0;
+    int   *peeked    = NULL;
+
+    srand(42);
+    for (i = 0; i < NUM_ELEMENTS; ++i)
+    {
+        vals[i] = (rand() % 100) + 1;
+        HeapPush(heap, &vals[i]);
+    }
+
+    RUN_TEST(pop_rand, "Heap size is 20", HeapSize(heap) == NUM_ELEMENTS);
+
+    prev_max = 101;
+
+    for (i = 0; i < NUM_ELEMENTS; ++i)
+    {
+        char desc1[64];
+        char desc2[64];
+
+        peeked = (int *)HeapPeek(heap);
+
+        sprintf(desc1, "Peek is not NULL (iteration %lu)", (unsigned long)i);
+
+        RUN_TEST(pop_rand, desc1, NULL != peeked);
+
+        if (NULL != peeked)
+        {
+            sprintf(desc2, "Peek <= previous max (%d <= %ld)", *peeked, (long)prev_max);
+
+            RUN_TEST(pop_rand, desc2, *peeked <= prev_max);
+            prev_max = *peeked;
+        }
+
+        HeapPop(heap);
+    }
+
+    RUN_TEST(pop_rand, "Heap is empty after all pops", HeapIsEmpty(heap));
+    
+    HeapDestroy(heap);
+
+    printf("== [%s] %d/%d Passed ==\n", pop_rand.name, pop_rand.passed, pop_rand.total);
 }
 
 int main(void)
 {
-    int i=0;
-    
+    int i = 0;
+
     PRINT_TEST_HEADER("OVERALL");
     printf("===================\n");
 
@@ -223,16 +296,20 @@ int main(void)
 
     for (i = 0; i < test_count; ++i)
     {
-        printf("Running Suite: %s\n",     test_registry[i].name);
+        printf("Running Suite: %s\n", test_registry[i].name);
         test_registry[i].func();
     }
 
     PRINT_SUMMARY();
-    
+
     return 0;
 }
 
 static void RegisterTests(void)
 {
     REGISTER_TEST(Test_Create);
+    REGISTER_TEST(Test_Insert);
+    REGISTER_TEST(Test_HeapPop);
+    REGISTER_TEST(Test_HeapPop_Random);
+    REGISTER_TEST(Test_Remove);
 }
