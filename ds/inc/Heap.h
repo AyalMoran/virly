@@ -187,7 +187,7 @@ size_t HeapSize(const heap_t* heap);
  *   @param callback - Pointer to a match function called for each element.
  *   Should return non-zero when a match is found, must not be NULL.
  *   @param param - User-supplied parameter passed through to the callback.
- *
+ * 
  * @note
  *   Time: O(n)
  *
