@@ -27,6 +27,8 @@
 static int RecMergeSort(int* arr, size_t start, size_t end);
 static void Swap(int* a, int* b);
 static int Merge(int* arr, size_t start, size_t mid, size_t end);
+static size_t Partition(void* base, size_t low, size_t high, size_t size, int (*compar)(const void*, const void*));
+static void QSortHelper(void* base, size_t low, size_t high, size_t size, int (*compar)(const void*, const void*));
 
 /*========================= API FUNCTIONS ==========================*/
 int* BinarySearchIterative(const int* arr, size_t size, int elem)
@@ -106,7 +108,13 @@ int MergeSort(int* arr, size_t size)
 void QuickSort(void* base, size_t nitems, size_t element_size,
                int (*compare)(const void*, const void*))
 {
-    return;
+    assert(NULL != base);
+    assert(NULL != compare);
+
+    if (nitems > 1)
+    {
+        QSortHelper(base, 0, nitems - 1, element_size, compare);
+    }
 }
 /*======================= STATIC FUNCTIONS ========================*/
 static int RecMergeSort(int* arr, size_t start, size_t end)
@@ -206,4 +214,43 @@ static int Merge(int* arr, size_t start, size_t mid, size_t end)
     free(right_arr);
 
     return 0;
+}
+
+static void QSortHelper(void* base, size_t low, size_t high, size_t size, int (*compar)(const void*, const void*))
+{
+    if (low < high)
+    {
+        size_t pivot = Partition(base, low, high, size, compar);
+
+        QSortHelper(base, low, pivot, size, compar);
+        QSortHelper(base, pivot + 1, high, size, compar);
+    }
+}
+
+static size_t Partition(void* base, size_t low, size_t high, size_t size, int (*compar)(const void*, const void*))
+{
+    char*  arr   = (char*) base;
+    char*  pivot = arr + (low * size);
+    size_t i     = low - 1;
+    size_t j     = high + 1;
+
+    while (1)
+    {
+        do
+        {
+            ++i;
+        } while (compar(arr + i * size, pivot) < 0);
+        
+        do
+        {
+            --j;
+        } while (compar(arr + j * size, pivot) > 0);
+
+        if (i >= j)
+        {
+            return j;
+        }
+
+        SwapVoid(arr + i * size, arr + j * size, size);
+    }
 }
