@@ -48,6 +48,8 @@ d_vector_t* DVectorCreate(size_t capacity, size_t element_size)
 
 void DVectorDestroy(d_vector_t* vector)
 {
+    assert(vector);
+    
     free(vector->elements);
     free(vector);
 }
