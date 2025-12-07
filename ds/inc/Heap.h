@@ -193,6 +193,9 @@ size_t HeapSize(const heap_t* heap);
  *
  *   Space: O(1)
  *
+ *   It is recommended to call HeapIsEmpty(`heap`) to verify the heap is not
+ *   empty before calling this function.
+ * 
  * @return
  *   void* - Pointer to the removed element's data on success, or NULL if no
  *   matching element was found.

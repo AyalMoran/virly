@@ -22,13 +22,20 @@
 /*========================== MACRO UTILS ===========================*/
 
 /*========================= TYPEDEFS/ENUMS =========================*/
-
+/* typedef struct node
+{
+    struct node* next;
+    void* data;
+} node_t; */
+ 
 /*====================== STATIC DECLARATIONS =======================*/
 static int RecMergeSort(int* arr, size_t start, size_t end);
 static void Swap(int* a, int* b);
 static int Merge(int* arr, size_t start, size_t mid, size_t end);
-static size_t Partition(void* base, size_t low, size_t high, size_t size, int (*compar)(const void*, const void*));
-static void QSortHelper(void* base, size_t low, size_t high, size_t size, int (*compar)(const void*, const void*));
+static size_t Partition(void* base, size_t low, size_t high, size_t size,
+                        int (*compar)(const void*, const void*));
+static void QSortHelper(void* base, size_t low, size_t high, size_t size,
+                        int (*compar)(const void*, const void*));
 
 /*========================= API FUNCTIONS ==========================*/
 int* BinarySearchIterative(const int* arr, size_t size, int elem)
@@ -101,6 +108,20 @@ int MergeSort(int* arr, size_t size)
     }
 
     RecMergeSort(arr, 0, size - 1);
+
+    return SUCCESS;
+}
+
+int LinkedListMergeSort(node_t* head, size_t size)
+{
+    assert(NULL != head);
+
+    if (1 >= size)
+    {
+        return 0;
+    }
+
+    LinkedListRecMergeSort(head, 0, size - 1);
 
     return SUCCESS;
 }
@@ -215,8 +236,89 @@ static int Merge(int* arr, size_t start, size_t mid, size_t end)
 
     return 0;
 }
+/* 
+static int LinkedListRecMergeSort(int* arr, size_t start, size_t end)
+{
+    size_t mid = 0;
 
-static void QSortHelper(void* base, size_t low, size_t high, size_t size, int (*compar)(const void*, const void*))
+    assert(NULL != arr);
+
+    if (start >= end)
+    {
+        return 0;
+    }
+
+    mid = start + (end - start) / 2;
+
+    if (0 != LinkedListRecMergeSort(arr, start, mid))
+    {
+        return 1;
+    }
+
+    if (0 != LinkedListRecMergeSort(arr, mid + 1, end))
+    {
+        return 1;
+    }
+
+    return Merge(arr, start, mid, end);
+}
+
+static int MergeLists(node_t* arr, size_t start, size_t mid, size_t end)
+{
+    size_t size1 = mid - start + 1;
+    size_t size2 = end - mid;
+    size_t k = start;
+    size_t i = 0;
+    size_t j = 0;
+    node_t* left_arr = NULL;
+    node_t* right_arr = NULL;
+    node_t* arr_saver = arr;
+
+    for (left_arr = arr; i < start; ++i)
+    {
+        left_arr = left_arr->next;
+    }
+
+    for (right_arr = arr; j < mid + 1; ++j)
+    {
+        right_arr = right_arr->next;
+    }
+
+    i = 0;
+    j = 0;
+
+    while ((size1 > i) && (size2 > j))
+    {
+        if (left_arr->data <= right_arr->data)
+        {
+            arr->data = left_arr->data;
+            ++i;
+            left_arr = left_arr->next;
+        }
+        else
+        {
+            arr->data = right_arr->data;
+            ++j;
+            right_arr = right_arr->next;
+        }
+        arr = arr->next;
+    }
+
+    while (size1 > i || size2 > j)
+    {
+        arr->data = size1 > i ? left_arr[++i - 1] : right_arr[++j - 1];
+
+        arr = arr->next;
+    }
+
+    free(left_arr);
+    free(right_arr);
+
+    return 0;
+}
+ */
+static void QSortHelper(void* base, size_t low, size_t high, size_t size,
+                        int (*compar)(const void*, const void*))
 {
     if (low < high)
     {
@@ -227,12 +329,13 @@ static void QSortHelper(void* base, size_t low, size_t high, size_t size, int (*
     }
 }
 
-static size_t Partition(void* base, size_t low, size_t high, size_t size, int (*compar)(const void*, const void*))
+static size_t Partition(void* base, size_t low, size_t high, size_t size,
+                        int (*compar)(const void*, const void*))
 {
-    char*  arr   = (char*) base;
-    char*  pivot = arr + (low * size);
-    size_t i     = low - 1;
-    size_t j     = high + 1;
+    char* arr = (char*) base;
+    char* pivot = arr + (low * size);
+    size_t i = low - 1;
+    size_t j = high + 1;
 
     while (1)
     {
@@ -240,7 +343,7 @@ static size_t Partition(void* base, size_t low, size_t high, size_t size, int (*
         {
             ++i;
         } while (compar(arr + i * size, pivot) < 0);
-        
+
         do
         {
             --j;

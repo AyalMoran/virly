@@ -232,7 +232,7 @@ static void HeapifyUp(heap_t* heap, size_t index)
         return;
     }
 
-    if (0 < heap->cmp(DATA(vec, parent), DATA(vec, index)))
+    if (0 <= heap->cmp(DATA(vec, parent), DATA(vec, index)))
     {
         return;
     }
