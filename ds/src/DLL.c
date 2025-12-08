@@ -326,7 +326,7 @@ static void DLLSetNext(dll_iter_t iter, node_t* next)
 static void DLLSetPrev(dll_iter_t iter, node_t* prev)
 {
 	assert(iter);
-	                                                                                                                                                                                
+	                                                                        
     IterToNode(iter)->prev = prev;
 }
 

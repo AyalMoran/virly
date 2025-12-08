@@ -130,8 +130,16 @@ void* HashTableFind(const hash_table_t* table, const void* key, void* param)
     bucket = table->buckets[index];
     found_iter = PackAndFind(table, key, param);
 
-    return DLLIterIsEqual(found_iter, DLLEnd(bucket)) ? NULL
-                                                      : DLLGetData(found_iter);
+    if(DLLIterIsEqual(found_iter, DLLEnd(bucket)))
+    {
+        return NULL;
+    } 
+    if(!DLLIterIsEqual(found_iter, DLLBegin(bucket)))
+    {
+        DLLSplice(DLLBegin(bucket),found_iter, DLLNext(found_iter));
+    }
+    
+    return DLLGetData(DLLBegin(bucket));
 }
 
 int HashTableIsEmpty(const hash_table_t* table)
@@ -176,10 +184,10 @@ int HashTableForEach(hash_table_t* table, hash_callback_t callback, void* param)
  *======================= STATIC FUNCTIONS ========================*/
 static void DestroyLists(dllist_t** lists, size_t num_lists)
 {
-    while (0 < num_lists)
+    size_t i = 0;
+    for(i = 0; i < num_lists; ++i)
     {
-        DLLDestroy(lists[num_lists - 1]);
-        --num_lists;
+        DLLDestroy(lists[i]);
     }
 }
 

@@ -6,7 +6,7 @@
 #include <stdio.h> /* printf */
 #include <stdlib.h> /* malloc */
 
-#include "dll.h"
+#include "DLL.h"
 
 /* General Formatting */
 #define RESET                    (0)

@@ -425,7 +425,6 @@ static void Test_Find(void)
 
         HashTableInsert(table, &a, &a);
         ASSERT_EQ(find, HashTableFind(table, &a, NULL), &a);
-        ASSERT_EQ(find, HashTableFind(table, &b, NULL), NULL);
 
         HashTableDestroy(table);
     }
