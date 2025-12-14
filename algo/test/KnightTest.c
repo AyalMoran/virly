@@ -195,4 +195,3 @@ static char* ConvertIndexToSquare(size_t index)
      return 0;
  }
  
- 
