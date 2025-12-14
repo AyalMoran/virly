@@ -96,7 +96,7 @@ void HeapDestroy(heap_t* heap);
  * @note
  *   Time: O(log n)
  *
- *   Space: O(log n)
+ *   Space: O(1)
  *
  * @return
  *   int - 0 on success, non-zero on failure (e.g., allocation failure).
@@ -133,7 +133,7 @@ void* HeapPeek(const heap_t* heap);
  * @note
  *   Time: O(log n)
  *
- *   Space: O(log n)
+ *   Space: O(1)
  *
  *   It is recommended to call HeapIsEmpty(`heap`) to verify the heap is not
  *   empty before calling this function.
