@@ -2,8 +2,8 @@
 *************************************************************
 * File    : HashTable.c
 * Author  : Ayal Moran
-* Reviewer:
-* Date    :
+* Reviewer: Daniel Nekrassov
+* Date    : 9-12-2025
 **************************************************************/
 #ifndef _ILRD_HASHTABLE_H
 #define _ILRD_HASHTABLE_H
