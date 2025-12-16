@@ -22,8 +22,6 @@ typedef enum KnightStatus
 }knight_status_t;
 
 
-/* */
-
 typedef unsigned char pos_xy_t;
 typedef pos_xy_t path_t[BOARD_SIZE]; 
 
