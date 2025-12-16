@@ -2,8 +2,8 @@
 /**************************************************************
  *  File        : HashTable.c
  *  Author      : Ayal Moran
- *  Reviewer    :
- *  Date        :
+ *  Reviewer    : Daniel Nekrassov
+ *  Date        : 9-12-2025
  **************************************************************/
 
 #include <assert.h> /* assert() */

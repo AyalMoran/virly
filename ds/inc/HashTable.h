@@ -2,8 +2,8 @@
 *************************************************************
 * File    : HashTable.c
 * Author  : Ayal Moran
-* Reviewer:
-* Date    :
+* Reviewer: Daniel Nekrassov
+* Date    : 9-12-2025
 **************************************************************/
 #ifndef _ILRD_HASHTABLE_H
 #define _ILRD_HASHTABLE_H
@@ -92,7 +92,7 @@ int HashTableInsert(hash_table_t* table, const void* key, const void* value);
  *   @param param - Paramter for matching function.
  *
  * @note
- *   Time: O(n)
+ *   Time: O(1)
  *
  *   Space: O(1)
  *
@@ -112,7 +112,7 @@ void* HashTableRemove(hash_table_t* table, const void* key, void* param);
  *   @param param - Parameter for the table's match function.
  *
  * @note
- *   Time: O(n)
+ *   Time: O(1)
  *
  *   Space: O(1)
  *
