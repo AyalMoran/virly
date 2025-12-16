@@ -75,7 +75,7 @@ static void Test_Alloc(void)
     SHOW_IP(ip_req);
     SHOW_IP(out_ip_received);
 
-    /* Test allocation of IP that is not in the network - wrong network */
+    /* Test wrong network */
     ip_req[0] = 23;
     ip_req[1] = 0;
     ip_req[2] = 0;
@@ -87,7 +87,7 @@ static void Test_Alloc(void)
     RUN_TEST(alloc, "DHCPAlloc returns FAILURE_WRONG_NET", FAILURE_WRONG_NET == status);
 
     
-    /* Test allocation of IP that is already allocated gets minimum free ip */
+    /* Test IP that is already allocated gets minimum free ip */
     ip_req[0] = 192;
     ip_req[1] = 0;
     ip_req[2] = 0;
