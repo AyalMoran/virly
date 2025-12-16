@@ -5,10 +5,10 @@
 *  Reviewer    : Yohai Shohet
 *  Date        : 11-12-2025
 **************************************************************/
-#include "bits_arr.h" /* bits_arr_t  */
-#include <assert.h>   /* assert */
+#include "bits_arr.h" /* bits_arr_t      */
+#include <assert.h>   /* assert          */
 
-#include "Knight.h"
+#include "Knight.h"   /* knight_status_t */
 
 #define SUCCESS (0)
 #define FAILURE (1)
@@ -18,7 +18,7 @@
 #define FALSE (0)
 
 typedef pos_xy_t point_t;
-/* Knight possible moves offsets */
+
 static const int dcols[POSSIBLE_KNIGHT_MOVES] = {1, 2, 2, 1, -1, -2, -2, -1};
 static const int drows[POSSIBLE_KNIGHT_MOVES] = {2, 1, -1, -2, -2, -1, 1, 2};
 
