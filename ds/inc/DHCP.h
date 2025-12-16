@@ -52,12 +52,13 @@ void DHCPDestroy(dhcp_t* dhcp);
  * @brief Allocates an IP address from the DHCP pool.
  * @param dhcp Pointer to the DHCP object (must not be NULL).
  * @param request Preferred IP address to allocate, if available.
- *               If unavailable, the next available IP will be assigned.
+ *                If unavailable, the next available IP will be assigned.
  * @param allocated_ip Output parameter for the allocated IP address.
  * @return SUCCESS on successful allocation,
- *         ERR_ALLOC if memory allocation fails,
- *         ERR_INVALID_ADDRESS if the requested IP is invalid,
- *         ERR_FULL if no IP addresses are available.
+ *         FAILURE_WRONG_NET if requested IP is outside the subnet,
+ *	 	   FAILURE_FULL if no IPs are available,
+ * 		   FAILURE_ALLOC on other allocation errors.
+ * 
  *
  * Time complexity: O(1)
  * Space complexity: O(1)
@@ -69,8 +70,8 @@ dhcp_status_t DHCPAlloc(dhcp_t* dhcp, uchar_t ip_req[IP_BYTES], uchar_t out_ip_r
  * @param dhcp Pointer to the DHCP object (must not be NULL).
  * @param to_free The IP address to release.
  * @return SUCCESS if the IP was successfully freed,
- *         ERR_INVALID_ADDRESS if the IP is invalid,
- *         ERR_DOUBLE_FREE if the IP was already free or never allocated.
+ *         FAILURE_WRONG_NET if the IP is invalid,
+ *         FAILURE_ALREADY_FREE if the IP was already free or never allocated.
  *
  * Time complexity: O(1)
  * Space complexity: O(1)

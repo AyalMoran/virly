@@ -38,38 +38,40 @@ static int IsSameHostId(dhcp_t* dhcp, uint32_t ip1, uint32_t ip2);
 static uint32_t IPAddrToInt(const ip_t ip);
 static void IntToIPAddr(ip_t dest, uint32_t src);
 static uint32_t ExtractHostId(const dhcp_t* dhcp, uint32_t ip);
-
+static dhcp_status_t InitDHCPMembers(dhcp_t* dhcp, uint32_t net_addr, size_t subnet_mask_size);
 
 dhcp_t* DHCPCreate(uchar_t net_addr[IP_BYTES], size_t subnet_mask_size)
 {
     dhcp_t* dhcp = NULL;
     int32_t result_host = 0;
     size_t host_bits = 0;
+    int status = 0;
+
     assert(subnet_mask_size < IP_BYTES * CHAR_BIT - 1);
     assert(net_addr);
 
-    host_bits = IP_BYTES * CHAR_BIT - subnet_mask_size;
-
+    
     dhcp = (dhcp_t*) malloc(sizeof(dhcp_t));
-    if (!dhcp)
+    if (NULL == dhcp)
     {
         return NULL;
     }
-
-    dhcp->net_id = IPAddrToInt(net_addr);
-    dhcp->subnet_size = subnet_mask_size;
-    dhcp->trie = TrieCreate(host_bits);
-    if (!dhcp->trie)
+    
+    status = InitDHCPMembers(dhcp, IPAddrToInt(net_addr), subnet_mask_size);
+    if (SUCCESS != status)
     {
         free(dhcp);
-        return NULL;
+        dhcp = NULL;
+        return dhcp;
     }
 
+    host_bits = BITS_IN_HOST_ID(dhcp);
     if (0 != TrieInsert(dhcp->trie, NETWORK_ADD & LSB_MASK(host_bits), &  result_host) ||
         0 != TrieInsert(dhcp->trie, SERVER_ADD & LSB_MASK(host_bits), &result_host) ||
         0 != TrieInsert(dhcp->trie, BROADCAST_ADD & LSB_MASK(host_bits), &result_host))
     {
         TrieDestroy(dhcp->trie);
+        dhcp->trie = NULL;
         free(dhcp);
         return NULL;
     }
@@ -83,8 +85,6 @@ void DHCPDestroy(dhcp_t* dhcp)
 
     TrieDestroy(dhcp->trie);
     dhcp->trie = NULL;
-    free(dhcp);
-    
 }
 
 dhcp_status_t DHCPAlloc(dhcp_t* dhcp, uchar_t ip_req[IP_BYTES], uchar_t out_ip_received[IP_BYTES])
@@ -92,9 +92,9 @@ dhcp_status_t DHCPAlloc(dhcp_t* dhcp, uchar_t ip_req[IP_BYTES], uchar_t out_ip_r
     int32_t  new_ip     = 0;
     int32_t  host_id    = 0;
     
-    assert(dhcp);
-    assert(ip_req);
-    assert(out_ip_received);
+    assert(NULL != dhcp);
+    assert(NULL != ip_req);
+    assert(NULL != out_ip_received);
 
     new_ip = IPAddrToInt(ip_req);
 
@@ -123,8 +123,8 @@ dhcp_status_t DHCPFree(dhcp_t* dhcp, uchar_t ip[IP_BYTES])
 {
     uint32_t to_free = 0;
 
-    assert(dhcp);
-    assert(ip);
+    assert(NULL != dhcp);
+    assert(NULL != ip);
 
     to_free = IPAddrToInt(ip);
 
@@ -143,14 +143,28 @@ dhcp_status_t DHCPFree(dhcp_t* dhcp, uchar_t ip[IP_BYTES])
 
 size_t DHCPFreeCount(const dhcp_t* dhcp)
 {
-    assert(dhcp);
+    assert(NULL != dhcp);
 
     return (0x1 << BITS_IN_HOST_ID(dhcp)) - TrieCount(dhcp->trie);
 }
 
+static dhcp_status_t InitDHCPMembers(dhcp_t* dhcp, uint32_t net_addr, size_t subnet_mask_size)
+{
+    assert(NULL != dhcp);
+
+    dhcp->net_id = net_addr;
+    dhcp->subnet_size = subnet_mask_size;
+    dhcp->trie = TrieCreate(BITS_IN_HOST_ID(dhcp));
+    if (NULL == dhcp->trie)
+    {
+        return FAILURE_ALLOC;
+    }
+
+    return SUCCESS;
+}
 static int IsValidNetId(dhcp_t* dhcp, uint32_t ip)
 {
-    assert(dhcp);
+    assert(NULL != dhcp);
 
     return (dhcp->net_id & MSB_MASK(dhcp->subnet_size)) ==
            (ip & MSB_MASK(dhcp->subnet_size));
@@ -158,8 +172,8 @@ static int IsValidNetId(dhcp_t* dhcp, uint32_t ip)
 
 static int IsSavedIp(dhcp_t* dhcp, uint32_t ip)
 {
-    assert(dhcp);
-    assert(ip);
+    assert(NULL != dhcp);
+    assert(NULL != ip);
 
     return IsSameHostId(dhcp, NETWORK_ADD, ip) ||
            IsSameHostId(dhcp, SERVER_ADD, ip) ||
@@ -168,7 +182,7 @@ static int IsSavedIp(dhcp_t* dhcp, uint32_t ip)
 
 static int IsSameHostId(dhcp_t* dhcp, uint32_t ip1, uint32_t ip2)
 {
-    assert(dhcp);
+    assert(NULL != dhcp);
 
     return (ip1 & LSB_MASK(BITS_IN_HOST_ID(dhcp))) ==
            (ip2 & LSB_MASK(BITS_IN_HOST_ID(dhcp)));
@@ -179,7 +193,7 @@ static uint32_t IPAddrToInt(const ip_t ip)
     size_t i = 0;
     uint32_t res = 0;
 
-    assert(ip);
+    assert(NULL != ip);
 
     for (; i < IP_BYTES; ++i)
     {
@@ -194,7 +208,7 @@ static void IntToIPAddr(ip_t dest, uint32_t src)
 {
     size_t i = 0;
 
-    assert(dest);
+    assert(NULL != dest);
 
     for (; i < IP_BYTES; ++i)
     {
@@ -204,7 +218,7 @@ static void IntToIPAddr(ip_t dest, uint32_t src)
 
 static uint32_t ExtractHostId(const dhcp_t* dhcp, uint32_t ip)
 {
-    assert(dhcp);
+    assert(NULL != dhcp);
 
     return ip & LSB_MASK(BITS_IN_HOST_ID(dhcp));
 }
