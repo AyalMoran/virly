@@ -1,10 +1,10 @@
 /*
 *************************************************************
- *  File        : DHCP.c
- *  Author      : Ayal Moran
- *  Reviewer    : Chen Mugany
- *  Date        : 11-12-2025
- **************************************************************/
+*  File        : DHCP.c
+*  Author      : Ayal Moran
+*  Reviewer    : Chen Mugany
+*  Date        : 11-12-2025
+**************************************************************/
 #include <assert.h>/* assert */
 #include <limits.h>/* CHAR_BIT */
 #include <stdlib.h>/* malloc */
@@ -38,7 +38,8 @@ static int IsSameHostId(dhcp_t* dhcp, uint32_t ip1, uint32_t ip2);
 static uint32_t IPAddrToInt(const ip_t ip);
 static void IntToIPAddr(ip_t dest, uint32_t src);
 static uint32_t ExtractHostId(const dhcp_t* dhcp, uint32_t ip);
-static dhcp_status_t InitDHCPMembers(dhcp_t* dhcp, uint32_t net_addr, size_t subnet_mask_size);
+static dhcp_status_t InitDHCPMembers(dhcp_t* dhcp, uint32_t net_addr,
+                                     size_t subnet_mask_size);
 
 dhcp_t* DHCPCreate(uchar_t net_addr[IP_BYTES], size_t subnet_mask_size)
 {
@@ -50,13 +51,12 @@ dhcp_t* DHCPCreate(uchar_t net_addr[IP_BYTES], size_t subnet_mask_size)
     assert(subnet_mask_size < IP_BYTES * CHAR_BIT - 1);
     assert(net_addr);
 
-    
     dhcp = (dhcp_t*) malloc(sizeof(dhcp_t));
     if (NULL == dhcp)
     {
         return NULL;
     }
-    
+
     status = InitDHCPMembers(dhcp, IPAddrToInt(net_addr), subnet_mask_size);
     if (SUCCESS != status)
     {
@@ -66,9 +66,12 @@ dhcp_t* DHCPCreate(uchar_t net_addr[IP_BYTES], size_t subnet_mask_size)
     }
 
     host_bits = BITS_IN_HOST_ID(dhcp);
-    if (0 != TrieInsert(dhcp->trie, NETWORK_ADD & LSB_MASK(host_bits), &  result_host) ||
-        0 != TrieInsert(dhcp->trie, SERVER_ADD & LSB_MASK(host_bits), &result_host) ||
-        0 != TrieInsert(dhcp->trie, BROADCAST_ADD & LSB_MASK(host_bits), &result_host))
+    if (0 != TrieInsert(dhcp->trie, NETWORK_ADD & LSB_MASK(host_bits),
+                        &result_host) ||
+        0 != TrieInsert(dhcp->trie, SERVER_ADD & LSB_MASK(host_bits),
+                        &result_host) ||
+        0 != TrieInsert(dhcp->trie, BROADCAST_ADD & LSB_MASK(host_bits),
+                        &result_host))
     {
         TrieDestroy(dhcp->trie);
         dhcp->trie = NULL;
@@ -85,13 +88,15 @@ void DHCPDestroy(dhcp_t* dhcp)
 
     TrieDestroy(dhcp->trie);
     dhcp->trie = NULL;
+    free(dhcp);
 }
 
-dhcp_status_t DHCPAlloc(dhcp_t* dhcp, uchar_t ip_req[IP_BYTES], uchar_t out_ip_received[IP_BYTES])
+dhcp_status_t DHCPAlloc(dhcp_t* dhcp, uchar_t ip_req[IP_BYTES],
+                        uchar_t out_ip_received[IP_BYTES])
 {
-    int32_t  new_ip     = 0;
-    int32_t  host_id    = 0;
-    
+    int32_t new_ip = 0;
+    int32_t host_id = 0;
+
     assert(NULL != dhcp);
     assert(NULL != ip_req);
     assert(NULL != out_ip_received);
@@ -148,7 +153,8 @@ size_t DHCPFreeCount(const dhcp_t* dhcp)
     return (0x1 << BITS_IN_HOST_ID(dhcp)) - TrieCount(dhcp->trie);
 }
 
-static dhcp_status_t InitDHCPMembers(dhcp_t* dhcp, uint32_t net_addr, size_t subnet_mask_size)
+static dhcp_status_t InitDHCPMembers(dhcp_t* dhcp, uint32_t net_addr,
+                                     size_t subnet_mask_size)
 {
     assert(NULL != dhcp);
 
@@ -173,7 +179,7 @@ static int IsValidNetId(dhcp_t* dhcp, uint32_t ip)
 static int IsSavedIp(dhcp_t* dhcp, uint32_t ip)
 {
     assert(NULL != dhcp);
-    assert(NULL != ip);
+    assert(ip);
 
     return IsSameHostId(dhcp, NETWORK_ADD, ip) ||
            IsSameHostId(dhcp, SERVER_ADD, ip) ||

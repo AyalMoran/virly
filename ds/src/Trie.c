@@ -65,8 +65,7 @@ static int CreateNode(node_t* node, child_t child_type);
 static trie_status_t InsertNode(node_t* node, int32_t to_insert, size_t depth,
                                 int32_t* inserted);
 
-static trie_status_t InsertToLeaf(node_t* node, child_t child_type,
-                                  int32_t* inserted);
+static trie_status_t InsertToLeaf(node_t* node, child_t child_type);
 
 static int IsSubtreeFull(const node_t* subroot);
 
@@ -169,7 +168,7 @@ static trie_status_t InsertNode(node_t* node, int32_t to_insert, size_t depth,
 
     if (0 == depth)
     {
-        return InsertToLeaf(node, direction, inserted);
+        return InsertToLeaf(node, direction);
     }
 
     if ((NULL == node->children[direction]) &&
@@ -185,8 +184,7 @@ static trie_status_t InsertNode(node_t* node, int32_t to_insert, size_t depth,
     return res;
 }
 
-static trie_status_t InsertToLeaf(node_t* node, child_t child_type,
-                                  int32_t* inserted)
+static trie_status_t InsertToLeaf(node_t* node, child_t child_type)
 {
     assert(node);
 
