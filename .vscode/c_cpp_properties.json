@@ -12,7 +12,8 @@
                 "${workspaceFolder}/projects/inc/**",
                 "${workspaceFolder}/quizzes/inc/**",
                 "${workspaceFolder}/system_programming/inc/**",
-                "${workspaceFolder}/utils/inc/**"
+                "${workspaceFolder}/utils/inc/**",
+                "${workspaceFolder}/system_programming/inc"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/gcc",
