@@ -32,7 +32,7 @@ int main(void)
     pid_t pong_pid = -1;
     int rounds = 0;
     char* pong_args = NULL;
-    char pid_buf[32];
+    char pid_buf[32] = {0};
     int n = 0;
     char* argv[3] = {0};
 

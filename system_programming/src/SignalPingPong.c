@@ -6,11 +6,6 @@
 **************************************************************/
 #define _POSIX_C_SOURCE 200809L
 
-#include <assert.h>  /* assert */
-#include <stddef.h>  /* size_t   */
-#include <stdlib.h>  /* malloc */
-#include <string.h>  /* memset */
-#include <errno.h>   /*EFAULT*/
   /*============================ INCLUDES ============================*/
 #include "SignalPingPong.h"
 
