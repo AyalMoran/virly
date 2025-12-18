@@ -18,4 +18,9 @@
 # CONFIG(?) FILES
 !.gitignore
 !.myfuncs
+!.clangd
+!c_cpp_properties.json
+!launch.json
+!settings.json
+
 

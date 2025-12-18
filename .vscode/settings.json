@@ -1,0 +1,56 @@
+{
+    "files.associations": {
+        "*.h": "c",
+        "cr4tomercalc": "c",
+        "functional": "c",
+        "cstdlib": "c",
+        "typeinfo": "c",
+        "random": "c",
+        "compare": "c",
+        "cstdint": "c",
+        "cerrno": "c",
+        "string": "c",
+        "array": "c",
+        "string_view": "c",
+        "initializer_list": "c"
+    },
+    "C_Cpp.default.compilerPath"    : "/usr/bin/gcc",
+    "C_Cpp.default.intelliSenseMode": "gcc-x64",
+    "C_Cpp.default.cStandard"       : "c89",
+    "C_Cpp.default.cppStandard"     : "c++17",
+    
+    "c-cpp-flylint.language"        : "c",
+    "c-cpp-flylint.clang.executable": "gcc -ansi -Wall -Wextra -pedantic-errors",
+    "c-cpp-flylint.clang.includePaths": [
+        "${workspaceFolder}/ds/inc",
+        "${workspaceFolder}/algo/inc",
+        "${workspaceFolder}/c/inc",
+        "${workspaceFolder}/exams/inc",
+        "${workspaceFolder}/other/inc",
+        "${workspaceFolder}/projects/inc",
+        "${workspaceFolder}/quizzes/inc",
+        "${workspaceFolder}/system_programming/inc",
+        "${workspaceFolder}/utils/inc"
+    ],
+    "c-cpp-flylint.cppcheck.extraArgs": [
+    "--suppress=variableScope",
+    "--suppress=unreadVariable"
+    ],
+    "github.copilot.enable"         : {
+        "*": false,
+        "plaintext": false,
+        "markdown": false,
+        "scminput": false
+    },
+    "cmake.sourceDirectory"   : "/home/moranayal/git/ds/SDL_bgi",
+    "makefile.makefilePath"   : "${workspaceFolder}/ds/ds.mk",
+    "C_Cpp.dimInactiveRegions": false,
+    
+    // Disable all automatic formatting for Makefiles
+    "[makefile]": {
+        "editor.formatOnSave": false,
+        "editor.formatOnType": false,
+        "editor.defaultFormatter": null
+    },
+    "clangd.enable": true
+}
