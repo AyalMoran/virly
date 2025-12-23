@@ -1,9 +1,7 @@
-#include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include "StringPerm.h"
+#include <assert.h>
 
 static void RecStringPerm(char* str, size_t left, size_t right);
 static void SwapChars(char* a, char* b);
@@ -12,20 +10,27 @@ void StringPerm(char* str)
 {
     assert(str);
 
-    RecStringPerm(str, 0, strlen(str) - 1);
+    if (*str == '\0')
+    {
+        printf("%s\n", str);
+        return;
+    }
+
+    RecStringPerm(str, 0, strlen(str));
+
 }
 
 static void RecStringPerm(char* str, size_t left, size_t right)
 {
     size_t i = 0;
 
-    if (left == right + 1)
+    if (left == right)
     {
         printf("%s\n", str);
         return;
     }
 
-    for (i = left; i <= right; ++i)
+    for (i = left; i < right; ++i)
     {
         SwapChars((str + left), (str + i));
         RecStringPerm(str, left + 1, right);
@@ -39,3 +44,4 @@ static void SwapChars(char* a, char* b)
     *a = *b;
     *b = temp;
 }
+
