@@ -36,12 +36,6 @@
     "--suppress=variableScope",
     "--suppress=unreadVariable"
     ],
-    "github.copilot.enable"         : {
-        "*": false,
-        "plaintext": false,
-        "markdown": false,
-        "scminput": false
-    },
     "cmake.sourceDirectory"   : "/home/moranayal/git/ds/SDL_bgi",
     "makefile.makefilePath"   : "${workspaceFolder}/ds/ds.mk",
     "C_Cpp.dimInactiveRegions": false,

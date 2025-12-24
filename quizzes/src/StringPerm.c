@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 static void RecStringPerm(char* str, size_t left, size_t right);
 static void SwapChars(char* a, char* b);
@@ -29,11 +30,11 @@ static void RecStringPerm(char* str, size_t left, size_t right)
         return;
     }
 
-    for (i = left; i <= right; ++i)
+    for (i = left; i < right; ++i)
     {
-        SwapChars((str + left), (str + right));
+        SwapChars((str + left), (str + i));
         RecStringPerm(str, left + 1, right);
-        SwapChars((str + left), (str + right));
+        SwapChars((str + left), (str + i));
     }
 }
 
