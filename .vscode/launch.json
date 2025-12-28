@@ -2,6 +2,27 @@
   "version"       : "0.2.0",
   "configurations": [
     {
+      "name": "Debug Current SysProg Executable",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/system_programming/bin/${fileBasenameNoExtension}",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${fileDirname}",
+      "environment"    : [],
+      "externalConsole": false,
+      "MIMode"         : "gdb",
+      "miDebuggerPath" : "/usr/bin/gdb",
+      "setupCommands"  : [
+        {
+          "description"   : "Enable pretty-printing",
+          "text"          : "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ],
+      //"preLaunchTask": "Build ANSI C89" // Uncomment to run the build task before launching
+    },
+    {
       "name": "Debug Current DS Executable",
       "type": "cppdbg",
       "request": "launch",
