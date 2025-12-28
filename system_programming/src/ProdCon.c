@@ -959,7 +959,7 @@ static void* C6(void* args)
     {
         pthread_mutex_lock(&ctx->mutex);
 
-        while (ctx->consumed == NCONS)
+        while (NCONS == ctx->consumed)
         {
             if (0 == ctx->items_to_produce)
             {
@@ -971,7 +971,7 @@ static void* C6(void* args)
 
         product = ctx->product;
         ++ctx->consumed;
-        if (ctx->consumed == NCONS)
+        if (NCONS == ctx->consumed)
         {
             sem_post(&ctx->sem);
         }
