@@ -139,7 +139,7 @@ sll_iter_t SLLInsert(sll_iter_t where, void* data)
     {
     	sll_iter_t curr  = where;
     	
-    	while(curr->next)
+    	while(IterToNode(curr)->next)
     	{
     		SLLNext(curr);
     	}
