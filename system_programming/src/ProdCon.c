@@ -45,7 +45,7 @@
 #define UNLOCKED (0)
 #define FULL (1)
 #define EMPTY (0)
-#define NUM_ITEMS (500000UL)
+#define NUM_ITEMS (5000000UL)
 
 #ifdef PHASE2
 #    define NCONS (4UL)
@@ -77,7 +77,6 @@
 /*========================= TYPEDEFS/ENUMS =========================*/
 typedef void* (*thread_routine_t)(void* args);
 #ifdef PHASE1
-
 typedef struct args1
 {
     size_t items_to_produce;
@@ -724,6 +723,7 @@ static void* P1(void* args)
         Produce(ctx->msg);
         ++i;
         ctx->full = FULL;
+        pthread_spin_unlock(&ctx->lock);
     }
 
     return NULL;
@@ -750,6 +750,7 @@ static void* C1(void* args)
         Consume(ctx->msg);
         ++i;
         ctx->full = EMPTY;
+        pthread_spin_unlock(&ctx->lock);
     }
     return NULL;
 }
