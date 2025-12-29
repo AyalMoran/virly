@@ -39,7 +39,8 @@ typedef enum sem_status
     SEM_SUCCESS = 0,
     SEM_INVALID_NUMBER = 1,
     SEM_POST_FAILED = 2,
-    SEM_WAIT_FAILED = 3
+    SEM_WAIT_FAILED = 3,
+    SEM_OPEN_FAILED = 4
 }sem_status_t;
 
 undo_entry_t undo_stack[MAX_OPS];
@@ -48,7 +49,7 @@ int undo_size = 0;
 sem_t* sem = NULL;
 
 /*====================== STATIC DECLARATIONS =======================*/
-static void ReceiveInput(sem_t* sem);
+static sem_status_t ReceiveInput(sem_t* sem);
 
 static void GetInput(char* input);
 
@@ -69,7 +70,7 @@ int SemManipulation(const char* name)
     if (SEM_FAILED == sem)
     { 
         perror("sem_open failed");
-        exit(SEM_FAILED);
+        exit(SEM_OPEN_FAILED);
     }
 
     atexit(ExitHandler);
@@ -79,7 +80,7 @@ int SemManipulation(const char* name)
 }
 
 /*======================= STATIC FUNCTIONS ========================*/
-static void ReceiveInput(sem_t* sem)
+static sem_status_t ReceiveInput(sem_t* sem)
 {
     char input[100] = {0};
     char* command = NULL;
@@ -99,6 +100,8 @@ static void ReceiveInput(sem_t* sem)
         }
         RunCommand(sem, number, command, undo);
     }
+
+    return SEM_SUCCESS;
 }
 
 static void GetInput(char* input)
@@ -158,7 +161,7 @@ static sem_status_t RunCommand(sem_t* sem, int number, char* command, int undo)
             if (-1 == sem_wait(sem))
             {
                 perror("sem_wait failed");
-                return;
+                return SEM_WAIT_FAILED;
             }
             --number;
         }
@@ -249,7 +252,7 @@ static sem_status_t ParseCommandAndNumber(char* input, int* number, char** comma
     {
         fprintf(stderr, "Invalid input format. Expected: <command> <number> "
                         "<undo_option>\n");
-        return;
+        return SEM_SUCCESS;
     }
 
     *command = token;
