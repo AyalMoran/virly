@@ -24,7 +24,7 @@ static int UIDSetIPAddress(unsigned char* ip);
 static int UIDSetCounter(ilrd_uid_t* uid);
 
 const  ilrd_uid_t UIDBadUID          = {0, (time_t) (-1), (pid_t) (-1), {0}};
-static pthread_mutex_t counter_mutex = PTHREAD_MUTEX_INITIALIZER;
+
 
 ilrd_uid_t UIDCreate(void)
 {
@@ -101,23 +101,13 @@ static int UIDSetCounter(ilrd_uid_t* uid)
 
     assert(uid);
 
-    if (0 != pthread_mutex_lock(&counter_mutex))
-    {
-        return FAIL;
-    }
-
     if (SIZE_MAX == counter)
     {
         counter = 0;
     }
     else
     {
-        uid->counter = counter++;
-    }
-
-    if (0 != pthread_mutex_unlock(&counter_mutex))
-    {
-        return FAIL;
+         __sync_add_and_fetch(&uid->counter, 1);
     }
 
     return status;
