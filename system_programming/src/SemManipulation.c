@@ -34,6 +34,14 @@ typedef struct undo_entry
     int is_increment;
 } undo_entry_t;
 
+typedef enum sem_status
+{
+    SEM_SUCCESS = 0,
+    SEM_INVALID_NUMBER = 1,
+    SEM_POST_FAILED = 2,
+    SEM_WAIT_FAILED = 3
+}sem_status_t;
+
 undo_entry_t undo_stack[MAX_OPS];
 int undo_size = 0;
 
@@ -44,13 +52,13 @@ static void ReceiveInput(sem_t* sem);
 
 static void GetInput(char* input);
 
-static void RunCommand(sem_t* sem, int number, char* command, int undo);
+static sem_status_t RunCommand(sem_t* sem, int number, char* command, int undo);
 
 static void AddUndoEntry(int amount, int is_increment);
 
-static void ParseCommandAndNumber(char* input, int* number, char** command, int* undo);
+static sem_status_t ParseCommandAndNumber(char* input, int* number, char** command, int* undo);
 
-static void UndoAll(sem_t* sem);
+static sem_status_t UndoAll(sem_t* sem);
 
 static void ExitHandler(void);
 
@@ -61,12 +69,13 @@ int SemManipulation(const char* name)
     if (SEM_FAILED == sem)
     { 
         perror("sem_open failed");
+        exit(SEM_FAILED);
     }
 
     atexit(ExitHandler);
     ReceiveInput(sem);
 
-    exit(EXIT_SUCCESS);
+    return EXIT_SUCCESS;
 }
 
 /*======================= STATIC FUNCTIONS ========================*/
@@ -76,7 +85,7 @@ static void ReceiveInput(sem_t* sem)
     char* command = NULL;
     int number = 0;
     int undo = 0;
-
+    sem_status_t status = SEM_SUCCESS;
     assert(NULL != sem);
 
     while (TRUE)
@@ -84,7 +93,10 @@ static void ReceiveInput(sem_t* sem)
         undo = 0;
 
         GetInput(input);
-        ParseCommandAndNumber(input, &number, &command, &undo);
+        if( SEM_SUCCESS != (status =  ParseCommandAndNumber(input, &number, &command, &undo)))
+        {
+            return status;
+        }
         RunCommand(sem, number, command, undo);
     }
 }
@@ -109,7 +121,7 @@ static void GetInput(char* input)
     }
 }
 
-static void RunCommand(sem_t* sem, int number, char* command, int undo)
+static sem_status_t RunCommand(sem_t* sem, int number, char* command, int undo)
 {
     int sem_val = 0;
     int number_cpy = number;
@@ -165,7 +177,7 @@ static void RunCommand(sem_t* sem, int number, char* command, int undo)
             if (-1 == sem_post(sem))
             {
                 perror("sem_post failed");
-                return;
+                return SEM_POST_FAILED;
             }
             --number;
         }
@@ -174,6 +186,8 @@ static void RunCommand(sem_t* sem, int number, char* command, int undo)
 
         break;
     }
+
+    return SEM_SUCCESS;
 }
 
 static void AddUndoEntry(int amount, int is_increment)
@@ -186,7 +200,7 @@ static void AddUndoEntry(int amount, int is_increment)
     }
 }
 
-static void UndoAll(sem_t* sem)
+static sem_status_t UndoAll(sem_t* sem)
 {
     int i = 0;
     while (0 < undo_size)
@@ -200,6 +214,7 @@ static void UndoAll(sem_t* sem)
                 if (-1 == sem_post(sem))
                 {
                     perror("Undo (sem_post) failed");
+                    return SEM_POST_FAILED;
                 }
             }
         }
@@ -210,11 +225,13 @@ static void UndoAll(sem_t* sem)
                 if (-1 == sem_trywait(sem))
                 {
                     perror("Undo (sem_trywait) failed - Semaphore Exhausted");
-                    break;
+                    return SEM_WAIT_FAILED;
                 }
             }
         }
     }
+
+    return SEM_SUCCESS;
 }
 
 static void ExitHandler(void)
@@ -224,7 +241,7 @@ static void ExitHandler(void)
     sem = NULL;
 }
 
-static void ParseCommandAndNumber(char* input, int* number, char** command,
+static sem_status_t ParseCommandAndNumber(char* input, int* number, char** command,
                                   int* undo)
 {
     char* token = strtok(input, " ");
@@ -240,7 +257,7 @@ static void ParseCommandAndNumber(char* input, int* number, char** command,
     token = strtok(NULL, " ");
     if (NULL == token)
     {
-        return;
+        return SEM_SUCCESS;
     }
 
     *number = atoi(token);
@@ -248,13 +265,13 @@ static void ParseCommandAndNumber(char* input, int* number, char** command,
     if (0 >= *number)
     {
         fprintf(stderr, "Invalid number: must be > 0\n");
-        return;
+        return SEM_INVALID_NUMBER;
     }
 
     token = strtok(NULL, " ");
     if (NULL == token)
     {
-        return;
+        return SEM_SUCCESS;
     }
 
     token[strcspn(token, "\r\n")] = '\0';
@@ -264,7 +281,7 @@ static void ParseCommandAndNumber(char* input, int* number, char** command,
         *undo = 1;
     }
 
-    return;
+    return SEM_SUCCESS;
 }
 
 
