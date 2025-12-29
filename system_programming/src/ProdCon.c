@@ -28,6 +28,9 @@
 #ifdef PHASE4
 #    include "cbuff.h" /* c_buffer_t */
 #endif                 /* PHASE4 */
+#ifdef PHASE5
+#    include "fsq.h" /* fsq_t */
+#endif               /* PHASE5 */
 
 /*========================== DEFINITIONS ===========================*/
 
@@ -60,7 +63,14 @@
 #    define BUFFER_CAPACITY (1000UL)
 #endif /* PHASE4 */
 
+#ifdef PHASE5
+#    define NCONS (10UL)
+#    define NPROD (10UL)
+#    define BUFFER_CAPACITY (100UL)
+#endif /* PHASE5 */
+
 #ifdef PHASE6
+#define NO_MORE_VERSIONS (-1)
 #    define NCONS (10UL)
 #    define NPROD (1UL)
 #endif /* PHASE6 */
@@ -121,6 +131,17 @@ typedef struct args4
 } args4_t;
 #endif /* PHASE4 */
 
+#ifdef PHASE5
+typedef struct args5
+{
+    size_t items_to_produce;
+    size_t consumed;
+    fsq_t* fsq;
+} args5_t;
+
+pthread_mutex_t count_mutex = PTHREAD_MUTEX_INITIALIZER;
+#endif /* PHASE5 */
+
 #ifdef PHASE6
 typedef struct args6
 {
@@ -130,6 +151,7 @@ typedef struct args6
     pthread_mutex_t mutex;
     sem_t sem;
     pthread_cond_t cond_var;
+    int version;
 } args6_t;
 #endif /* PHASE6 */
 
@@ -158,6 +180,10 @@ static void* P4(void* args);
 static void* C4(void* args);
 static int ReleaseConsumers(fsq_t* fsq);
 #endif /* PHASE4 */
+#ifdef PHASE5
+static void* P5(void* args);
+static void* C5(void* args);
+#endif /* PHASE5 */
 #ifdef PHASE6
 static void* P6(void* args);
 static void* C6(void* args);
@@ -237,21 +263,18 @@ prod_con_status_t ProdCon()
         (status = CreateThreads(producer, NPROD, consumer, NCONS, P2, C2,
                                 &resource, &resource)))
     {
-        /* free(msg); */
         return status;
     }
 
     if (PROD_CON_SUCCESS !=
         (status = JoinThreads(producer, NPROD, consumer, NCONS, NULL, NULL)))
     {
-        /*  free(msg); */
         return status;
     }
 
     SLLDestroy(resource.buffer);
     pthread_mutex_destroy(&resource.mutex);
 
-    /* free(msg); */
 
     return status;
 }
@@ -383,6 +406,45 @@ prod_con_status_t ProdCon()
     return status;
 }
 #endif /* PHASE4 */
+
+#ifdef PHASE5
+prod_con_status_t ProdCon()
+{
+    pthread_t producer[NPROD] = {0};
+    pthread_t consumer[NCONS] = {0};
+    prod_con_status_t status = PROD_CON_SUCCESS;
+    args5_t resource = {
+        0,
+    };
+
+    resource.items_to_produce = NUM_ITEMS * NCONS;
+    resource.consumed = 0;
+
+    resource.fsq = FSQCreate(BUFFER_CAPACITY, NCONS);
+    if (!resource.fsq)
+    {
+        return PROD_CON_ALLOC_FAILURE;
+    }
+
+    if (PROD_CON_SUCCESS !=
+        (status = CreateThreads(producer, NPROD, consumer, NCONS, P5, C5,
+                                &resource, &resource)))
+    {
+        return status;
+    }
+
+    if (PROD_CON_SUCCESS !=
+        (status = JoinThreads(producer, NPROD, consumer, NCONS, NULL, NULL)))
+    {
+        return status;
+    }
+
+    FSQDestroy(resource.fsq);
+    pthread_mutex_destroy(&count_mutex);
+
+    return status;
+}
+#endif /* PHASE5 */
 #ifdef PHASE6
 prod_con_status_t ProdCon()
 {
@@ -395,6 +457,8 @@ prod_con_status_t ProdCon()
 
     resource.items_to_produce = NUM_ITEMS;
     resource.consumed = NCONS;
+    resource.version = 0;
+
     if (0 != pthread_mutex_init(&resource.mutex, NULL))
     {
         return PROD_CON_ALLOC_FAILURE;
@@ -878,24 +942,23 @@ static void* P4(void* args)
 static void* C4(void* args)
 {
     args4_t* ctx = (args4_t*) args;
+    int product = 0;
 
     assert(ctx);
 
     while (TRUE)
     {
-        int product = 0;
-
         sem_wait(&ctx->fsq.sem_full);
 
         pthread_mutex_lock(&ctx->fsq.mutex);
-        if (NUM_ITEMS ==ctx->consumed)
+        if (NUM_ITEMS == ctx->consumed)
         {
             pthread_mutex_unlock(&ctx->fsq.mutex);
             sem_post(&ctx->fsq.sem_full);
             break;
         }
         CBuffRead(ctx->fsq.cb, &product, sizeof(int));
-        ctx->consumed++;
+        ++(ctx->consumed);
         pthread_mutex_unlock(&ctx->fsq.mutex);
 
         sem_post(&ctx->fsq.sem_empty);
@@ -919,32 +982,115 @@ static int ReleaseConsumers(fsq_t* fsq)
     }
 }
 #endif /* PHASE4 */
-#ifdef PHASE6
-static void* P6(void* args)
+
+#ifdef PHASE5
+static void* P5(void* args)
 {
-    args6_t* ctx = (args6_t*) args;
-    int product = 0;
+    args5_t* ctx = (args5_t*) args;
+    int* product = 0;
+    fsq_t* fsq = ctx->fsq;
+    size_t i = 0;
+
+    size_t items = 0;
+    assert(ctx);
+
+    items = ctx->items_to_produce;
+    while (TRUE)
+    {
+        product = (int*) malloc(sizeof(int));
+        if (!product)
+        {
+            continue;
+        }
+
+        Produce(product);
+#    ifdef TESTING_COUNTER
+        pthread_mutex_lock(&count_mutex);
+        if (0 == items)
+        {
+            pthread_mutex_unlock(&count_mutex);
+            free(product);
+            break;
+        }
+        --items;
+        pthread_mutex_unlock(&count_mutex);
+#    endif /* TESTING_COUNTER */
+
+        FSQEnqueue(fsq, product);
+    }
+
+    return NULL;
+}
+
+static void* C5(void* args)
+{
+    args5_t* ctx = (args5_t*) args;
+    fsq_t* fsq = ctx->fsq;
+    void* product = 0;
+    int consumed = 0;
 
     assert(ctx);
 
     while (TRUE)
     {
-        Produce(&product);
-
-        pthread_mutex_lock(&ctx->mutex);
-        if (0 == ctx->items_to_produce)
+#    ifdef TESTING_COUNTER
+        pthread_mutex_lock(&count_mutex);
+        if (NUM_ITEMS == ctx->consumed)
         {
-            pthread_mutex_unlock(&ctx->mutex);
+            pthread_mutex_unlock(&count_mutex);
             break;
         }
+        ctx->consumed++;
+        pthread_mutex_unlock(&count_mutex);
+#    endif /* TESTING_COUNTER */
+
+        FSQDequeue(ctx->fsq, &product);
+        ++consumed;
+
+        Consume(product);
+        free(product);
+    }
+
+    return NULL;
+}
+#endif /* PHASE5 */
+#ifdef PHASE6
+static void* P6(void* args)
+{
+    args6_t* ctx = (args6_t*) args;
+    size_t i = 0;
+    int product = 0;
+    size_t items_to_produce = NUM_ITEMS;
+
+    assert(ctx);
+
+    while (items_to_produce > 0)
+    {
+        for (i = 0; i < NCONS; ++i)
+        {
+            sem_wait(&ctx->sem);
+        }
+
+        Produce(&product);
+        --items_to_produce;
+        
+        pthread_mutex_lock(&ctx->mutex);
         ctx->product = product;
-        ctx->consumed = 0;
-        --ctx->items_to_produce;
+        ctx->version += 1;
         pthread_cond_broadcast(&ctx->cond_var);
         pthread_mutex_unlock(&ctx->mutex);
+    }
+    
+    for (i = 0; i < NCONS; ++i)
+    {
         sem_wait(&ctx->sem);
     }
 
+    pthread_mutex_lock(&ctx->mutex);
+    ctx->version = NO_MORE_VERSIONS;
+    pthread_cond_broadcast(&ctx->cond_var);
+    pthread_mutex_unlock(&ctx->mutex);
+    
     return NULL;
 }
 
@@ -952,32 +1098,35 @@ static void* C6(void* args)
 {
     args6_t* ctx = (args6_t*) args;
     int product = 0;
+    int curr_version = 0;
+    size_t consumed_count = 0;
 
     assert(ctx);
 
-    while (TRUE)
+    sem_post(&ctx->sem);
+    
+    curr_version = ctx->version;
+    
+    while (consumed_count < NUM_ITEMS)
     {
         pthread_mutex_lock(&ctx->mutex);
-
-        while (NCONS == ctx->consumed)
+        while (curr_version == ctx->version)
         {
-            if (0 == ctx->items_to_produce)
+            if (ctx->version == NO_MORE_VERSIONS)
             {
                 pthread_mutex_unlock(&ctx->mutex);
                 return NULL;
             }
             pthread_cond_wait(&ctx->cond_var, &ctx->mutex);
         }
-
+        curr_version = ctx->version;
         product = ctx->product;
-        ++ctx->consumed;
-        if (NCONS == ctx->consumed)
-        {
-            sem_post(&ctx->sem);
-        }
         pthread_mutex_unlock(&ctx->mutex);
-
+        
         Consume(&product);
+        consumed_count++;
+        
+        sem_post(&ctx->sem);
     }
 
     return NULL;
