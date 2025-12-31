@@ -70,7 +70,7 @@
 #endif /* PHASE5 */
 
 #ifdef PHASE6
-#define NO_MORE_VERSIONS (-1)
+#    define NO_MORE_VERSIONS (-1)
 #    define NCONS (10UL)
 #    define NPROD (1UL)
 #endif /* PHASE6 */
@@ -273,7 +273,6 @@ prod_con_status_t ProdCon()
 
     SLLDestroy(resource.buffer);
     pthread_mutex_destroy(&resource.mutex);
-
 
     return status;
 }
@@ -784,8 +783,12 @@ static void* P2(void* args)
             free(product);
             break;
         }
-        SLLInsert(SLLEnd(ctx->buffer), product);
-        ctx->items_to_produce--;
+        if (SLLIterIsEqual(SLLInsert(SLLEnd(ctx->buffer), product),
+                           SLLEnd(ctx->buffer)))
+        {
+            return PROD_CON_ALLOC_FAILURE;
+        }
+        --(ctx->items_to_produce);
         pthread_mutex_unlock(&ctx->mutex);
     }
 
@@ -817,7 +820,7 @@ static void* C2(void* args)
         iter = SLLBegin(ctx->buffer);
         product = (int*) SLLGetData(iter);
         SLLRemove(iter);
-        ctx->consumed++;
+        ++(ctx->consumed);
         pthread_mutex_unlock(&ctx->mutex);
 
         if (product)
@@ -858,7 +861,7 @@ static void* P3(void* args)
             break;
         }
         SLLInsert(SLLEnd(ctx->buffer), product);
-        ctx->items_to_produce--;
+        --(ctx->items_to_produce);
         pthread_mutex_unlock(&ctx->mutex);
 
         sem_post(&ctx->available_items);
@@ -888,7 +891,7 @@ static void* C3(void* args)
         iter = SLLBegin(ctx->buffer);
         product = (int*) SLLGetData(iter);
         SLLRemove(iter);
-        ctx->consumed++;
+        ++(ctx->consumed);
         pthread_mutex_unlock(&ctx->mutex);
 
         if (product)
@@ -931,7 +934,7 @@ static void* P4(void* args)
             break;
         }
         CBuffWrite(ctx->fsq.cb, product, sizeof(int));
-        --ctx->items_to_produce;
+        --(ctx->items_to_produce);
         pthread_mutex_unlock(&ctx->fsq.mutex);
 
         sem_post(&ctx->fsq.sem_full);
@@ -1013,7 +1016,7 @@ static void* P5(void* args)
             free(product);
             break;
         }
-        --items;
+        --(items);
         pthread_mutex_unlock(&count_mutex);
 #    endif /* TESTING_COUNTER */
 
@@ -1041,7 +1044,7 @@ static void* C5(void* args)
             pthread_mutex_unlock(&count_mutex);
             break;
         }
-        ctx->consumed++;
+        ++(ctx->consumed);
         pthread_mutex_unlock(&count_mutex);
 #    endif /* TESTING_COUNTER */
 
@@ -1074,14 +1077,14 @@ static void* P6(void* args)
 
         Produce(&product);
         --items_to_produce;
-        
+
         pthread_mutex_lock(&ctx->mutex);
         ctx->product = product;
         ctx->version += 1;
         pthread_cond_broadcast(&ctx->cond_var);
         pthread_mutex_unlock(&ctx->mutex);
     }
-    
+
     for (i = 0; i < NCONS; ++i)
     {
         sem_wait(&ctx->sem);
@@ -1091,7 +1094,7 @@ static void* P6(void* args)
     ctx->version = NO_MORE_VERSIONS;
     pthread_cond_broadcast(&ctx->cond_var);
     pthread_mutex_unlock(&ctx->mutex);
-    
+
     return NULL;
 }
 
@@ -1105,15 +1108,15 @@ static void* C6(void* args)
     assert(ctx);
 
     sem_post(&ctx->sem);
-    
+
     curr_version = ctx->version;
-    
+
     while (consumed_count < NUM_ITEMS)
     {
         pthread_mutex_lock(&ctx->mutex);
         while (curr_version == ctx->version)
         {
-            if (ctx->version == NO_MORE_VERSIONS)
+            if (NO_MORE_VERSIONS == ctx->version)
             {
                 pthread_mutex_unlock(&ctx->mutex);
                 return NULL;
@@ -1123,10 +1126,10 @@ static void* C6(void* args)
         curr_version = ctx->version;
         product = ctx->product;
         pthread_mutex_unlock(&ctx->mutex);
-        
+
         Consume(&product);
-        consumed_count++;
-        
+        ++(consumed_count);
+
         sem_post(&ctx->sem);
     }
 

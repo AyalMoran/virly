@@ -109,13 +109,13 @@ fsq_t* FSQCreate(size_t capacity, size_t nconsumers)
     }
     if (0 != sem_init(&q->sem_full, 0, 0))
     {
+        perror("sem_init sem_full");
         (void) sem_destroy(&q->sem_empty);
         (void) pthread_mutex_destroy(&q->r_mtx);
         (void) pthread_mutex_destroy(&q->w_mtx);
 
         free(q);
 
-        perror("sem_init sem_full");
         return NULL;
     }
 
@@ -143,12 +143,12 @@ fsq_status_t FSQDestroy(fsq_t* q)
     }
     if (0 != pthread_mutex_destroy(&q->w_mtx))
     {
-        perror("pthread_mutex_destroy w_mtx");
+        fprintf(stderr,"pthread_mutex_destroy w_mtx");
         status += FSQ_FAILURE;
     }
     if (0 != pthread_mutex_destroy(&q->r_mtx))
     {
-        perror("pthread_mutex_destroy r_mtx");
+        fprintf(stderr,"pthread_mutex_destroy r_mtx");
         status += FSQ_FAILURE;
     }
 
