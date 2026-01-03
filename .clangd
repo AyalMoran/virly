@@ -6,8 +6,8 @@ CompileFlags:
     - -I/home/moranayal/repos/ILRD/git/exams/inc
     - -I/home/moranayal/repos/ILRD/git/other/inc
     - -I/home/moranayal/repos/ILRD/git/projects/inc
+    - -I/home/moranayal/repos/ILRD/git/projects/watchdog/inc
     - -I/home/moranayal/repos/ILRD/git/quizzes/inc
     - -I/home/moranayal/repos/ILRD/git/system_programming/inc
     - -I/home/moranayal/repos/ILRD/git/utils/inc
-    - -std=c89
 

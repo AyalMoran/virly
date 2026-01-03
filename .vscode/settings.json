@@ -30,7 +30,8 @@
         "${workspaceFolder}/projects/inc",
         "${workspaceFolder}/quizzes/inc",
         "${workspaceFolder}/system_programming/inc",
-        "${workspaceFolder}/utils/inc"
+        "${workspaceFolder}/utils/inc",
+        "${workspaceFolder}/projects/watchdog/inc",
     ],
     "c-cpp-flylint.cppcheck.extraArgs": [
     "--suppress=variableScope",
@@ -46,5 +47,23 @@
         "editor.formatOnType": false,
         "editor.defaultFormatter": null
     },
-    "clangd.enable": true
+    "clangd.enable": true,
+    "c-cpp-flylint.enable": true,
+    "c-cpp-flylint.includePaths": [
+        "${workspaceFolder}/ds/inc",
+        "${workspaceFolder}/algo/inc",
+        "${workspaceFolder}/c/inc",
+        "${workspaceFolder}/exams/inc",
+        "${workspaceFolder}/other/inc",
+        "${workspaceFolder}/projects/inc",
+        "${workspaceFolder}/quizzes/inc",
+        "${workspaceFolder}/system_programming/inc",
+        "${workspaceFolder}/utils/inc",
+        "${workspaceFolder}/projects/watchdog/inc",
+    ],
+    "c-cpp-flylint.clang.enable": true,
+    "c-cpp-flylint.standard": [
+        "c89",
+        "c++17",
+    ]
 }
