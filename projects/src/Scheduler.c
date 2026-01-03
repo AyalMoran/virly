@@ -28,15 +28,6 @@ struct sched
     int is_running;
 };
 
-enum
-{
-    SCHED_SUCCESS = 0,
-    SCHED_INVALID_TASK,
-    SCHED_ENQUEUE_FAIL,
-    SCHED_FAIL
-
-};
-
 sched_t* SchedCreate(void)
 {
     sched_t* sched = NULL;
@@ -122,7 +113,7 @@ int SchedRemove(sched_t* sched, ilrd_uid_t uid)
     return SCHED_FAIL;
 }
 
-int SchedRun(sched_t* sched)
+sched_status_t SchedRun(sched_t* sched)
 {
     task_t* task_to_execute = NULL;
     size_t task_interval = 0;

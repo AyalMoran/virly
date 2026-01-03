@@ -8,6 +8,15 @@
 
 typedef struct sched sched_t;
 
+typedef enum sched_status
+{
+    SCHED_SUCCESS = 0,
+    SCHED_INVALID_TASK,
+    SCHED_ENQUEUE_FAIL,
+    SCHED_FAIL
+
+} sched_status_t;
+
 /**
  * @brief Creates a new empty scheduler.
  *
@@ -65,7 +74,7 @@ int SchedRemove(sched_t* sched, ilrd_uid_t uid);
  * @complexity Time: Depends on number of tasks. Roughly O(n). Worst case
  * O(n^2), if every task reschedules itself.
  */
-int SchedRun(sched_t* sched);
+sched_status_t SchedRun(sched_t* sched);
 
 /**
  * @brief Stops the scheduler from running.
