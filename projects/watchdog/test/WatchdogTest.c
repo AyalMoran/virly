@@ -1,4 +1,3 @@
-
 /**************************************************************
  * File    : Watchdog.c
  * Author  : Ayal Moran
@@ -16,7 +15,7 @@
 
 #include "test_utils.h"
 #include "Watchdog.h"
-#include "wd_debug.h"
+#include "WDDebug.h"
 
 #define RUNTIME_IN_SEC (500)
 #define INTERVAL_IN_SEC (3)
@@ -28,7 +27,6 @@ static void IHaveNothingToLiveFor(void);
 /******************************************************
  * START OF ACTUAL TESTS
  ******************************************************/
-
 
  int main(int argc, char* argv[])
  {
