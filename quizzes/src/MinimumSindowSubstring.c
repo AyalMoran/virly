@@ -6,7 +6,7 @@
 #define MAX_CHAR 128
 #include "MinimumSubstringWindow.h"
 
-char* MinimumSubstringWindow(const char* s, const char* t)
+char* MinimumSubstringWindowIter(const char* s, const char* t)
 {
     size_t i = 0;
     int sLen = strlen(s);
@@ -14,7 +14,7 @@ char* MinimumSubstringWindow(const char* s, const char* t)
 
     int left = 0;
     int right = 0;
-    int formed = 0; /* Number of characters in window that meet frequency requirement */
+    int formed = 0;
     int minLength = INT_MAX;
     int minStart = 0;
 
@@ -91,4 +91,9 @@ char* MinimumSubstringWindow(const char* s, const char* t)
     result[minLength] = '\0'; /* Add null terminator */
 
     return result;
+}
+
+char* MinimumSubstringWindowRec(const char* s, const char* t)
+{
+    return NULL;
 }

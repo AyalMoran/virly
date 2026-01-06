@@ -4,12 +4,20 @@
 
 #include "MinimumSubstringWindow.h"
 
-int main()
+int main(int argc, char* argv[])
 {
-    const char* s = "ADOBECODEBANC";
-    const char* t = "ABC";
-    char* result = MinimumSubstringWindow(s, t);
+    char* result = NULL;
+    if (argc < 4)
+    {
+        printf("Usage: <string> <substring>");
+    }
+    if (strcmp(argv[3], "iter"))
 
+        result = MinimumSubstringWindowIter(argv[1], argv[2]);
+    else if (strcmp(argv[3], "rec"))
+    {
+        result = MinimumSubstringWindowRec(argv[1], argv[2]);
+    }
     if (result != NULL)
     {
         printf("Minimum window substring: %s\n", result);
