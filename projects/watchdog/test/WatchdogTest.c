@@ -4,7 +4,6 @@
  * Reviewer:
  * Date    :
  **************************************************************/
-
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -12,12 +11,11 @@
 #include <unistd.h>
 #include <sys/types.h>
 
-
 #include "test_utils.h"
 #include "Watchdog.h"
 #include "WDDebug.h"
 
-#define RUNTIME_IN_SEC (500)
+#define RUNTIME_IN_SEC (5)
 #define INTERVAL_IN_SEC (3)
 #define THRESHOLD_IN_SEC (2)
 
@@ -60,7 +58,7 @@ static void IHaveNothingToLiveFor(void);
              printf("main process id: %d\n", pid);
          SET_PRINT_COLOR(RESET);
          ++i;
-         if(0 == i % 7)
+         if(0 == i % 10)
          {
              SET_PRINT_COLOR(FG_RED);
              printf("Russian Roulette...\n");
@@ -99,8 +97,7 @@ static void IHaveNothingToLiveFor(void)
 
 static void RussianRoulette(void)
 {
-    int gun = 0;
-    gun = rand() % 6;
+    int gun = rand() % 6;
     if(gun == 0)
     {
         IHaveNothingToLiveFor();

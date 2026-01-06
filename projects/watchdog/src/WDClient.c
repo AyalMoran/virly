@@ -63,7 +63,6 @@ int main(int argc, char* argv[])
     wd_status_t status = WD_SUCCESS;
     wd_args_t* args = NULL;
     
-    
     status = Init(&args, argc, argv);
     if (WD_SUCCESS != status)
     {

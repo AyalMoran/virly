@@ -31,14 +31,13 @@ typedef enum debug_level
 } debug_level_t;
 
 #ifndef NDEBUG
-
-
-    #include <stdarg.h>/* va_list */
-    #include <stdio.h>/* vprintf */
+    #include <stdarg.h> /* va_list */
+    #include <stdio.h>  /* vprintf */
 
     static void WD_DBG_PRINT(const char* fmt_, ...)
     {
         va_list ap_;
+
         va_start(ap_, fmt_);
         vprintf(COLOR_GRN, ap_);
         vprintf(WD_TABS, ap_);
@@ -51,6 +50,7 @@ typedef enum debug_level
 static void HB_DBG_PRINT(const char* fmt_, ...)
     {
         va_list ap_;
+
         va_start(ap_, fmt_);
         vprintf(COLOR_MAG, ap_);
         vprintf(HB_TABS, ap_);
@@ -63,6 +63,7 @@ static void HB_DBG_PRINT(const char* fmt_, ...)
 static void MAIN_DBG_PRINT(const char* fmt_, ...)
     {
         va_list ap_;
+
         va_start(ap_, fmt_);
         vprintf(COLOR_BRI, ap_);
         vprintf("[MAIN]: ", ap_);
@@ -71,6 +72,7 @@ static void MAIN_DBG_PRINT(const char* fmt_, ...)
         fflush(stdout);
         va_end(ap_);
 }
+
 static void PRINT_ARGS(debug_level_t debug_lvl, wd_args_t* args)
 {
     switch (debug_lvl)
