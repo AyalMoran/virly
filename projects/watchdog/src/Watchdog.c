@@ -9,36 +9,32 @@
 /*============================ INCLUDES ============================*/
 #define _POSIX_C_SOURCE 200809L
 
-#include <assert.h>    /* assert    */
-#include <errno.h>     /* errno     */
-#include <fcntl.h>     /* O_* constants */
-#include <pthread.h>   /* pthread_t */
-#include <semaphore.h> /* sem_t     */
-#include <signal.h>    /* sig_atomic_t */
-#include <stddef.h>    /* size_t    */
-#include <stdio.h>     /* snprintf  */
-#include <stdlib.h>    /* malloc    */
-#include <string.h>    /* memset    */
-#include <sys/types.h> /* pid_t */
-#include <sys/wait.h>  /* waitpid   */
-#include <unistd.h>    /* write     */
+#include <assert.h>    /* assert                */
+#include <errno.h>     /* errno                 */
+#include <fcntl.h>     /* O_CREAT               */
+#include <pthread.h>   /* pthread_t             */
+#include <semaphore.h> /* sem_t                 */
+#include <signal.h>    /* SIGUSR2               */
+#include <stddef.h>    /* size_t                */
+#include <stdio.h>     /* snprintf              */
+#include <stdlib.h>    /* malloc                */
+#include <sys/types.h> /* pid_t                 */
+#include <sys/wait.h>  /* waitpid               */
+#include <unistd.h>    /* fork                  */
+#include "Scheduler.h" /* sched_t               */
+#include "WDCommon.h"  /* WDCommonInitHeartBeat */
+#include "WDDebug.h"   /* PRINT_ARGS            */
+#include "Watchdog.h"  /* wd_args_t             */
 
-#include "Scheduler.h"
-#include "WDDebug.h"
-#include "Watchdog.h"
 /*========================== DEFINITIONS ===========================*/
+/*========================== MACRO UTILS ===========================*/
 #define ALIVE (1)
 #define DEAD (0)
 #define TRUE (1)
 #define FALSE (0)
-/*========================== MACRO UTILS ===========================*/
 
 /*========================= TYPEDEFS/ENUMS =========================*/
 typedef void* (*thread_routine_t)(void* args);
-
-volatile sig_atomic_t is_alive = FALSE;
-volatile sig_atomic_t should_shutdown = FALSE;
-static wd_args_t* g_wd_args = NULL;
 
 /*====================== STATIC DECLARATIONS =======================*/
 static wd_status_t CreateThread(pthread_t* thread, thread_routine_t func,
@@ -46,24 +42,16 @@ static wd_status_t CreateThread(pthread_t* thread, thread_routine_t func,
 static void* HeartBeatFunc(void* param);
 static wd_status_t Init(wd_args_t** args, size_t interval,
                         size_t misses_threshold, char* argv[]);
-static wd_status_t InitHeartBeat(wd_args_t* args);
 static wd_status_t ReviveWD(wd_args_t* args);
 
 static size_t CountArgv(char* argv[]);
 static wd_status_t BuildExecArgv(wd_args_t* args, size_t interval,
                                  size_t misses_threshold, char* argv[]);
 
-static wd_status_t StartBeating(sched_t* heart);
-
 static int WDCheckTask(void* args);
 static int WDSignalTask(void* args);
 
-static void HandleSIGUSR1(int sig);
-static void HandleSIGUSR2(int sig);
-static wd_status_t InstallHandlers(void);
-
 static wd_status_t Destroy(wd_args_t* args);
-static wd_status_t SemWaitLoop(sem_t* s);
 /*========================= API FUNCTIONS ==========================*/
 
 wd_status_t WatchdogStart(size_t interval, size_t misses_threshold,
@@ -75,7 +63,6 @@ wd_status_t WatchdogStart(size_t interval, size_t misses_threshold,
 
     assert(argv);
 
-    /*Init SetUp*/
     status = Init(&wd_args, interval, misses_threshold, argv);
     if (WD_SUCCESS != status)
     {
@@ -83,15 +70,15 @@ wd_status_t WatchdogStart(size_t interval, size_t misses_threshold,
         return status;
     }
 
-    /*Create a Thread*/
     status = CreateThread(&thr_heartbeat, HeartBeatFunc, wd_args);
     if (WD_SUCCESS != status)
     {
+        MAIN_DBG_PRINT("CreateThread(): failed in Watchdog.c:\n");
+
         return status;
     }
 
-    /*Wait for Thread to complete set up*/
-    status = SemWaitLoop(&wd_args->user_sem);
+    status = WDSemWaitLoop(&wd_args->user_sem);
     if (WD_SUCCESS != status)
     {
         return status;
@@ -142,22 +129,23 @@ static void* HeartBeatFunc(void* param)
     dog_gate = args->dog_gate;
     user_sem = &args->user_sem;
 
+    status = WDCommonInitHeartBeat(args, WDCheckTask, WDSignalTask, time(NULL));
+    if (WD_SUCCESS != status)
+    {
+        return (void*) status;
+    }
+
     status = ReviveWD(args);
     if (WD_SUCCESS != status)
     {
         return (void*) status;
     }
 
-    if (WD_SUCCESS != (status = InitHeartBeat(args)))
-    {
-        return (void*) status;
-    }
-
     g_wd_args = args;
     PRINT_ARGS(HB_DEBUG, args);
-
     HB_DBG_PRINT("Waiting for dog_gate...\n");
-    status = SemWaitLoop(dog_gate);
+    status = WDSemWaitLoop(dog_gate);
+
     if (WD_SUCCESS != status)
     {
         HB_DBG_PRINT("SemWaitLoop(dog_gate) failed in Watchdog.c:\n");
@@ -168,7 +156,7 @@ static void* HeartBeatFunc(void* param)
     sem_post(user_sem);
     HB_DBG_PRINT("user_sem posted\n");
 
-    StartBeating(args->heart);
+    (void) WDCommonStartBeating(args->heart);
 
     if (should_shutdown)
     {
@@ -222,43 +210,12 @@ static wd_status_t Init(wd_args_t** args, size_t interval,
         return WD_SEM_ERROR;
     }
 
-    if (WD_SUCCESS != (status = InstallHandlers()))
+    status = WDCommonInstallHandlers();
+    if (WD_SUCCESS != status)
     {
         free((*args)->exec_argv);
         free(*args);
         return status;
-    }
-
-    return WD_SUCCESS;
-}
-
-static wd_status_t InitHeartBeat(wd_args_t* args)
-{
-    ilrd_uid_t check_uid = UIDBadUID;
-    ilrd_uid_t signal_uid = UIDBadUID;
-    HB_DBG_PRINT("InitHeartBeat() called in Watchdog.c:\n");
-
-    args->heart = SchedCreate();
-    if (NULL == args->heart)
-    {
-        return WD_ALLOC_ERROR;
-    }
-    HB_DBG_PRINT("heart: %p\n", (void*) args->heart);
-
-    check_uid = SchedAdd(args->heart, WDCheckTask, NULL, args, time(NULL));
-    if (UIDIsSame(check_uid, UIDBadUID))
-    {
-        SchedDestroy(args->heart);
-
-        return WD_ALLOC_ERROR;
-    }
-
-    signal_uid = SchedAdd(args->heart, WDSignalTask, NULL, args, time(NULL));
-    if (UIDIsSame(signal_uid, UIDBadUID))
-    {
-        SchedDestroy(args->heart);
-
-        return WD_ALLOC_ERROR;
     }
 
     return WD_SUCCESS;
@@ -306,18 +263,21 @@ static wd_status_t BuildExecArgv(wd_args_t* args, size_t interval,
     }
 
     snprintf_ret = snprintf(args->interval_str, sizeof(args->interval_str),
-                            "%zu", interval);
+                            "%lu", interval);
     if (snprintf_ret < 0 || (size_t) snprintf_ret >= sizeof(args->interval_str))
     {
+        perror("snprintf failed:");
         free(args->exec_argv);
         return WD_SNPRINTF_FAIL;
     }
     args->exec_argv[argc + 1] = args->interval_str;
 
-    snprintf_ret = snprintf(args->misses_str, sizeof(args->misses_str), "%zu",
+    snprintf_ret = snprintf(args->misses_str, sizeof(args->misses_str), "%lu",
                             misses_threshold);
     if (snprintf_ret < 0 || (size_t) snprintf_ret >= sizeof(args->misses_str))
     {
+        perror("snprintf failed:");
+
         free(args->exec_argv);
         return WD_SNPRINTF_FAIL;
     }
@@ -379,28 +339,6 @@ static wd_status_t Destroy(wd_args_t* args)
     return WD_SUCCESS;
 }
 
-static wd_status_t StartBeating(sched_t* heart)
-{
-    sched_status_t status = SCHED_SUCCESS;
-    HB_DBG_PRINT("StartBeating() called in Watchdog.c:\n");
-
-    assert(NULL != heart);
-    HB_DBG_PRINT("heart: %p\n", (void*) heart);
-    if (SCHED_SUCCESS != (status = SchedRun(heart)))
-    {
-        switch (status)
-        {
-        case SCHED_INVALID_TASK:
-            return WD_SCHED_INVALID_TASK;
-        case SCHED_ENQUEUE_FAIL:
-            return WD_SCHED_ENQUEUE_ERROR;
-        default:
-            return WD_SCHED_ERROR;
-        }
-    }
-    return WD_SUCCESS;
-}
-
 static int WDCheckTask(void* args)
 {
     static size_t misses_count = 0;
@@ -434,7 +372,7 @@ static int WDCheckTask(void* args)
             {
                 kill(0, SIGUSR2);
             }
-            status = SemWaitLoop(wd_args->dog_gate);
+            status = WDSemWaitLoop(wd_args->dog_gate);
             if (WD_SUCCESS != status)
             {
                 return status;
@@ -455,62 +393,4 @@ static int WDSignalTask(void* args)
     return (int) wd_args->interval;
 }
 
-static void HandleSIGUSR1(int sig)
-{
-    (void) sig;
-    is_alive = ALIVE;
-}
-
-static void HandleSIGUSR2(int sig)
-{
-    (void) sig;
-
-    should_shutdown = TRUE;
-
-    if (g_wd_args && g_wd_args->heart)
-    {
-        SchedStop(g_wd_args->heart);
-    }
-}
-
-static wd_status_t InstallHandlers(void)
-{
-    struct sigaction sa = {0};
-
-    sa.sa_handler = HandleSIGUSR1;
-    sa.sa_flags = SA_RESTART;
-    sigemptyset(&sa.sa_mask);
-
-    if (0 != sigaction(SIGUSR1, &sa, NULL))
-    {
-        perror("sigaction(SIGUSR1) failed:");
-        return WD_SIGNAL_ERROR;
-    }
-
-    sa.sa_handler = HandleSIGUSR2;
-    sa.sa_flags = SA_RESTART;
-    sigemptyset(&sa.sa_mask);
-
-    if (0 != sigaction(SIGUSR2, &sa, NULL))
-    {
-        perror("sigaction(SIGUSR2) failed:");
-        return WD_SIGNAL_ERROR;
-    }
-
-    return WD_SUCCESS;
-}
-
-static wd_status_t SemWaitLoop(sem_t* s)
-{
-    HB_DBG_PRINT("sem_wait loop\n");
-    while (-1 == sem_wait(s))
-    {
-        HB_DBG_PRINT("sem_wait(s) failed in Watchdog.c:\n");
-        if (EINTR != errno)
-        {
-            return WD_SEM_ERROR;
-        }
-    }
-    HB_DBG_PRINT("sem_wait loop done\n");
-    return WD_SUCCESS;
-}
+/* handlers and sem-wait loop are now shared in WDCommon.c */

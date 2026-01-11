@@ -11,24 +11,11 @@
 #include <semaphore.h> /* sem_t */
 #include <sys/types.h> /* pid_t */
 
-#include "Scheduler.h" /* sched_t */
+/*#include "Scheduler.h"*/ /* sched_t */
 
 #define WATCHDOG_GATE ("/wd_gate")
 
 #define WD_EXEC_PATH ("./bin/wd_client") /*TODO: change to the actual path*/
-
-typedef struct wd_args
-{
-    sem_t user_sem;
-    sem_t* dog_gate;
-    size_t interval;
-    size_t misses_threshold;
-    pid_t pid;
-    sched_t* heart;
-    char** exec_argv;
-    char interval_str[32];
-    char misses_str[32];
-} wd_args_t;
 
 typedef enum wd_status
 {
