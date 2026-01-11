@@ -95,5 +95,6 @@ char* MinimumSubstringWindowIter(const char* s, const char* t)
 
 char* MinimumSubstringWindowRec(const char* s, const char* t)
 {
+    
     return NULL;
 }
