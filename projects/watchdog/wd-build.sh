@@ -28,6 +28,7 @@ TEST="$WATCHDOG_PATH/test/WatchdogTest.c"
 
 SHARED_LIB="$BIN_DIR/libwd.so"
 
+
 INCLUDES=(
     "-I$DS_PATH/inc"
     "-I$UTILS_PATH/inc"
