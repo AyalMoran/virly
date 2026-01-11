@@ -1,3 +1,9 @@
+/**************************************************************
+ * File    : MTCountSortTest.c
+ * Author  : Ayal Moran
+ * Reviewer: Yohai S.
+ * Date    : 11-1-2026
+ **************************************************************/
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -42,7 +48,6 @@ int main( int argc, char* argv[])
     SET_PRINT_COLOR(RESET);
     SortDictEx2(8, &out, &out_size);
     assert(IsSorted(out, out_size));
-
     free(out);
 
     (void) argc;

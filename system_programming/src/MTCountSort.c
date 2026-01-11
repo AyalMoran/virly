@@ -1,3 +1,10 @@
+/**************************************************************
+ * File    : MTCountSort.c
+ * Author  : Ayal Moran
+ * Reviewer: Yohai S.
+ * Date    : 11-1-2026
+ **************************************************************/
+
 #define _XOPEN_SOURCE 700
 
 #include <assert.h> /* assert */
@@ -10,7 +17,7 @@
 #include <time.h>   /* clock */
 #include <unistd.h> /* write */
 
-#define MULTIPLIER (10000)
+#define MULTIPLIER (100)
 
 #ifdef NO_FALSE_SHARING
 #    define CACHE_LINE_SIZE (64)
@@ -90,8 +97,6 @@ int MTCountSort(char arr[], size_t size, size_t nthreads, char** out)
     all_luts = (padded_arr_t*) raw_ptr;
     memset(all_luts, 0, total_size);
 
-    printf("Starting counting sort with %lu threads...\n", nthreads);
-    fflush(stdout);
     clock_gettime(CLOCK_MONOTONIC, &start);
     for (i = 0; i < nthreads; ++i)
     {
@@ -105,7 +110,6 @@ int MTCountSort(char arr[], size_t size, size_t nthreads, char** out)
         if (0 !=
             pthread_create(&threads[i], NULL, CountRoutine, &thread_ctxs[i]))
         {
-            fprintf(stderr, "Error creating thread %lu\n", i);
             for (j = 0; j < i; ++j)
             {
                 pthread_join(threads[j], NULL);
@@ -123,7 +127,6 @@ int MTCountSort(char arr[], size_t size, size_t nthreads, char** out)
     elapsed = (finish.tv_sec - start.tv_sec);
     elapsed += (finish.tv_nsec - start.tv_nsec) / 1000000000.0;
 
-    printf("Counting Completed.\n");
     printf("Counting Time: %f seconds\n", elapsed);
     fflush(stdout);
 
@@ -198,9 +201,6 @@ static void BuildSortedOutput(char* out, padded_arr_t* lut, size_t size)
 
     for (i = 0; i < LUT_SIZE; ++i)
     {
-        /*
-        printf("Character '%c' : %lu occurrences\n", (char) i, lut[i].value);
-        */
         count = lut[i].value;
 
         while (0 < count)
@@ -210,7 +210,6 @@ static void BuildSortedOutput(char* out, padded_arr_t* lut, size_t size)
             --count;
         }
     }
-    printf("Total sorted size: %lu bytes\n", out_index);
 }
 
 /*------------- Dictionary Exercise ---------------------*/
@@ -225,7 +224,6 @@ int SortDictEx2(size_t nthreads, char** out, size_t* out_size)
     {
         return status;
     }
-    printf("Made big buffer from dictionary\n");
     status = MTCountSort(buffer, size, nthreads, out);
     if (0 != status)
     {
@@ -234,7 +232,6 @@ int SortDictEx2(size_t nthreads, char** out, size_t* out_size)
     }
 
     free(buffer);
-    /* write(STDOUT_FILENO, buffer, size);*/
     
     return 0;
 }
@@ -309,7 +306,6 @@ static int MakeBigBufferFromDict(char** buffer_out, size_t* size_out,
     }
 
     dict_size = GetFileSize(fp);
-    printf("The dictionary size is: %lu bytes\n", dict_size);
 
     dict_buf = (char*) malloc(dict_size);
     if (NULL == dict_buf)
@@ -339,7 +335,6 @@ static int MakeBigBufferFromDict(char** buffer_out, size_t* size_out,
     {
         memcpy(big_buf + i * dict_size, dict_buf, dict_size);
     }
-    printf("Total buffer size is: %lu bytes\n", total_size);
 
     *buffer_out = big_buf;
     *size_out = total_size;
