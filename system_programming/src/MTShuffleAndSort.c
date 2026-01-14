@@ -1,8 +1,8 @@
 /**************************************************************
  * File    : MTShuffleAndSort.c
  * Author  : Ayal Moran
- * Reviewer:
- * Date    :
+ * Reviewer: Daniel N.
+ * Date    :14-01-2026
  **************************************************************/
 #define _POSIX_C_SOURCE 200809L
 #include <assert.h>  /* assert */
