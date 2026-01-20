@@ -10,4 +10,5 @@ CompileFlags:
     - -I/home/moranayal/repos/ILRD/git/quizzes/inc
     - -I/home/moranayal/repos/ILRD/git/system_programming/inc
     - -I/home/moranayal/repos/ILRD/git/utils/inc
+    - -I/home/moranayal/repos/ILRD/git/cpp/include
 
