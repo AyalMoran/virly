@@ -8,7 +8,9 @@
 
 # FILE EXTENSIONS
 !*.c
+!*.cpp
 !*.h
+!*.hpp
 !*.md
 !*.sh
 
@@ -19,6 +21,8 @@
 !.gitignore
 !.myfuncs
 !.clangd
+!.clang-tidy
+!.clang-format
 !c_cpp_properties.json
 !launch.json
 !settings.json
