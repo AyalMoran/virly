@@ -13,11 +13,13 @@
                 "${workspaceFolder}/quizzes/inc/**",
                 "${workspaceFolder}/system_programming/inc/**",
                 "${workspaceFolder}/utils/inc/**",
-                "${workspaceFolder}/system_programming/inc"
+                "${workspaceFolder}/system_programming/inc/**",
+                "${workspaceFolder}/cpp/include/**"
             ],
             "defines": [],
-            "compilerPath": "/usr/bin/gcc",
+            "compilerPath": "/usr/bin/g++",
             "cStandard": "c89",
+            "cppStandard": "c++98",
             "intelliSenseMode": "gcc-x64",
             "browse": {
                 "path": [
