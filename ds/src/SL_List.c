@@ -131,13 +131,13 @@ sll_iter_t SLLInsert(sll_iter_t where, void* data)
 {
     node_t* new_node = NULL;
     sll_t* list = NULL; 
-    
+    sll_iter_t curr = NULL;
     assert(where);
     
     new_node = (node_t*) malloc(sizeof(node_t));
     if (NULL == new_node)
     {
-    	sll_iter_t curr  = where;
+    	curr  = where;
     	
     	while(IterToNode(curr)->next)
     	{
