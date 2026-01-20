@@ -31,7 +31,7 @@
 #define MAX_THREADS (64)
 #define PATH_TO_DICT "/usr/share/dict/american-english"
 #define START (start_time = clock())
-#define END (end_time = clock())
+#define END (end_time = clock())E
 
 typedef enum mt_count_sort_status
 {
