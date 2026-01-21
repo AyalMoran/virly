@@ -1,11 +1,15 @@
 #include <iostream>
-
 #include "SimpleString.hpp"
 
-void Foo(String* s)
+void Foo(String s)
 {
-    *s = "def";
-    std::cout << *s << std::endl;
+    std::cout << "==== " << std::endl;
+    std::cout << "In Foo():" << std::endl;
+    std::cout << "`s` was: " << s << std::endl;
+    s = "def";
+    std::cout << "`s` is now: " << s << std::endl;
+    std::cout << "exiting Foo() " << std::endl;
+    std::cout << "==== " << std::endl;
 }
 
 void PrintString(const String& s)
@@ -21,24 +25,26 @@ String Bla()
 int main()
 {
     String s("abc");
-    std::cout << "s is:" << s << std::endl;
-    std::cout << "s length is " << s.Length() << std::endl;
+
+    assert(strcmp(s.Cstr(), "abc") == 0);
+    assert(s.Length() == 3);
     
     String s2(s);
-    std::cout << "s2 is:" << s2 << std::endl;
-    std::cout << "s2 length is " << s2.Length() << std::endl;
+    assert(strcmp(s2.Cstr(), "abc") == 0);
+    assert(s2.Length() == 3);
+
     String s1;
-    std::cout << "s1 is:" << s1 << std::endl;
-    std::cout << "s1 length is " << s1.Length() << std::endl;
+    assert(strcmp(s1.Cstr(), "") == 0);
+    assert(s1.Length() == 0);
 
     s1 = s;
-    std::cout << "s length is " << s.Length() << std::endl;
-    std::cout << "s1 length is " << s1.Length() << std::endl;
+    assert(s.Length() == 3);
+    assert(s1.Length() == 3);
 
-    Foo(&s);
+    Foo(s);
     PrintString(s);
     
     String tmp = Bla();
-    std::cout << tmp << std::endl;
+    assert(strcmp(tmp.Cstr(), "efg") == 0);
 
 }
