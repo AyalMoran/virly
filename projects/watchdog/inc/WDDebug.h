@@ -1,3 +1,11 @@
+
+/**************************************************************
+ * File    : WDDebug.h
+ * Author  : Ayal Moran
+ * Reviewer: Chaya T.
+ * Date    : 10-1-2026
+ **************************************************************/
+
 #ifndef ILRD_WD_COMMON_H
 #define ILRD_WD_COMMON_H
 

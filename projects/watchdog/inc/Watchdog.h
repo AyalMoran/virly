@@ -1,9 +1,11 @@
+
 /**************************************************************
  * File    : Watchdog.h
  * Author  : Ayal Moran
- * Reviewer: 
- * Date    : 
+ * Reviewer: Chaya T.
+ * Date    : 10-1-2026
  **************************************************************/
+
 #ifndef __ILRD_WATCHDOG_H__
 #define __ILRD_WATCHDOG_H__
 
