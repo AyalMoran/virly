@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <string.h>
 /* structs and globals */
 #ifndef __TEST_UTILS_H__
 #define __TEST_UTILS_H__
@@ -107,13 +108,13 @@ static int test_count = 0;
 /*test suites*/
 
 #define TEST_CASE(name) \
-    do { printf("\n--- Running Test: %s ---\n", name); } while (0)
+    do { printf("\n--- Running Test: " #name " ---\n"); } while (0)
 
 #define BEGIN_SUITE(name) \
     do { \
         SET_PRINT_COLOR(BRIGHT); \
         SET_PRINT_COLOR(FG_BLUE); \
-        printf("\n========== BEGIN SUITE: %s ==========\n\n", name); \
+        printf("\n========== BEGIN SUITE: " #name " ==========\n\n"); \
         SET_PRINT_COLOR(RESET); \
     } while(0)
 
@@ -121,7 +122,7 @@ static int test_count = 0;
     do { \
         SET_PRINT_COLOR(BRIGHT); \
         SET_PRINT_COLOR(FG_BLUE); \
-        printf("\n========== END SUITE: %s ==========\n\n", name); \
+        printf("\n========== END SUITE: " #name " ==========\n\n"); \
         SET_PRINT_COLOR(RESET); \
     } while(0)
 
