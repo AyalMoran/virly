@@ -1,4 +1,11 @@
 
+/**************************************************************
+ * File    : WDDebug.c
+ * Author  : Ayal Moran
+ * Reviewer: Chaya T.
+ * Date    : 10-1-2026
+ **************************************************************/
+
 #include "WDCommon.h"
 #include "WDDebug.h"
 

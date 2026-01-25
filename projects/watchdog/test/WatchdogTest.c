@@ -1,8 +1,9 @@
+
 /**************************************************************
- * File    : Watchdog.c
+ * File    : WAtchdogTest.c
  * Author  : Ayal Moran
- * Reviewer:
- * Date    :
+ * Reviewer: Chaya T.
+ * Date    : 10-1-2026
  **************************************************************/
 
 #define _POSIX_C_SOURCE 200809L
