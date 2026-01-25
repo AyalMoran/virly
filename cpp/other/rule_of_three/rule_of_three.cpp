@@ -49,12 +49,11 @@ int main()
     X x1(1);
     X x2(x1); // double free at destructor
     /*
-    The compiler will generate a copy constructor that does a shallow copy of the pointers and when x2 destruct it will free the pointer `m_p` which will result in double free when x1 is destroyed.
+    The default copy constructor performs a shallow copy of m_p, leading to both x1 and x2 pointing to the same memory. When both are destroyed, delete m_p is called twice on the same pointer, causing undefined behavior (double free).
     */
     X x3 = x2;  
     /*
-    The compiler 
-
+    No assignment operator is defined, so the compiler will generate one that does a shallow copy of the pointers, leading to the same double free problem when x3 and x2 are destroyed.
     */
     x1.Foo();
     Fifi(x1);
