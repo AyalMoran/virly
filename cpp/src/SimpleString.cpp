@@ -36,6 +36,6 @@ size_t String::Length() const
 
 std::ostream& operator<<(std::ostream& os, const String& str) 
 {
-    os << const_cast<String&>(str).Cstr();
+    os << (str).Cstr();
     return os;
 }
