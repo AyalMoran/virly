@@ -14,13 +14,21 @@
         "string_view": "c",
         "initializer_list": "c"
     },
-    "C_Cpp.default.compilerPath"    : "/usr/bin/clang-18",
-    "C_Cpp.default.intelliSenseMode": "gcc-x64",
-    "C_Cpp.default.cStandard"       : "c89",
-    "C_Cpp.default.cppStandard"     : "c++17",
-    
-    "c-cpp-flylint.language"        : "c",
-    "c-cpp-flylint.clang.executable": "gcc -ansi -Wall -Wextra -pedantic-errors",
+    "C_Cpp.default.compilerPath": "/usr/bin/clang-18",
+    "C_Cpp.default.intelliSenseMode": "clang-x64",
+    "C_Cpp.default.cStandard": "c89",
+    "C_Cpp.default.cppStandard": "c++98",
+    "C_Cpp.dimInactiveRegions": false,
+    // flylint
+    "c-cpp-flylint.language": "c",
+    "c-cpp-flylint.clang.executable": "/usr/bin/clang-18",
+    "c-cpp-flylint.clang.extraArgs": [
+        "-std=c89",
+        "ansi",
+        "-Wall",
+        "-Wextra",
+        "-pedantic-errors"
+    ],
     "c-cpp-flylint.clang.includePaths": [
         "${workspaceFolder}/ds/inc",
         "${workspaceFolder}/algo/inc",
@@ -33,21 +41,11 @@
         "${workspaceFolder}/utils/inc",
         "${workspaceFolder}/projects/watchdog/inc",
     ],
+    "c-cpp-flylint.cppcheck.executable": "/usr/bin/cppcheck",
     "c-cpp-flylint.cppcheck.extraArgs": [
-    "--suppress=variableScope",
-    "--suppress=unreadVariable"
+        "--suppress=variableScope",
+        "--suppress=unreadVariable"
     ],
-    "cmake.sourceDirectory"   : "/home/moranayal/git/ds/SDL_bgi",
-    "makefile.makefilePath"   : "${workspaceFolder}/ds/ds.mk",
-    "C_Cpp.dimInactiveRegions": false,
-    
-    // Disable all automatic formatting for Makefiles
-    "[makefile]": {
-        "editor.formatOnSave": false,
-        "editor.formatOnType": false,
-        "editor.defaultFormatter": null
-    },
-    "clangd.enable": true,
     "c-cpp-flylint.enable": true,
     "c-cpp-flylint.includePaths": [
         "${workspaceFolder}/ds/inc",
@@ -64,6 +62,15 @@
     "c-cpp-flylint.clang.enable": true,
     "c-cpp-flylint.standard": [
         "c89",
-        "c++17",
-    ]
+        "c++98",
+    ],
+    "cmake.sourceDirectory": "/home/moranayal/git/ds/SDL_bgi",
+    "makefile.makefilePath": "${workspaceFolder}/ds/ds.mk",
+    // Disable all automatic formatting for Makefiles
+    "[makefile]": {
+        "editor.formatOnSave": false,
+        "editor.formatOnType": false,
+        "editor.defaultFormatter": null
+    },
+    "clangd.enable": true,
 }
