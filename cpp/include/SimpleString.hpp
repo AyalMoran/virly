@@ -1,27 +1,28 @@
 
 #ifndef ILRD_RD175_STRING_HPP
 #define ILRD_RD175_STRING_HPP
-#include <iostream>
+#include <cassert>
 #include <cstddef>
 #include <cstring>
-#include <cassert>
+#include <iostream>
 
 class String
 {
   public:
-    //Ctor
+    // Ctor
     String(const char* cstr = "");
-    //CCtor
+    // CCtor
     String(const String& other);
-    //Dtor
+    // Dtor
     ~String();
-    //assignment = operator
+    // assignment = operator
     String& operator=(const String& other);
-    
+
     size_t Length() const;
-    inline const char* Cstr() const; 
+    inline const char* Cstr() const;
 
   private:
+    static inline char* StrDup(const char* other);
     char* m_cstr;
 };
 
@@ -30,10 +31,11 @@ inline const char* String::Cstr() const
     return m_cstr;
 }
 
-inline char* StrDup(const char* other){
-  std::size_t other_size = strlen(other) + 1;
-  char* buffer =  new char[other_size]; 
-  return static_cast<char*>(std::memcpy(buffer, other, other_size));
+inline char* String::StrDup(const char* other)
+{
+    std::size_t other_size = strlen(other) + 1;
+    char* buffer = new char[other_size];
+    return static_cast<char*>(std::memcpy(buffer, other, other_size));
 }
 
 std::ostream& operator<<(std::ostream& os, const String& str);
