@@ -1,6 +1,9 @@
 
 #include <iostream>
 
+namespace ilrd
+{
+
 class Complex
 {
   public:
@@ -8,29 +11,29 @@ class Complex
     ~Complex();
     Complex(const Complex&);
     Complex& operator=(const Complex&);
-    
-    Complex& SetReal(float real_);
-    Complex& SetImg(float m_img);
+
+    inline Complex& SetReal(float real_);
+    inline Complex& SetImg(float img_);
     inline float GetReal() const;
     inline float GetImg() const;
-    
+
     Complex& operator+=(const Complex&);
     Complex& operator-=(const Complex& other);
     Complex& operator*=(const Complex& other);
     Complex& operator/=(const Complex& other);
-    
-    inline bool operator==(const Complex& other) const;
-    inline bool operator!=(const Complex& other) const;    
 
   private:
     float m_real;
     float m_img;
 };
 
-Complex operator+(const Complex& a_, const Complex& b_);
-Complex operator-(const Complex& a_, const Complex& b_);
-Complex operator*(const Complex& a_, const Complex& b_);
-Complex operator/(const Complex& a_, const Complex& b_);
+Complex operator+(const Complex& lhs_, const Complex& rhs_);
+Complex operator-(const Complex& lhs_, const Complex& rhs_);
+Complex operator*(const Complex& lhs_, const Complex& rhs_);
+Complex operator/(const Complex& lhs_, const Complex& rhs_);
+
+bool operator==(const Complex& lhs_, const Complex& rhs_);
+bool operator!=(const Complex& lhs_, const Complex& rhs_);
 
 std::ostream& operator<<(std::ostream& os, const Complex& complex);
 std::istream& operator>>(std::istream& is, Complex& complex);
@@ -57,12 +60,13 @@ inline Complex& Complex::SetImg(float img_)
     return *this;
 }
 
-inline bool Complex::operator==(const Complex& other) const
+inline bool operator==(const Complex& lhs_, const Complex& rhs_)
 {
-    return (this->m_img == other.m_img && this->m_real == other.m_real);
+    return (lhs_.GetImg() == rhs_.GetImg() && lhs_.GetReal() == rhs_.GetReal());
 }
 
-inline bool Complex::operator!=(const Complex& other) const
+inline bool operator!=(const Complex& lhs_, const Complex& rhs_)
 {
-    return !(*this == other);
+    return !(lhs_ == rhs_);
 }
+} // namespace ilrd

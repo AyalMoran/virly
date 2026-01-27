@@ -1,7 +1,10 @@
-#include "Complex.hpp"
-#include <iostream>
 #include <cmath>
+#include <iostream>
 
+#include "Complex.hpp"
+
+namespace ilrd
+{
 Complex::Complex(float real, float img) : m_real(real), m_img(img)
 {
     //
@@ -44,60 +47,62 @@ Complex& Complex::operator-=(const Complex& other)
 
 Complex& Complex::operator*=(const Complex& other)
 {
-    const float a = m_real;
-    const float b = m_img;
-    const float c = other.m_real;
-    const float d = other.m_img;
+    float temp_real = m_real * other.m_real - m_img * other.m_img;
+    float temp_img = m_real * other.m_img + m_img * other.m_real;
 
-    m_real = a * c - b * d;
-    m_img  = a * d + b * c;
+    m_real = temp_real;
+    m_img = temp_img;
     return *this;
 }
+
 Complex& Complex::operator/=(const Complex& other)
 {
-    const float a = m_real;
-    const float b = m_img;
-    const float c = other.m_real;
-    const float d = other.m_img;
-
-    const float denom = c * c + d * d;
-    if (denom == 0)
+    if (0 == other)
     {
         throw std::runtime_error("Division by zero in Complex division");
     }
 
-    m_real = (a * c + b * d) / denom;
-    m_img  = (b * c - a * d) / denom;
+    float denominator = other.m_real * other.m_real + other.m_img * other.m_img;
+    float temp_real =
+        (m_real * other.m_real + m_img * other.m_img) / denominator;
+    float temp_img =
+        (m_img * other.m_real - m_real * other.m_img) / denominator;
+
+    m_real = temp_real;
+    m_img = temp_img;
+
     return *this;
 }
 
-Complex operator+(const Complex& a_, const Complex& b_)
+Complex operator+(const Complex& lhs_, const Complex& rhs_)
 {
-    Complex tmp(a_);
-    return tmp+=b_;
+    Complex tmp(lhs_);
+    return tmp += rhs_;
 }
 
-Complex operator-(const Complex& a_, const Complex& b_)
+Complex operator-(const Complex& lhs_, const Complex& rhs_)
 {
-    Complex tmp(a_);
-    return tmp-=b_;
+    Complex tmp(lhs_);
+    return tmp -= rhs_;
 }
 
-Complex operator*(const Complex& a_, const Complex& b_)
+Complex operator*(const Complex& lhs_, const Complex& rhs_)
 {
-    Complex tmp(a_);
-    return tmp*=b_;
+    Complex tmp(lhs_);
+    return tmp *= rhs_;
 }
 
-Complex operator/(const Complex& a_, const Complex& b_)
+Complex operator/(const Complex& lhs_, const Complex& rhs_)
 {
-    Complex tmp(a_);
-    return tmp/=b_;
+    Complex tmp(lhs_);
+    return tmp /= rhs_;
 }
 
 std::ostream& operator<<(std::ostream& os, const Complex& complex)
 {
-    os << "{" << complex.GetReal() << (complex.GetImg() >= 0 ? " + " : " - ") << std::abs(complex.GetImg()) << "i}";
+
+    os << "{" << complex.GetReal() << (complex.GetImg() >= 0 ? " + " : " - ")
+       << std::abs(complex.GetImg()) << "i}";
 
     return os;
 }
@@ -109,3 +114,4 @@ std::istream& operator>>(std::istream& is, Complex& complex)
     complex.SetReal(real).SetImg(img);
     return is;
 }
+} // namespace ilrd
