@@ -24,7 +24,7 @@
     "c-cpp-flylint.clang.executable": "/usr/bin/clang-18",
     "c-cpp-flylint.clang.extraArgs": [
         "-std=c89",
-        "ansi",
+        "-ansi",
         "-Wall",
         "-Wextra",
         "-pedantic-errors"
