@@ -19,7 +19,7 @@ RCString::State* RCString::CreateState(const char* cstr)
     size_t offset = OFFSETOF(State, m_cstr);
     size_t total_size = offset + len + 1;
 
-    char* raw_memory = static_cast<char*>(new char[total_size]);
+    char* raw_memory = static_cast<char*>(operator new(total_size));
     State* state = reinterpret_cast<State*>(raw_memory);
 
     state->m_ref_count = 1;
