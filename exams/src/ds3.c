@@ -337,7 +337,12 @@ Assume the data element type in the stack is int.
 There is no need to write the “min_stack”’s Create() / Destroy() functions.
 
 Do declare the “min_stack”’s management struct. */
-
+#include "Stack.h"
+typedef struct min_stack
+{
+    stack_t* st;
+    int min;
+}min_stack_t;
 /* 7.
 Write a function that receives a string, checks whether its parentheses ( (),
 [], {}, <> ) are arranged correctly, and returns 0 or 1.
