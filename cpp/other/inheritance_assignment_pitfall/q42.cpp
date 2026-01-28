@@ -10,16 +10,6 @@ class X
     {
     }
 
-  protected:
-    X(const X& other) : m_a(other.m_a)
-    {
-    }
-    X& operator=(const X& other)
-    {
-        m_a = other.m_a;
-        return *this;
-    }
-
   private:
     double m_a;
 };
@@ -46,5 +36,6 @@ int main()
     x1 = x2;
     y3 = y4;
 
+    
     return 0;
 }

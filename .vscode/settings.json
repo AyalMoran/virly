@@ -41,7 +41,8 @@
         "${workspaceFolder}/utils/inc",
         "${workspaceFolder}/projects/watchdog/inc",
         "${workspaceFolder}/cpp/include",
-        "/usr/include/gclib"
+        "/usr/include/c++/13",
+        "/usr/lib/clang/18/include"
     ],
     "c-cpp-flylint.cppcheck.executable": "/usr/bin/cppcheck",
     "c-cpp-flylint.cppcheck.extraArgs": [
@@ -60,7 +61,8 @@
         "${workspaceFolder}/system_programming/inc",
         "${workspaceFolder}/utils/inc",
         "${workspaceFolder}/projects/watchdog/inc",
-        "${workspaceFolder}/cpp/include"
+        "${workspaceFolder}/cpp/include",
+        "/usr/include/c++/13"
     ],
     "c-cpp-flylint.clang.enable": true,
     "c-cpp-flylint.standard": [
