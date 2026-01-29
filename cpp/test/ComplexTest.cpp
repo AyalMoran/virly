@@ -1,8 +1,9 @@
-#include "Complex.hpp"
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <sstream>
+
+#include "Complex.hpp"
 
 #include "test_utils.h"
 
@@ -10,6 +11,7 @@ static void RegisterTests(void);
 
 static void TestCtor(void)
 {
+    using namespace ilrd;
     INIT_SUITE(TestCtor, "Constructor Tests");
 
     // Default constructor (no arguments)
@@ -42,7 +44,7 @@ static void TestCtor(void)
 static void TestAssignment(void)
 {
     INIT_SUITE(TestAssignment, "Assignment Operator Tests");
-
+    using namespace ilrd;
     Complex c1(1, 2);
     Complex c2(3, 4);
 
@@ -66,7 +68,7 @@ static void TestAssignment(void)
 static void TestPlusMinus(void)
 {
     INIT_SUITE(TestPlusMinus, "Plus Minus Tests");
-
+    using namespace ilrd;
     Complex c1(1, 2);
     Complex c2(3, 4);
 
@@ -97,7 +99,7 @@ static void TestPlusMinus(void)
 static void TestMultiplyDivide(void)
 {
     INIT_SUITE(TestMultiplyDivide, "Multiply Divide Tests");
-
+    using namespace ilrd;
     Complex c1(1, 2);
     Complex c2(3, 4);
 
@@ -144,7 +146,7 @@ static void TestMultiplyDivide(void)
 static void TestComparison(void)
 {
     INIT_SUITE(TestComparison, "Comparison Operator Tests");
-
+    using namespace ilrd;
     Complex c1(1, 2);
     Complex c2(1, 2);
     Complex c3(3, 4);
@@ -174,7 +176,7 @@ static void TestComparison(void)
 static void TestStreamOperator(void)
 {
     INIT_SUITE(TestStreamOperator, "Stream Operator Tests");
-
+    using namespace ilrd;
     Complex c1(3, 4);
     Complex c2(-1, -2);
     Complex c3(0, 5);
@@ -219,7 +221,7 @@ static void TestStreamOperator(void)
 static void TestLoad(void)
 {
     INIT_SUITE(TestLoad, "Load Test");
-
+    using namespace ilrd;
     std::size_t i = 0;
     const std::size_t num_iterations = 999999999UL;
     Complex c1(1.0f, 2.0f);
@@ -240,7 +242,7 @@ int main()
     int i = 0;
     PRINT_TEST_HEADER("OVERALL");
     std::cout << "===================\n";
-
+    using namespace ilrd;
     RegisterTests();
 
     for (i = 0; i < test_count; ++i)
@@ -256,11 +258,12 @@ int main()
 
 static void RegisterTests(void)
 {
-    // REGISTER_TEST(TestCtor);
-    // REGISTER_TEST(TestAssignment);
-    // REGISTER_TEST(TestPlusMinus);
-    // REGISTER_TEST(TestMultiplyDivide);
-    // REGISTER_TEST(TestComparison);
-    // REGISTER_TEST(TestStreamOperator);
+    using namespace ilrd;
+    REGISTER_TEST(TestCtor);
+    REGISTER_TEST(TestAssignment);
+    REGISTER_TEST(TestPlusMinus);
+    REGISTER_TEST(TestMultiplyDivide);
+    REGISTER_TEST(TestComparison);
+    REGISTER_TEST(TestStreamOperator);
     REGISTER_TEST(TestLoad);
 }

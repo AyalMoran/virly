@@ -337,12 +337,80 @@ Assume the data element type in the stack is int.
 There is no need to write the “min_stack”’s Create() / Destroy() functions.
 
 Do declare the “min_stack”’s management struct. */
-#include "Stack.h"
+
+#include "limits.h"
+#include "stack.h"
+
 typedef struct min_stack
 {
     stack_t* st;
     int min;
-}min_stack_t;
+} min_stack_t;
+
+int Push(min_stack_t* mstack, int pushed)
+{
+    int val = pushed;
+
+    assert(mstack);
+
+    if (StackIsEmpty(mstack->st))
+    {
+        mstack->min = pushed;
+    }
+    else if (pushed < mstack->min)
+    {
+        val = 2 * pushed - mstack->min;
+        mstack->min = pushed;
+    }
+
+    return StackPush(mstack->st, &val);
+}
+
+int Peek(min_stack_t* mstack)
+{
+    int top = 0;
+
+    assert(mstack);
+    assert(!StackIsEmpty(mstack->st));
+
+    top = *(int*)StackPeek(mstack->st);
+
+    if (top < mstack->min) /* if the top is less than the min, return the min */
+    {
+        return mstack->min;
+    }
+
+    return top;
+}
+
+void Pop(min_stack_t* mstack)
+{
+    int top = 0;
+
+    assert(mstack);
+    assert(!StackIsEmpty(mstack->st));
+
+    top = *(int*)StackPeek(mstack->st);
+
+    if (top < mstack->min)
+    {
+        mstack->min = 2 * mstack->min - top;
+    }
+
+    StackPop(mstack->st, 0);
+
+    if (StackIsEmpty(mstack->st))
+    {
+        mstack->min = INT_MAX;
+    }
+}
+
+int GetMin(min_stack_t* mstack)
+{
+    assert(mstack);
+
+    return (mstack->min);
+}
 /* 7.
 Write a function that receives a string, checks whether its parentheses ( (),
 [], {}, <> ) are arranged correctly, and returns 0 or 1.
@@ -354,7 +422,62 @@ For example:
 "(8 ]* (6 + 2) + 1)" → would return 0
 
 "[(8 ]* (6 + 2) + 1)" → would return 0 */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+#include <stddef.h>
+#include <limits.h>
+#include <stack.h>
+#include <q.h>
 
+int CheckParentheses(const char* str)
+{
+    size_t i = 0;
+    char popped = 0;
+
+    size_t len = strlen(str);
+    stack_t* stack = StackCreate(len, sizeof(char));
+    if (!stack)
+    {
+        return 0;
+    }
+
+    for (i = 0; i < len; ++i)
+    {
+        if (str[i] == '(' || str[i] == '[' || str[i] == '{' || str[i] == '<')
+        {
+            StackPush(stack, &str[i]);
+        }
+        else if (str[i] == ')' || str[i] == ']' || str[i] == '}' || str[i] == '>')
+        {
+            if (StackIsEmpty(stack))
+            {
+                StackDestroy(stack);
+                return 0;
+            }
+            popped = *(char*)StackPeek(stack);
+            StackPop(stack, 0);
+            if ((str[i] == ')' && popped != '(') ||
+                (str[i] == ']' && popped != '[') ||
+                (str[i] == '}' && popped != '{') ||
+                (str[i] == '>' && popped != '<'))
+            {
+                StackDestroy(stack);
+                return 0;
+            }
+        }
+    }
+
+    if (!StackIsEmpty(stack))
+    {
+        StackDestroy(stack);
+        return 0;
+    }
+
+    StackDestroy(stack);
+    return 1;
+}
 /* 8.
 Recursion:
 
@@ -390,18 +513,31 @@ Note:
 You may not use the +, - operators.
 
 You may assume unsigned int argument/s. */
-unsigned int Inc(unsigned int x)
+unsigned int Inc2(unsigned int x)
 {
     /* if LSB is 0 -> set it to 1 */
     /* else -> clear LSB and recurse on higher bits */
     unsigned int lsb = x & 1u;
     unsigned int add = lsb ^ 1u; /* 1 if lsb==0 else 0 */
-    unsigned int carry = lsb;    /* 1 if need carry */
     unsigned int shifted = x >> 1;
-    unsigned int rec = carry ? Inc(shifted) : shifted;
+    unsigned int rec = lsb ? Inc2(shifted) : shifted;
     return (rec << 1) | add;
 }
 
+unsigned int Inc(unsigned int num, unsigned int carry)
+{
+    int local = 0;
+
+    if(carry == 0)
+    {
+        return num;
+    }
+
+    local = (num & carry);
+    num = (num ^ carry);
+    
+    return Inc(num, local << 1);
+}
 /*
 
 9.
@@ -521,6 +657,65 @@ PrintAllAnagramsDictionaryWords(char* word){/.../}
 You can prepare any required code or data structure in advance.
 
 Note: Clear pseudo-code is enough. */
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <assert.h>
+#include <stddef.h>
+#include <limits.h>
+#include <stack.h>
+#include <q.h>
+
+/*
+ * SOLUTION:
+ * 
+ * Data Structure: Hash table where:
+ *   - Key: sorted version of each word (e.g., "live" -> "eilv")
+ *   - Value: list of all dictionary words that are anagrams
+ *
+ * PRE-PROCESSING (done once before queries):
+ * 
+ *   hash_table = CreateHashTable()
+ *   
+ *   FOR each word in dictionary:
+ *       sorted_key = SortCharacters(word)  // e.g., "live" -> "eilv"
+ *       
+ *       anagram_list = HashTableFind(hash_table, sorted_key)
+ *       IF anagram_list == NULL:
+ *           anagram_list = CreateNewList()
+ *           HashTableInsert(hash_table, sorted_key, anagram_list)
+ *       
+ *       AddToList(anagram_list, word)
+ *
+ * QUERY FUNCTION:
+ * 
+ *   void PrintAllAnagramsDictionaryWords(char* word)
+ *   {
+ *       sorted_key = SortCharacters(word)
+ *       anagram_list = HashTableFind(hash_table, sorted_key)
+ *       
+ *       IF anagram_list != NULL:
+ *           FOR each dict_word in anagram_list:
+ *               IF dict_word != word:  // Don't print input word itself
+ *                   PRINT dict_word
+ *   }
+ *
+ * TIME COMPLEXITY:
+ *   Pre-processing: O(n * m * log(m)) where n = dict size, m = avg word length (sorting each word) and populating the HashTable
+ *   Query: O(m * log(m)) for sorting + O(1) avg lookup + O(k) to print k anagrams
+ *   Space: O(n * m) for storing dictionary
+ *
+ * EXAMPLE:
+ *   Dictionary: ["live", "vile", "veil", "evil", "hello"]
+ *   After pre-processing:
+ *     "eilv" -> ["live", "vile", "veil", "evil"]
+ *     "ehllo" -> ["hello"]
+ *   
+ *   Query: PrintAllAnagramsDictionaryWords("live")
+ *   - Sort("live") = "eilv"
+ *   - Lookup "eilv" -> ["live", "vile", "veil", "evil"]
+ *   - Print: "vile", "veil", "evil" (excluding "live")
+ */
 /*
 11.Design the data structures and interfaces for a hash table:
 
@@ -537,7 +732,7 @@ typedef struct hash_table
     size_t size;
     hash_func_t hash_func;
     cmp_func_t cmp_func;
-}hash_table_t;
+} hash_table_t;
 
 /* T: O(1) average case
     S: O(n) */
@@ -560,10 +755,48 @@ void* HashTableFind(const hash_table_t* table, const void* key);
     S: O(1) */
 void HashTableRemove(hash_table_t* table, const void* key);
 
-
 /*
 12.
 Design the data structures and interfaces for a heap:
+
+typedef struct heap
+{
+    int* arr;
+    size_t size;
+    size_t capacity;
+} heap_t;
+
+heap_t* HeapCreate(size_t capacity);
+
+void HeapDestroy(heap_t* heap);
+
+void HeapPush(heap_t* heap, int data);
+
+void HeapPop(heap_t* heap);
+
+int HeapIsEmpty(const heap_t* heap);
+
+int HeapIsFull(const heap_t* heap);
+
+int HeapSize(const heap_t* heap);
+
+int HeapCapacity(const heap_t* heap);
+
+int HeapPeek(const heap_t* heap);
+
+int HeapPop(heap_t* heap);
+
+int HeapPush(heap_t* heap, int data);
+
+int HeapIsEmpty(const heap_t* heap);
+
+int HeapIsFull(const heap_t* heap);
+
+int HeapSize(const heap_t* heap);
+
+int HeapCapacity(const heap_t* heap);
+
+int HeapPeek(const heap_t* heap);
 
 a. Describe the purpose of the heap data structure. Give an example of when you
 would use it. b. Write the interface for a heap (API only, no implementation).
@@ -608,6 +841,7 @@ problem.
 
 int main()
 {
+    /*
     int i = 0;
     int j = 0;
     int* bitmap_ptrs[10];
@@ -637,5 +871,41 @@ int main()
 
     printf("There are %d islands in the bitmap.\n",
            CountIslands(bitmap_ptrs, 10, 10));
+           */
+
+           /*
+    min_stack_t* mstack = (min_stack_t*)malloc(sizeof(min_stack_t));
+    if (!mstack)
+    {
+        return 1;
+    }
+
+    mstack->st = StackCreate(100,sizeof(int*));
+    if(!mstack->st)
+    {
+        return 1;
+    }
+
+    mstack->min = INT_MAX;
+
+    Push(mstack,3);
+    printf("pushed 3, min: %d, peek: %d\n", GetMin(mstack), Peek(mstack));
+    Push(mstack,2);
+    printf("pushed 2, min: %d, peek: %d\n", GetMin(mstack), Peek(mstack));
+    Push(mstack,1);
+    printf("pushed 1, min: %d, peek: %d\n", GetMin(mstack), Peek(mstack));
+    Pop(mstack);
+    printf("popped 1, min: %d, peek: %d\n", GetMin(mstack), Peek(mstack));
+    Pop(mstack);
+    printf("popped 2, min: %d, peek: %d\n", GetMin(mstack), Peek(mstack));
+    Pop(mstack);
+    printf("popped 3, min: %d", GetMin(mstack));
+    
+    StackDestroy(mstack->st);
+    free(mstack);
+    */
+
+        printf("%d\n", Inc(422, 1));
+  
     return 0;
 }
