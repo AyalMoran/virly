@@ -27,10 +27,10 @@ class Complex
     float m_img;
 };
 
-Complex operator+(const Complex& lhs_, const Complex& rhs_);
-Complex operator-(const Complex& lhs_, const Complex& rhs_);
-Complex operator*(const Complex& lhs_, const Complex& rhs_);
-Complex operator/(const Complex& lhs_, const Complex& rhs_);
+const Complex operator+(const Complex& lhs_, const Complex& rhs_);
+const Complex operator-(const Complex& lhs_, const Complex& rhs_);
+const Complex operator*(const Complex& lhs_, const Complex& rhs_);
+const Complex operator/(const Complex& lhs_, const Complex& rhs_);
 
 bool operator==(const Complex& lhs_, const Complex& rhs_);
 bool operator!=(const Complex& lhs_, const Complex& rhs_);
