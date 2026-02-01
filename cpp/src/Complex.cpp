@@ -74,25 +74,25 @@ Complex& Complex::operator/=(const Complex& other)
     return *this;
 }
 
-Complex operator+(const Complex& lhs_, const Complex& rhs_)
+const Complex operator+(const Complex& lhs_, const Complex& rhs_)
 {
     Complex tmp(lhs_);
     return tmp += rhs_;
 }
 
-Complex operator-(const Complex& lhs_, const Complex& rhs_)
+const Complex operator-(const Complex& lhs_, const Complex& rhs_)
 {
     Complex tmp(lhs_);
     return tmp -= rhs_;
 }
 
-Complex operator*(const Complex& lhs_, const Complex& rhs_)
+const Complex operator*(const Complex& lhs_, const Complex& rhs_)
 {
     Complex tmp(lhs_);
     return tmp *= rhs_;
 }
 
-Complex operator/(const Complex& lhs_, const Complex& rhs_)
+const Complex operator/(const Complex& lhs_, const Complex& rhs_)
 {
     Complex tmp(lhs_);
     return tmp /= rhs_;

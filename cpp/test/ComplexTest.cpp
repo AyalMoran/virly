@@ -5,7 +5,7 @@
 
 #include "Complex.hpp"
 
-#include "test_utils.h"
+#include "test_utils.hpp"
 
 static void RegisterTests(void);
 
@@ -13,6 +13,7 @@ static void TestCtor(void)
 {
     using namespace ilrd;
     INIT_SUITE(TestCtor, "Constructor Tests");
+    BEGIN_SUITE(TestCtor);
 
     // Default constructor (no arguments)
     Complex c1;
@@ -239,16 +240,22 @@ static void TestLoad(void)
 
 int main()
 {
+    using namespace ilrd;
     int i = 0;
+    Complex c1(1, 2);
+    Complex c2(3, 4);
+    c1 = c1*c2;
+    c1 = c1/c2;
+    
+    
     PRINT_TEST_HEADER("OVERALL");
     std::cout << "===================\n";
-    using namespace ilrd;
     RegisterTests();
 
-    for (i = 0; i < test_count; ++i)
+    for (i = 0; i < TestUtils::GetRegisteredTestCount(); ++i)
     {
-        std::cout << "Running Suite: " << test_registry[i].name << std::endl;
-        test_registry[i].func();
+        std::cout << "Running Suite: " << TestUtils::GetRegisteredTestName(i) << std::endl;
+        TestUtils::RunRegisteredTest(i);
     }
 
     PRINT_SUMMARY();

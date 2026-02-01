@@ -20,11 +20,9 @@
     "C_Cpp.default.cppStandard": "c++98",
     "C_Cpp.dimInactiveRegions": false,
     // flylint
-    "c-cpp-flylint.language": "c",
+    "c-cpp-flylint.language": "c_cpp",
     "c-cpp-flylint.clang.executable": "/usr/bin/clang-18",
     "c-cpp-flylint.clang.extraArgs": [
-        "-std=c89",
-        "-ansi",
         "-Wall",
         "-Wextra",
         "-pedantic-errors"
@@ -33,6 +31,7 @@
         "${workspaceFolder}/ds/inc",
         "${workspaceFolder}/algo/inc",
         "${workspaceFolder}/c/inc",
+        "${workspaceFolder}/cpp/include",
         "${workspaceFolder}/exams/inc",
         "${workspaceFolder}/other/inc",
         "${workspaceFolder}/projects/inc",
@@ -53,7 +52,8 @@
     "c-cpp-flylint.includePaths": [
         "${workspaceFolder}/ds/inc",
         "${workspaceFolder}/algo/inc",
-        // "${workspaceFolder}/c/inc",
+        "${workspaceFolder}/c/inc",
+        "${workspaceFolder}/cpp/include",
         "${workspaceFolder}/exams/inc",
         "${workspaceFolder}/other/inc",
         "${workspaceFolder}/projects/inc",
