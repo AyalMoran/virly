@@ -6,7 +6,7 @@
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/ds/inc/**",
                 "${workspaceFolder}/algo/inc/**",
-                "${workspaceFolder}/c/inc/**",
+                //"${workspaceFolder}/c/inc/**",
                 "${workspaceFolder}/exams/inc/**",
                 "${workspaceFolder}/other/inc/**",
                 "${workspaceFolder}/projects/inc/**",
@@ -14,12 +14,19 @@
                 "${workspaceFolder}/system_programming/inc/**",
                 "${workspaceFolder}/utils/inc/**",
                 "${workspaceFolder}/system_programming/inc/**",
-                "${workspaceFolder}/cpp/include/**"
+                "${workspaceFolder}/cpp/include/**",
+                "/usr/include/c++/13/**",
+                "/usr/include/x86_64-linux-gnu/c++/13/**",
+                "/usr/include/c++/13/backward/**",
+                "/usr/lib/gcc/x86_64-linux-gnu/13/include/**",
+                "/usr/local/include/**",
+                "/usr/include/x86_64-linux-gnu/**",
+                "/usr/include/**"
             ],
             "defines": [],
             "compilerPath": "/usr/bin/g++",
             "cStandard": "c89",
-            "cppStandard": "c++98",
+            "cppStandard": "c++17",
             "intelliSenseMode": "gcc-x64",
             "browse": {
                 "path": [

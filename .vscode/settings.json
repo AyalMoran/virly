@@ -39,6 +39,9 @@
         "${workspaceFolder}/system_programming/inc",
         "${workspaceFolder}/utils/inc",
         "${workspaceFolder}/projects/watchdog/inc",
+        "${workspaceFolder}/cpp/include",
+        "/usr/include/c++/13",
+        "/usr/lib/clang/18/include"
     ],
     "c-cpp-flylint.cppcheck.executable": "/usr/bin/cppcheck",
     "c-cpp-flylint.cppcheck.extraArgs": [
@@ -58,12 +61,24 @@
         "${workspaceFolder}/system_programming/inc",
         "${workspaceFolder}/utils/inc",
         "${workspaceFolder}/projects/watchdog/inc",
+        "${workspaceFolder}/cpp/include",
+        "/usr/include/c++/13"
     ],
     "c-cpp-flylint.clang.enable": true,
     "c-cpp-flylint.standard": [
         "c89",
         "c++98",
     ],
+    "c-cpp-flylint.lizard.enable": true,
+    "c-cpp-flylint.lizard.extraArgs": [
+        "-C",
+        "15"
+    ],
+    "c-cpp-flylint.flawfinder.enable": true,
+    "c-cpp-flylint.flawfinder.extraArgs": [
+        "--minlevel=3"
+    ],
+    "c-cpp-flylint.flexelint.enable": false,
     "cmake.sourceDirectory": "/home/moranayal/git/ds/SDL_bgi",
     "makefile.makefilePath": "${workspaceFolder}/ds/ds.mk",
     // Disable all automatic formatting for Makefiles
@@ -71,6 +86,5 @@
         "editor.formatOnSave": false,
         "editor.formatOnType": false,
         "editor.defaultFormatter": null
-    },
-    "clangd.enable": true,
+    }
 }
