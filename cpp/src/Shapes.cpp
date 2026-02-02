@@ -1,6 +1,6 @@
 #include "Shapes.hpp"
 #include <iostream>
-
+ 
 namespace ilrd
 {
 Shape::Shape(int pos_x, int pos_y) : pos_x(pos_x), pos_y(pos_y)

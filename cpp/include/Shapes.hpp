@@ -1,7 +1,7 @@
 #include <iostream>
 
 namespace ilrd
-{
+{ 
 class Shape
 {
   public:

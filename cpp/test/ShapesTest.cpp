@@ -1,6 +1,6 @@
 #include <Shapes.hpp>
 #include <iostream>
-
+  
 using namespace ilrd;
 class Line : public Shape
 {
