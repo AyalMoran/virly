@@ -42,6 +42,27 @@
         }
       ],
       //"preLaunchTask": "Build ANSI C89" // Uncomment to run the build task before launching
+    },
+    {
+      "name": "cpp2c",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/cpp/other/cpp2c/trans_out",
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${fileDirname}",
+      "environment"    : [],
+      "externalConsole": false,
+      "MIMode"         : "gdb",
+      "miDebuggerPath" : "/usr/bin/gdb",
+      "setupCommands"  : [
+        {
+          "description"   : "Enable pretty-printing",
+          "text"          : "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ],
+      //"preLaunchTask": "Build ANSI C89" // Uncomment to run the build task before launching
     }
   ],
 }
