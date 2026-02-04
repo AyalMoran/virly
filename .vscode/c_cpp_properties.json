@@ -26,7 +26,7 @@
             "defines": [],
             "compilerPath": "/usr/bin/g++",
             "cStandard": "c89",
-            "cppStandard": "c++17",
+            "cppStandard": "c++98",
             "intelliSenseMode": "gcc-x64",
             "browse": {
                 "path": [
