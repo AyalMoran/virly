@@ -2,6 +2,7 @@
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
+
 static int s_count = 0;
 
 /* ===================== PublicTransport ============================= */
@@ -51,7 +52,7 @@ PublicTransport* PublicTransport_CCtor(PublicTransport* this_ptr,
     *(PublicTransportVTable*)this_ptr =
         *(PublicTransportVTable*)&g_public_transport_table;
     this_ptr->m_license_plate = ++s_count;
-    printf("PublicTransport::CCtor()%d\n", this_ptr->m_license_plate);
+    printf("PublicTransport::CCtor() %d\n", this_ptr->m_license_plate);
 
     (void)other;
     return this_ptr;
@@ -100,7 +101,8 @@ Minibus* Minibus_Ctor(Minibus* this_ptr)
 {
     *(PublicTransport*)this_ptr =
         *PublicTransport_Ctor((PublicTransport*)this_ptr);
-    ((PublicTransport*)this_ptr)->vptr = (PublicTransportVTable*)&g_MinibusVTable;
+    ((PublicTransport*)this_ptr)->vptr =
+        (PublicTransportVTable*)&g_MinibusVTable;
     this_ptr->m_numSeats = 20;
     printf("Minibus::Ctor()\n");
     return this_ptr;
@@ -110,7 +112,8 @@ Minibus* Minibus_CCtor(Minibus* this_ptr, const Minibus* other)
 {
     *(PublicTransport*)this_ptr = *PublicTransport_CCtor(
         (PublicTransport*)this_ptr, (PublicTransport*)other);
-    ((PublicTransport*)this_ptr)->vptr = (PublicTransportVTable*)&g_MinibusVTable;
+    ((PublicTransport*)this_ptr)->vptr =
+        (PublicTransportVTable*)&g_MinibusVTable;
     this_ptr->m_numSeats = other->m_numSeats;
     printf("Minibus::CCtor()\n");
 
@@ -120,8 +123,8 @@ Minibus* Minibus_CCtor(Minibus* this_ptr, const Minibus* other)
 void Minibus_Dtor(Minibus* this_ptr)
 {
     (void)this_ptr;
-    PublicTransport_Dtor((PublicTransport*)this_ptr);
     printf("Minibus::Dtor()\n");
+    PublicTransport_Dtor((PublicTransport*)this_ptr);
 }
 
 void Minibus_display(Minibus* this_ptr)
@@ -149,7 +152,8 @@ typedef struct ArmyMinibusVTable
     void (*Minibus_display)(Minibus*);
     void (*Minibus_wash)(Minibus*, int);
 } ArmyMinibusVTable;
-ArmyMinibusVTable g_ArmyMinibusVTable = {ArmyMinibus_Dtor, Minibus_display, Minibus_wash};
+ArmyMinibusVTable g_ArmyMinibusVTable = {ArmyMinibus_Dtor, Minibus_display,
+                                         Minibus_wash};
 
 typedef struct ArmyMinibus
 {
@@ -161,7 +165,8 @@ ArmyMinibus* ArmyMinibus_Ctor(ArmyMinibus* this_ptr)
 
     *(Minibus*)this_ptr = *Minibus_Ctor((Minibus*)this_ptr);
 
-    ((PublicTransport*)this_ptr)->vptr = (PublicTransportVTable*)&g_ArmyMinibusVTable;
+    ((PublicTransport*)this_ptr)->vptr =
+        (PublicTransportVTable*)&g_ArmyMinibusVTable;
     printf("ArmyMinibus::Ctor()\n");
     return this_ptr;
 }
@@ -170,7 +175,8 @@ ArmyMinibus* ArmyMinibus_CCtor(ArmyMinibus* this_ptr, const ArmyMinibus* other)
 {
     *(Minibus*)this_ptr = *Minibus_CCtor((Minibus*)this_ptr, (Minibus*)other);
 
-    ((PublicTransport*)this_ptr)->vptr = (PublicTransportVTable*)&g_ArmyMinibusVTable;
+    ((PublicTransport*)this_ptr)->vptr =
+        (PublicTransportVTable*)&g_ArmyMinibusVTable;
 
     printf("ArmyMinibus::CCtor()\n");
 
@@ -223,7 +229,6 @@ Taxi* Taxi_CCtor(Taxi* this_ptr, const Taxi* other)
         (PublicTransport*)this_ptr, (PublicTransport*)other);
 
     ((PublicTransport*)this_ptr)->vptr = (PublicTransportVTable*)&g_TaxiVTable;
-    
 
     printf("Taxi::CCtor()\n");
 
@@ -281,7 +286,8 @@ typedef struct SpecialTaxi
 SpecialTaxi* SpecialTaxi_Ctor(SpecialTaxi* this_ptr)
 {
     *(Taxi*)this_ptr = *Taxi_Ctor((Taxi*)this_ptr);
-    ((PublicTransport*)this_ptr)->vptr = (PublicTransportVTable*)&g_SpecialTaxiVTable;
+    ((PublicTransport*)this_ptr)->vptr =
+        (PublicTransportVTable*)&g_SpecialTaxiVTable;
 
     printf("SpecialTaxi::Ctor()\n");
     return this_ptr;
@@ -290,7 +296,8 @@ SpecialTaxi* SpecialTaxi_Ctor(SpecialTaxi* this_ptr)
 SpecialTaxi* SpecialTaxi_CCtor(SpecialTaxi* this_ptr, const SpecialTaxi* other)
 {
     *(Taxi*)this_ptr = *Taxi_CCtor((Taxi*)this_ptr, (Taxi*)other);
-    ((PublicTransport*)this_ptr)->vptr = (PublicTransportVTable*)&g_SpecialTaxiVTable;
+    ((PublicTransport*)this_ptr)->vptr =
+        (PublicTransportVTable*)&g_SpecialTaxiVTable;
 
     printf("SpecialTaxi::CCtor()\n");
 
@@ -327,11 +334,13 @@ void print_info_Minibus(Minibus* m)
 
 PublicTransport print_info(int i)
 {
-    Minibus ret;
+    Minibus ret = *Minibus_Ctor((Minibus*)&ret);
     printf("print_info(int i)\n");
     Minibus_display(&ret);
     (void)i;
-    return *((PublicTransport*)&ret);
+    PublicTransport tmp = *PublicTransport_CCtor(&tmp,((PublicTransport*)&ret));
+    Minibus_Dtor(&ret);
+    return (tmp);
 }
 
 void taxi_display(Taxi s)
@@ -342,78 +351,122 @@ void taxi_display(Taxi s)
 int main(int argc, char** argv, char** envp)
 {
     Minibus m = *Minibus_Ctor(&m);
+
     print_info_Minibus(&m);
+
     PublicTransport tmp = print_info(3);
-    Minibus tmp_minibus_02 = *Minibus_CCtor(&tmp_minibus_02, (Minibus*)&tmp);
-    Minibus tmp_minibus_01 = *(Minibus_CCtor(&tmp_minibus_01, &tmp_minibus_02));
-    (*(PublicTransport*)&tmp_minibus_01)
-        .vptr->PublicTransport_display((PublicTransport*)&tmp_minibus_01);
+    PublicTransport_display(&tmp);
+    PublicTransport_Dtor(&tmp);
+
+    printf("%d\n", __LINE__);
 
     PublicTransport* array[] = {
         (PublicTransport*)Minibus_Ctor((Minibus*)malloc(sizeof(Minibus))),
         (PublicTransport*)Taxi_Ctor((Taxi*)malloc(sizeof(Taxi))),
         (PublicTransport*)Minibus_Ctor((Minibus*)malloc(sizeof(Minibus)))};
+    printf("%d\n", __LINE__);
 
+    printf("%d\n", __LINE__);
     array[0]->vptr->PublicTransport_display(array[0]);
+
+    printf("%d\n", __LINE__);
     array[1]->vptr->PublicTransport_display(array[1]);
+
+    printf("%d\n", __LINE__);
     array[2]->vptr->PublicTransport_display(array[2]);
 
+    printf("%d\n", __LINE__);
     array[0]->vptr->PublicTransport_Dtor(array[0]);
+    printf("%d\n", __LINE__);
     free(array[0]);
+    printf("%d\n", __LINE__);
     array[1]->vptr->PublicTransport_Dtor(array[1]);
+    printf("%d\n", __LINE__);
     free(array[1]);
+    printf("%d\n", __LINE__);
     array[2]->vptr->PublicTransport_Dtor(array[2]);
+    printf("%d\n", __LINE__);
     free(array[2]);
+    printf("%d\n", __LINE__);
 
     PublicTransport arr2[] = {
         *(PublicTransport*)Minibus_Ctor((Minibus*)malloc(sizeof(Minibus))),
         *(PublicTransport*)Taxi_Ctor((Taxi*)malloc(sizeof(Taxi))),
         *(PublicTransport*)PublicTransport_Ctor(
             (PublicTransport*)malloc(sizeof(PublicTransport)))};
+    printf("%d\n", __LINE__);
 
-    arr2[0].vptr->PublicTransport_display(&arr2[0]);
-    arr2[1].vptr->PublicTransport_display(&arr2[1]);
-    arr2[2].vptr->PublicTransport_display(&arr2[2]);
+    printf("%d\n", __LINE__);
+    PublicTransport_display(&arr2[0]);
+
+    printf("%d\n", __LINE__);
+    PublicTransport_display(&arr2[1]);
+
+    printf("%d\n", __LINE__);
+    PublicTransport_display(&arr2[2]);
+
+    printf("%d\n", __LINE__);
     print_info_PublicTransport(&arr2[0]);
 
+    printf("%d\n", __LINE__);
     PublicTransport_print_count();
+
     Minibus m2 = *(Minibus*)Minibus_Ctor(&m2);
     PublicTransport_print_count();
+    printf("%d\n", __LINE__);
 
     Minibus arr3[4] = {*Minibus_Ctor((Minibus*)malloc(sizeof(Minibus))),
                        *Minibus_Ctor((Minibus*)malloc(sizeof(Minibus))),
                        *Minibus_Ctor((Minibus*)malloc(sizeof(Minibus))),
                        *Minibus_Ctor((Minibus*)malloc(sizeof(Minibus)))};
+    printf("%d\n", __LINE__);
 
     Taxi* arr4 = (Taxi*)malloc(4 * sizeof(Taxi));
     for (size_t i = 0; i < 4; ++i)
     {
         arr4[i] = *Taxi_Ctor(arr4 + i);
     }
+    printf("%d", __LINE__);
 
     for (size_t i = 4; i > 0; --i)
     {
         Taxi_Dtor(arr4 + i - 1);
-        free(arr4 + i - 1);
     }
+    free(arr4);
+    printf("%d", __LINE__);
 
     max_funcTEMPLATE(int) int a = 1;
     int b = 2;
-    float bf = 2.0f;
+    int bf = (int)2.0f;
+    fflush(stdout);
+    printf("%d", __LINE__);
+
     printf("%d\n", max_func_int((int*)&a, (int*)&b));
+    printf("%d\n", __LINE__);
+
     printf("%d\n", max_func_int((int*)&a, (int*)&bf));
+    printf("%d\n", __LINE__);
+
     SpecialTaxi st = *SpecialTaxi_Ctor(&st);
+    printf("%d\n", __LINE__);
+
     taxi_display(*(Taxi*)&st);
+    printf("%d\n", __LINE__);
 
     ArmyMinibus* army_minibus = (ArmyMinibus*)ArmyMinibus_Ctor(
         (ArmyMinibus*)malloc(sizeof(ArmyMinibus)));
 
     ((MinibusVTable*)((PublicTransport*)army_minibus)->vptr)
         ->Minibus_display((Minibus*)army_minibus);
+    printf("%d\n", __LINE__);
+
     ((MinibusVTable*)((PublicTransport*)army_minibus)->vptr)
         ->Minibus_wash((Minibus*)army_minibus, 5);
+    printf("%d\n", __LINE__);
 
     ArmyMinibus_Dtor(army_minibus);
+    printf("%d\n", __LINE__);
+
     free(army_minibus);
 
     return 0;
