@@ -1,7 +1,7 @@
 /********************
  * File: cpp2c_trans.c
  * Author: Ayal Moran
- * Date: 08-02-2026
+ * Date: 08-02-2026 
  ********************/
 #include <stddef.h>
 #include <stdio.h>
