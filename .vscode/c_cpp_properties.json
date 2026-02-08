@@ -6,7 +6,6 @@
                 "${workspaceFolder}/**",
                 "${workspaceFolder}/ds/inc/**",
                 "${workspaceFolder}/algo/inc/**",
-                //"${workspaceFolder}/c/inc/**",
                 "${workspaceFolder}/exams/inc/**",
                 "${workspaceFolder}/other/inc/**",
                 "${workspaceFolder}/projects/inc/**",
@@ -24,7 +23,7 @@
                 "/usr/include/**"
             ],
             "defines": [],
-            "compilerPath": "/usr/bin/g++",
+            "compilerPath": "/usr/bin/gcc",
             "cStandard": "c89",
             "cppStandard": "c++98",
             "intelliSenseMode": "gcc-x64",

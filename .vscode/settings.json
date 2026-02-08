@@ -23,7 +23,7 @@
     "c-cpp-flylint.language": "c++",
     "c-cpp-flylint.clang.executable": "/usr/bin/clang-18",
     "c-cpp-flylint.clang.extraArgs": [
-        "-std=c++98",
+        "-ansi",
         "-Wall",
         "-Wextra",
         "-pedantic-errors"
