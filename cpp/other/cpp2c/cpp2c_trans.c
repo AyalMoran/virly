@@ -1,4 +1,8 @@
-
+/********************
+ * File: cpp2c_trans.c
+ * Author: Ayal Moran
+ * Date: 08-02-2026
+ ********************/
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -93,7 +97,6 @@ MinibusVTable g_MinibusVTable = {Minibus_Dtor, Minibus_display, Minibus_wash};
 struct Minibus
 {
     PublicTransport _base_part;
-
     int m_numSeats;
 };
 
@@ -200,7 +203,6 @@ typedef struct TaxiVTable
 {
     void (*Taxi_Dtor)(Taxi*);
     void (*Taxi_display)(Taxi*);
-
 } TaxiVTable;
 TaxiVTable g_TaxiVTable = {Taxi_Dtor, Taxi_display};
 
@@ -255,7 +257,6 @@ typedef struct SpecialTaxiVTable
 {
     void (*SpecialTaxi_Dtor)(SpecialTaxi*);
     void (*SpecialTaxi_display)(SpecialTaxi*);
-
 } SpecialTaxiVTable;
 SpecialTaxiVTable g_SpecialTaxiVTable = {SpecialTaxi_Dtor, SpecialTaxi_display};
 
