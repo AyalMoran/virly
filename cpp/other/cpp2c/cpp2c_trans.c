@@ -319,7 +319,10 @@ PublicTransport print_info(int i)
 
 void taxi_display(Taxi* s)
 {
-    Taxi_display(s);
+    Taxi taxi_tmp02;
+    Taxi_CCtor(&taxi_tmp02, (Taxi*)&s);
+    Taxi_display(&taxi_tmp02);
+    Taxi_Dtor(&taxi_tmp02);
 }
 
 int max_funcii(const int* t1, const int* t2)
@@ -411,10 +414,7 @@ int main(int argc, char** argv, char** envp)
     SpecialTaxi st;
     SpecialTaxi_Ctor(&st);
 
-    Taxi taxi_tmp02;
-    Taxi_CCtor(&taxi_tmp02, (Taxi*)&st);
-    taxi_display(&taxi_tmp02);
-    Taxi_Dtor(&taxi_tmp02);
+    taxi_display((Taxi*)&st);
 
     ArmyMinibus* army_minibus = (ArmyMinibus*)malloc(sizeof(ArmyMinibus));
     ArmyMinibus_Ctor(army_minibus);
