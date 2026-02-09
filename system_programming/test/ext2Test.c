@@ -17,10 +17,10 @@ int main()
     Ext2PrintGroupDescriptor(fs);
     int found = Ext2ReadFile(fs, FILE_PATH);
     if (found == -1)
-    {        fprintf(stderr, "Failed to read file: %s\n", FILE_PATH);
-        Ext2Close(fs);
-        return EXIT_FAILURE;
+    {        
+        fprintf(stderr, "Failed to read file: %s\n", FILE_PATH);
     }
+    
     Ext2Close(fs);
-    return EXIT_SUCCESS;
+    return found;
 }
