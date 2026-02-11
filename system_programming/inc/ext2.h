@@ -50,6 +50,6 @@ void Ext2PrintGroupDescriptor(ext2_t* fs);
 * @param path The path to the file to read.
 * @return An ext2status_t value indicating the result of the operation (e.g., success, file not found, is a directory, allocation error).
 */
-int  Ext2ReadFile(ext2_t* fs, const char* path);
+ext2status_t  Ext2ReadFile(ext2_t* fs, const char* path);
 
 #endif /* __FSPARSE_H__ */

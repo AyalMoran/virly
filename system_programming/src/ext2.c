@@ -23,7 +23,11 @@ struct Ext2FS
 
 static struct ext2_super_block GetSuperblockInfo(ext2_t* fs)
 {
-    pread(fs->fd, &fs->super, sizeof(fs->super), BASE_OFFSET);
+    if(pread(fs->fd, &fs->super, sizeof(fs->super), BASE_OFFSET) == -1)
+    {
+        perror("Error reading superblock");
+        exit(EXIT_FAILURE);
+    }
     fs->block_size = 1024 << fs->super.s_log_block_size;
     return fs->super;
 }
@@ -31,8 +35,12 @@ static struct ext2_super_block GetSuperblockInfo(ext2_t* fs)
 static struct ext2_group_desc GetGroupDescriptorInfo(ext2_t* fs)
 {
     struct ext2_group_desc group;
-    pread(fs->fd, &group, sizeof(group),
-          fs->block_size * (fs->super.s_first_data_block + 1));
+    if(pread(fs->fd, &group, sizeof(group),
+          fs->block_size * (fs->super.s_first_data_block + 1)) == -1)
+    {
+        perror("Error reading group descriptor");
+        exit(EXIT_FAILURE);
+    }
     return group;
 }
 
@@ -40,9 +48,13 @@ static struct ext2_inode GetRootDirInode(ext2_t* fs)
 {
     struct ext2_inode rootdir_inode;
     int inode_no = 2; // Root directory is always inode 2
-    pread(fs->fd, &rootdir_inode, sizeof(struct ext2_inode),
+    if(pread(fs->fd, &rootdir_inode, sizeof(struct ext2_inode),
           fs->block_size * fs->group.bg_inode_table +
-              (inode_no - 1) * fs->super.s_inode_size);
+              (inode_no - 1) * fs->super.s_inode_size) == -1)
+    {
+        perror("Error reading root directory inode");
+        exit(EXIT_FAILURE);
+    }
     return rootdir_inode;
 }
 
@@ -70,8 +82,11 @@ static struct ext2_inode get_inode_data(ext2_t* fs, uint32_t inode_num)
     off_t offset = (off_t)inode_table_block * fs->block_size +
                    (index * fs->super.s_inode_size);
 
-    lseek(fs->fd, offset, SEEK_SET);
-    read(fs->fd, &inode, sizeof(struct ext2_inode));
+    if(pread(fs->fd, &inode, sizeof(struct ext2_inode), offset) == -1)
+    {
+        perror("Error reading inode data");
+        exit(EXIT_FAILURE);
+    }
     return inode;
 }
 
@@ -79,6 +94,7 @@ static uint32_t find_inode_in_dir(ext2_t* fs, struct ext2_inode* dir_inode,
                                   const char* name)
 {
     uint32_t inode_num = 0;
+    int i = 0;
     char* block = (char*)malloc(fs->block_size);
     if (block == NULL)
     {
@@ -86,11 +102,15 @@ static uint32_t find_inode_in_dir(ext2_t* fs, struct ext2_inode* dir_inode,
         return 0;
     }
 
-    // Iterating only through direct blocks
-    for (int i = 0; i < 12 && dir_inode->i_block[i]; i++)
+    for (i = 0; i < 12 && dir_inode->i_block[i]; i++)
     {
-        pread(fs->fd, block, fs->block_size,
-              (off_t)dir_inode->i_block[i] * fs->block_size);
+        if(pread(fs->fd, block, fs->block_size,
+              (off_t)dir_inode->i_block[i] * fs->block_size) == -1)
+        {
+            perror("Error reading directory block");
+            free(block);
+            exit(EXIT_FAILURE);
+        }
 
         struct ext2_dir_entry_2* entry = (struct ext2_dir_entry_2*)block;
         unsigned int size = 0;
@@ -98,6 +118,9 @@ static uint32_t find_inode_in_dir(ext2_t* fs, struct ext2_inode* dir_inode,
         // Traverse the linked list of entries in this block
         while (size < dir_inode->i_size && entry->rec_len > 0)
         {
+            printf("Checking entry: %.*s\n", entry->name_len, entry->name); // Debug print
+            printf("Entry inode: %u, record length: %u\n", entry->inode, entry->rec_len); // Debug print
+            printf("Directory size in Bytes: %u\n", dir_inode->i_size);
             // Check if the name matches
             if (DirEntryMatch(entry, name))
             {
@@ -114,20 +137,26 @@ static uint32_t find_inode_in_dir(ext2_t* fs, struct ext2_inode* dir_inode,
     return 0;
 }
 
-static int PrintFileContent(ext2_t* fs, struct ext2_inode* file_inode)
+static ext2status_t PrintFileContent(ext2_t* fs, struct ext2_inode* file_inode)
 {
     char* buffer = (char*)malloc(fs->block_size);
+    int i = 0;
+
     if (buffer == NULL)
     {
         perror("Error allocating memory for file content");
         return EXT2_ALLOC_ERROR;
     }
 
-    // For simplicity, we only read direct blocks
-    for (int i = 0; i < 12 && file_inode->i_block[i]; ++i)
+    for (i = 0; i < 12 && file_inode->i_block[i]; ++i)
     {
-        pread(fs->fd, buffer, fs->block_size,
-              (off_t)file_inode->i_block[i] * fs->block_size);
+        if(pread(fs->fd, buffer, fs->block_size,
+              (off_t)file_inode->i_block[i] * fs->block_size) == -1)
+        {
+            perror("Error reading file block");
+            free(buffer);
+            return EXT2_ALLOC_ERROR;
+        }
         fwrite(buffer, 1, fs->block_size, stdout);
     }
 
@@ -147,14 +176,20 @@ static uint32_t TraversePath(ext2_t* fs, struct ext2_inode* current_inode,
             inode_num = find_inode_in_dir(fs, current_inode, token);
             if (inode_num == 0)
             {
-                fprintf(stderr, "File not found: %s\n", token);
+                if(fprintf(stderr, "File not found: %s\n", token) < 0)
+                {
+                    perror("Error writing to stderr");
+                }
                 return 0;
             }
             *current_inode = get_inode_data(fs, inode_num);
         }
         else
         {
-            fprintf(stderr, "Error: %s is not a directory\n", token);
+            if(fprintf(stderr, "Error: %s is not a directory\n", token) < 0)
+            {
+                perror("Error writing to stderr");
+            }
             return 0;
         }
         token = strtok(NULL, "/");
@@ -211,7 +246,7 @@ void Ext2PrintGroupDescriptor(ext2_t* fs)
     printf("  Inode table block: %u\n", fs->group.bg_inode_table);
 }
 
-int Ext2ReadFile(ext2_t* fs, const char* path)
+ext2status_t Ext2ReadFile(ext2_t* fs, const char* path)
 {
     unsigned int* buffer = NULL;
     uint32_t inode_num = 2;
@@ -220,7 +255,7 @@ int Ext2ReadFile(ext2_t* fs, const char* path)
         0,
     };
     char* path_copy = NULL;
-    int status = EXT2_SUCCESS;
+    ext2status_t status = EXT2_SUCCESS;
 
     path_copy = strdup(path);
     if (path_copy == NULL)
@@ -248,7 +283,7 @@ int Ext2ReadFile(ext2_t* fs, const char* path)
     else
     {
         printf("File found with inode number: %u\n", inode_num);
-        PrintFileContent(fs, &current_inode);
+        status = PrintFileContent(fs, &current_inode);
     }
 
     free(buffer);

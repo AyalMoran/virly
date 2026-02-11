@@ -16,7 +16,7 @@ int main()
     Ext2PrintSuperblock(fs);
     Ext2PrintGroupDescriptor(fs);
     int found = Ext2ReadFile(fs, FILE_PATH);
-    if (found == -1)
+    if (EXT2_SUCCESS != found)
     {        
         fprintf(stderr, "Failed to read file: %s\n", FILE_PATH);
     }
