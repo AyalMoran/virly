@@ -9,6 +9,8 @@
 
 #include <semaphore.h>
 #include <string>
+#include <mqueue.h>
+
 /*Declarations for IPCPingPong*/
 class SemException : public std::exception
 {
@@ -44,13 +46,13 @@ class SemPingPong
 
 int SemPingPongFunc(char** argv, std::size_t num_rounds);
 
-class Pipe
-{
-
-};
-
-
 int PipePingPongFunc(std::size_t num_round);
 
+int NamedPipesFunc(char** argv, std::size_t num_rounds);
+
+int MessageQueueFunc(char** argv, const char* msg);
+
 #endif /* _ILRD_IPCPINGPONG_H */
+
+
 

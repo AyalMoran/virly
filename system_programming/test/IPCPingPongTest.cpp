@@ -7,8 +7,8 @@
 
 #include <cassert>
 #include <cstdlib>
-#include <iostream>
 #include <cstring>
+#include <iostream>
 
 #include "IPCPingPong.hpp"
 
@@ -22,20 +22,38 @@ const std::size_t NUM_OF_ROUNDS = 999 * MILLION;
 
 int main(int argc, char** argv)
 {
-    if(argc < 2)
+    if (argc < 2)
     {
         std::cout << "Usage: ./IPCPingPong <Function>" << std::endl;
         return 1;
     }
 
-    if(0 == strcmp(argv[1], "SemPingPongFunc"))
+    if (0 == strcmp(argv[1], "SemPingPongFunc"))
     {
-        SemPingPongFunc(argv, NUM_OF_ROUNDS);
+        return SemPingPongFunc(argv, NUM_OF_ROUNDS);
     }
     else if (0 == strcmp(argv[1], "PipePingPongFunc"))
     {
-        PipePingPongFunc(NUM_OF_ROUNDS);
+        return PipePingPongFunc(NUM_OF_ROUNDS);
     }
+    else if(0 == strcmp(argv[1], "NamedPipesFunc"))
+    {
+        return NamedPipesFunc(argv, NUM_OF_ROUNDS);
+    }
+    else if(0 == strcmp(argv[1], "MessageQueueFunc"))
+    {
+        if(argc < 4)
+        {
+            return MessageQueueFunc(argv, NULL);
+        }
+        return  MessageQueueFunc(argv, argv[3]);
+    }
+    else 
+    {
+        std::cout << "Usage: ./IPCPingPong <Function> <funcs_params>" << std::endl;
+        return 1;
+    }
+
 
 
 

@@ -18,6 +18,12 @@
 #include <signal.h>   //sigprocmask
 #include <sys/wait.h> // waitpid
 #include <unistd.h>   // fork
+
+#include <sys/stat.h> // mkfifo
+
+#include <fstream> // std::ifstream
+#include <mqueue.h>
+#include <sstream> // std::istringstream
 /*============================ INCLUDES ============================*/
 #include "IPCPingPong.hpp"
 
@@ -27,7 +33,6 @@
 #define SUCCESS (0)
 #define FAILURE (1)
 
-/*======================= STATIC FUNCTIONS ========================*/
 #pragma region SemTest
 
 SemPingPong::SemPingPong(const char* sem_ping, const char* sem_pong,
@@ -184,7 +189,7 @@ int SemPingPongFunc(char** argv, std::size_t num_rounds)
     return 0;
 }
 #pragma endregion SemTest
-
+#pragma region AnonPipeTest
 int writer(const char* message, FILE* stream)
 {
     if (fprintf(stream, "%s\n", message) < 0)
@@ -243,7 +248,6 @@ static inline void PingPong(FILE* write_stream, FILE* read_stream,
 {
     for (size_t i = 0; i < num_rounds; ++i)
     {
-        // Read first to synchronize (wait for other side)
         if (SUCCESS != reader(read_stream))
         {
             std::cerr << "Process " << getpid() << " failed to read from pipe. "
@@ -251,7 +255,6 @@ static inline void PingPong(FILE* write_stream, FILE* read_stream,
             break;
         }
 
-        // Then write your message
         if (SUCCESS != writer(message, write_stream))
         {
             std::cerr << "Process " << getpid() << " failed to write to pipe. "
@@ -289,8 +292,6 @@ int PipePingPongFunc(std::size_t num_rounds)
         read_ping = fdopen(ping_fd[0], "r");
 
         PingPong(write_pong, read_ping, "Pong", num_rounds);
-        
-        
 
         close(ping_fd[0]);
         close(pong_fd[1]);
@@ -306,14 +307,13 @@ int PipePingPongFunc(std::size_t num_rounds)
         write_ping = fdopen(ping_fd[1], "w");
         read_pong = fdopen(pong_fd[0], "r");
 
-        // Parent writes first to start the exchange
         if (SUCCESS != writer("Ping", write_ping))
         {
             std::cerr << "Process " << getpid() << " failed to write to pipe. "
                       << std::strerror(errno) << std::endl;
         }
 
-        PingPong(write_ping, read_pong, "Ping", num_rounds-1);
+        PingPong(write_ping, read_pong, "Ping", num_rounds - 1);
 
         waitpid(pid, NULL, 0);
         close(ping_fd[1]);
@@ -322,3 +322,141 @@ int PipePingPongFunc(std::size_t num_rounds)
 
     return status;
 }
+#pragma endregion AnonPipeTest
+#pragma region NamedPipeTest
+static int FifoPingPong(int write_pipe, int read_pipe, const char* msg)
+{
+    char buffer[1024];
+    if (read(read_pipe, buffer, sizeof(buffer)) < 0)
+    {
+        std::cerr << "Failed to read from fifo. " << std::strerror(errno)
+                  << std::endl;
+        return FAILURE;
+    }
+    std::cout << buffer << " " << getpid() << std::endl;
+
+    if (write(write_pipe, msg, strlen(msg)) < 0)
+    {
+        std::cerr << "Failed to write " << msg << " to fifo."
+                  << std::strerror(errno) << std::endl;
+        return FAILURE;
+    }
+    return SUCCESS;
+}
+
+int NamedPipesFunc(char** argv, std::size_t num_rounds)
+{
+
+    int ping_fd;
+    int pong_fd;
+
+    if (0 == strcmp(argv[2], "ping"))
+    {
+        mkfifo("/tmp/fifo_ping", 0644);
+        mkfifo("/tmp/fifo_pong", 0644);
+        ping_fd = open("/tmp/fifo_ping", O_WRONLY);
+        pong_fd = open("/tmp/fifo_pong", O_RDONLY);
+        if (write(ping_fd, "Ping", strlen("Ping")) < 0)
+        {
+            std::cerr << "Failed to write Ping to fifo." << std::strerror(errno)
+                      << std::endl;
+            return FAILURE;
+        }
+        for (size_t i = 0; i < num_rounds; ++i)
+        {
+            FifoPingPong(ping_fd, pong_fd, "Ping");
+            std::cout << i << std::endl;
+        }
+        close(ping_fd);
+        close(pong_fd);
+        unlink("/tmp/fifo_ping");
+        unlink("/tmp/fifo_pong");
+    }
+    else if (0 == strcmp(argv[2], "pong"))
+    {
+        ping_fd = open("/tmp/fifo_ping", O_RDONLY);
+        pong_fd = open("/tmp/fifo_pong", O_WRONLY);
+        for (size_t i = 0; i < num_rounds; ++i)
+        {
+            FifoPingPong(pong_fd, ping_fd, "Pong");
+            std::cout << i << std::endl;
+        }
+        close(ping_fd);
+        close(pong_fd);
+        unlink("/tmp/fifo_ping");
+        unlink("/tmp/fifo_pong");
+    }
+
+    return SUCCESS;
+}
+#pragma endregion NamedPipeTest
+#pragma region MsgQTest
+
+const char* MSGQ_NAME = "/msgq_ipc_pingpong";
+
+int MessageQueueFunc(char** argv, const char* msg)
+{
+    struct mq_attr attr;
+    attr.mq_flags = 0;
+    attr.mq_maxmsg = 10;
+    attr.mq_msgsize = 1024;
+    attr.mq_curmsgs = 0;
+
+    mqd_t msgq = mq_open(MSGQ_NAME, O_CREAT | O_RDWR, 0666, &attr);
+    if (msgq == (mqd_t)-1)
+    {
+        std::cerr << "Failed to create/open message queue. "
+                  << std::strerror(errno) << std::endl;
+        return 1;
+    }
+
+    if (strcmp(argv[2], "prod") == 0)
+    {
+        if (msg == NULL)
+        {
+            std::cout << "producing ";
+            std::ifstream story(
+                "/home/moranayal/repos/ILRD/git/utils/story.txt");
+            for (std::string buffer; std::getline(story, buffer);)
+            {
+                std::cout << "wrote \"" << buffer << "\" to msgq" << std::endl;
+                mq_send(msgq, buffer.c_str(), buffer.length(), 0);
+            }
+        }
+        else
+        {
+            mq_send(msgq, msg, strlen(msg), 0);
+        }
+    }
+    else
+    {
+        char* buffer = new char[attr.mq_msgsize];
+        ssize_t bytes_received = mq_receive(msgq, buffer, attr.mq_msgsize, 0);
+        if(bytes_received == -1)
+        {
+            std::cerr << "Failed to receive message from queue. "
+                      << std::strerror(errno) << std::endl;
+            delete[] buffer;
+            return 1;
+        }
+        if (bytes_received > 0)
+        {
+            buffer[bytes_received] = '\0';
+            std::cout << "Received: " << buffer << std::endl;
+        }
+        
+        delete[] buffer;
+    }
+
+    mq_getattr(msgq, &attr);
+    std::cout << "Current number of messages in queue: " << attr.mq_curmsgs
+              << std::endl;
+    mq_close(msgq);
+    if (attr.mq_curmsgs == 0)
+    {
+        mq_unlink(MSGQ_NAME);
+    }
+    return 0;
+}
+
+#pragma endregion MsgQTest
