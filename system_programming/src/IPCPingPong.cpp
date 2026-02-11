@@ -1,8 +1,8 @@
 /**************************************************************
- * File    : IPCPingPong.c
+ * File    : IPCPingPong.cpp
  * Author  : Ayal Moran
- * Reviewer:
- * Date    :
+ * Reviewer: Oshri F.
+ * Date    : 11-02-2026
  **************************************************************/
 
 #include <assert.h>    // assert
@@ -19,11 +19,15 @@
 #include <sys/wait.h> // waitpid
 #include <unistd.h>   // fork
 
+#include <sys/shm.h>
 #include <sys/stat.h> // mkfifo
 
 #include <fstream> // std::ifstream
 #include <mqueue.h>
 #include <sstream> // std::istringstream
+
+#include <sys/mman.h>
+
 /*============================ INCLUDES ============================*/
 #include "IPCPingPong.hpp"
 
@@ -64,6 +68,8 @@ SemPingPong::~SemPingPong()
         std::cerr << m_pong_name << " failed to close. " << std::strerror(errno)
                   << std::endl;
     }
+    sem_unlink(m_pong_name.c_str());
+    sem_unlink(m_ping_name.c_str());
 }
 
 SemPingPong::SemPingPong(const SemPingPong& other)
@@ -432,7 +438,7 @@ int MessageQueueFunc(char** argv, const char* msg)
     {
         char* buffer = new char[attr.mq_msgsize];
         ssize_t bytes_received = mq_receive(msgq, buffer, attr.mq_msgsize, 0);
-        if(bytes_received == -1)
+        if (bytes_received == -1)
         {
             std::cerr << "Failed to receive message from queue. "
                       << std::strerror(errno) << std::endl;
@@ -444,7 +450,7 @@ int MessageQueueFunc(char** argv, const char* msg)
             buffer[bytes_received] = '\0';
             std::cout << "Received: " << buffer << std::endl;
         }
-        
+
         delete[] buffer;
     }
 
@@ -460,3 +466,72 @@ int MessageQueueFunc(char** argv, const char* msg)
 }
 
 #pragma endregion MsgQTest
+#pragma region ShMemTest
+
+int SharedMemoryFunc(char** argv, const char* msg, int number_of_readers)
+{
+    int segment_id;
+    void* shared_memory;
+    const int shared_segment_size = 0x6400;
+
+    segment_id = shm_open("/shm_ipc_ilrd", O_CREAT | O_RDWR, 0666);
+    if (segment_id == -1)
+    {
+        std::cerr << "Failed to create shared memory segment. "
+                  << std::strerror(errno) << std::endl;
+        return 1;
+    }
+
+    if (ftruncate(segment_id, shared_segment_size) == -1)
+    {
+        std::cerr << "Failed to set segment size. " << std::strerror(errno)
+                  << std::endl;
+        close(segment_id);
+        return 1;
+    }
+
+    shared_memory = mmap(NULL, shared_segment_size, PROT_WRITE | PROT_READ,
+                         MAP_SHARED, segment_id, 0);
+    if (shared_memory == MAP_FAILED)
+    {
+        std::cerr << "Failed to mmap shared memory. " << std::strerror(errno)
+                  << std::endl;
+        close(segment_id);
+        return 1;
+    }
+
+    printf("shared memory attached at address %p\n", shared_memory);
+    printf("segment size: %d\n", shared_segment_size);
+
+    if (strcmp(argv[2], "prod") == 0)
+    {
+        std::cout << msg << std::endl;
+        *(int*)shared_memory = number_of_readers;
+        std::size_t msg_len = strlen(msg);
+        std::size_t len = msg_len < shared_segment_size? msg_len : shared_segment_size;
+        snprintf((char*)shared_memory + sizeof(int), len, "%s", msg);
+    }
+    else
+    {
+        int num_of_readers_left = *(int*)shared_memory;
+        if (num_of_readers_left > 0)
+        {
+            --num_of_readers_left;
+            std::cout << "Number of readers left: " << num_of_readers_left
+                      << std::endl;
+            *(int*)shared_memory = num_of_readers_left;
+        }
+        else
+        {
+            std::cout << "No more readers left." << std::endl;
+            shm_unlink("/shm_ipc_ilrd");
+        }
+        printf("%s\n", (char*)shared_memory + sizeof(int));
+    }
+
+    munmap(shared_memory, shared_segment_size);
+    close(segment_id);
+
+    return 0;
+}
+#pragma endregion ShMemTest

@@ -1,8 +1,8 @@
 /**************************************************************
  * File    : IPCPingPong.hpp
  * Author  : Ayal Moran
- * Reviewer:
- * Date    :
+ * Reviewer: Oshri F.
+ * Date    : 11-02-2026
  **************************************************************/
 #ifndef _ILRD_IPCPINGPONG_H
 #define _ILRD_IPCPINGPONG_H
@@ -52,7 +52,7 @@ int NamedPipesFunc(char** argv, std::size_t num_rounds);
 
 int MessageQueueFunc(char** argv, const char* msg);
 
+int SharedMemoryFunc(char** argv, const char* msg, int number_of_readers);
+
+
 #endif /* _ILRD_IPCPINGPONG_H */
-
-
-

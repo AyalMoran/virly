@@ -1,8 +1,8 @@
 /**************************************************************
- * File    : IPCPingPongTest.c
+ * File    : IPCPingPongTest.cpp
  * Author  : Ayal Moran
- * Reviewer:
- * Date    :
+ * Reviewer: Oshri F.
+ * Date    : 11-02-2026
  **************************************************************/
 
 #include <cassert>
@@ -18,7 +18,9 @@
 
 const std::size_t THOUSAND = 1000;
 const std::size_t MILLION = 1000000;
-const std::size_t NUM_OF_ROUNDS = 999 * MILLION;
+const std::size_t NUM_OF_ROUNDS = MILLION;
+const int NUM_OF_READERS  = 4;
+
 
 int main(int argc, char** argv)
 {
@@ -47,6 +49,14 @@ int main(int argc, char** argv)
             return MessageQueueFunc(argv, NULL);
         }
         return  MessageQueueFunc(argv, argv[3]);
+    }
+    else if(0 == strcmp(argv[1], "SharedMemoryFunc"))
+    {
+        if(argc < 4)
+        {
+            return SharedMemoryFunc(argv, NULL, -1);
+        }
+        return SharedMemoryFunc(argv, argv[3], NUM_OF_READERS);
     }
     else 
     {
