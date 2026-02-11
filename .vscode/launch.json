@@ -1,5 +1,5 @@
 {
-  "version"       : "0.2.0",
+  "version": "0.2.0",
   "configurations": [
     {
       "name": "Debug Current SysProg Executable",
@@ -9,14 +9,14 @@
       "args": [],
       "stopAtEntry": false,
       "cwd": "${fileDirname}",
-      "environment"    : [],
+      "environment": [],
       "externalConsole": false,
-      "MIMode"         : "gdb",
-      "miDebuggerPath" : "/usr/bin/gdb",
-      "setupCommands"  : [
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "setupCommands": [
         {
-          "description"   : "Enable pretty-printing",
-          "text"          : "-enable-pretty-printing",
+          "description": "Enable pretty-printing",
+          "text": "-enable-pretty-printing",
           "ignoreFailures": true
         }
       ],
@@ -30,39 +30,54 @@
       "args": [],
       "stopAtEntry": false,
       "cwd": "${fileDirname}",
-      "environment"    : [],
+      "environment": [],
       "externalConsole": false,
-      "MIMode"         : "gdb",
-      "miDebuggerPath" : "/usr/bin/gdb",
-      "setupCommands"  : [
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "setupCommands": [
         {
-          "description"   : "Enable pretty-printing",
-          "text"          : "-enable-pretty-printing",
+          "description": "Enable pretty-printing",
+          "text": "-enable-pretty-printing",
           "ignoreFailures": true
         }
       ],
       //"preLaunchTask": "Build ANSI C89" // Uncomment to run the build task before launching
     },
     {
-      "name": "cpp2c",
+      "name": "ext2",
       "type": "cppdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/cpp/other/cpp2c/trans_out",
+      "program": "${workspaceFolder}/system_programming/bin/ext2",
       "args": [],
       "stopAtEntry": false,
       "cwd": "${fileDirname}",
-      "environment"    : [],
+      "environment": [],
       "externalConsole": false,
-      "MIMode"         : "gdb",
-      "miDebuggerPath" : "/usr/bin/gdb",
-      "setupCommands"  : [
+      "MIMode": "gdb",
+      "miDebuggerPath": "/usr/bin/gdb",
+      "setupCommands": [
         {
-          "description"   : "Enable pretty-printing",
-          "text"          : "-enable-pretty-printing",
+          "description": "Enable pretty-printing",
+          "text": "-enable-pretty-printing",
           "ignoreFailures": true
-        }
+        },
       ],
-      //"preLaunchTask": "Build ANSI C89" // Uncomment to run the build task before launching
+      "preLaunchTask": "ext2 build" // Uncomment to run the build task before launching
+    },
+    {
+      "name": "sudo ext2 Launch",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/system_programming/bin/ext2", // Replace with your program's path
+      "args": [],
+      "stopAtEntry": false,
+      "cwd": "${fileDirname}",
+      "environment": [],
+      "externalConsole": false,
+      "miDebuggerPath": "${workspaceFolder}/system_programming/bin/sudo_gdb.sh", // Path to your script
+      "MIMode": "gdb",
+      "preLaunchTask": "ext2 build" // Uncomment to run the build task before launching
+
     }
   ],
 }
