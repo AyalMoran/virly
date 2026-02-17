@@ -1,6 +1,7 @@
 #include "Net/TcpSocket.hpp"
 #include "Net/Logger.hpp"
 
+#include "TcpSocket.hpp"
 #include <arpa/inet.h>
 #include <cerrno>
 #include <cstring>
@@ -9,7 +10,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
-
 
 TcpSocket::TcpSocket() : SocketBase(socket(AF_INET, SOCK_STREAM, 0))
 {
@@ -23,7 +23,6 @@ TcpSocket::TcpSocket() : SocketBase(socket(AF_INET, SOCK_STREAM, 0))
 TcpSocket::TcpSocket(int fd) : SocketBase(fd)
 {
 }
-
 
 void TcpSocket::EnableReuseAddress() const
 {
@@ -109,7 +108,8 @@ void TcpSocket::SendAll(const std::string& data) const
             {
                 continue;
             }
-            throw std::runtime_error(Logger::BuildErrnoMessage("send() failed"));
+            throw std::runtime_error(
+                Logger::BuildErrnoMessage("send() failed"));
         }
         offset += static_cast<std::size_t>(sent);
     }
@@ -132,7 +132,8 @@ bool TcpSocket::ReceiveLine(std::string& outLine) const
             {
                 continue;
             }
-            throw std::runtime_error(Logger::BuildErrnoMessage("recv() failed"));
+            throw std::runtime_error(
+                Logger::BuildErrnoMessage("recv() failed"));
         }
 
         if (c == '\n')
@@ -142,4 +143,30 @@ bool TcpSocket::ReceiveLine(std::string& outLine) const
 
         outLine.push_back(c);
     }
+}
+
+Endpoint TcpSocket::GetPeer() const
+{
+    struct sockaddr_in peerAddr;
+    socklen_t peerSize = sizeof(peerAddr);
+
+    if (getpeername(GetFd(), reinterpret_cast<struct sockaddr*>(&peerAddr),
+                    &peerSize) < 0)
+    {
+        throw std::runtime_error(
+            Logger::BuildErrnoMessage("getpeername() failed"));
+    }
+
+    char ipText[INET_ADDRSTRLEN];
+    
+    if (inet_ntop(AF_INET, &(peerAddr.sin_addr), ipText, sizeof(ipText)) ==
+        NULL)
+    {
+        throw std::runtime_error(
+            Logger::BuildErrnoMessage("inet_ntop() failed"));
+    }
+    
+    Endpoint peerEndpoint(ipText, ntohs(peerAddr.sin_port));
+    
+    return peerEndpoint;
 }
