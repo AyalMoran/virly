@@ -7,7 +7,7 @@
 #include <stdio.h>
 #endif /*NDEBUG*/
 
-#include "bst.h" /* bst_t       */
+#include "BST.h"/* bst_t       */
 #define MAX(a, b) ((a) < (b) ? (b) : (a))
 
 struct bst

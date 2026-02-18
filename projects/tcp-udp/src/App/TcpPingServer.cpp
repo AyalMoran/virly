@@ -1,6 +1,7 @@
-#include "App/TcpPingServer.hpp"
 
 #include "App/CommandLineOptions.hpp"
+#include "App/TcpPingServer.hpp"
+
 #include "Net/Logger.hpp"
 #include "Net/MessageBuilder.hpp"
 #include "Net/SignalManager.hpp"
