@@ -48,7 +48,7 @@ inline SharedPtr<T>::SharedPtr(const SharedPtr& other)
 template <typename T>
 inline SharedPtr<T>& SharedPtr<T>::operator=(const SharedPtr& other)
 {
-    if (*this = other)
+    if (*this == other)
     {
         return *this;
     }
