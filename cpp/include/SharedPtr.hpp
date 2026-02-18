@@ -24,33 +24,54 @@ template <typename T> class SharedPtr
     std::size_t* m_counter;
 };
 
-
-template <typename T> inline SharedPtr<T>::SharedPtr(T* ptr)
+template <typename T>
+inline SharedPtr<T>::SharedPtr(T* ptr) : m_ptr(ptr), m_counter(new std::size_t)
 {
+    *m_counter = 1;
 }
 
 template <typename T> inline SharedPtr<T>::~SharedPtr()
 {
+    --*m_counter;
+    if (0 == *m_counter)
+    {
+        delete m_ptr;
+    }
 }
 
-template <typename T> inline SharedPtr<T>::SharedPtr(const SharedPtr& other)
+template <typename T>
+inline SharedPtr<T>::SharedPtr(const SharedPtr& other)
+    : m_ptr(other.m_ptr), m_counter(m_counter)
 {
 }
 
 template <typename T>
-inline SharedPtr& SharedPtr<T>::operator=(const SharedPtr& other)
+inline SharedPtr<T>& SharedPtr<T>::operator=(const SharedPtr& other)
 {
-    // TODO: insert return statement here
+    if (*this = other)
+    {
+        return *this;
+    }
+    --*m_counter;
+    if (0 == *m_counter)
+    {
+        delete m_ptr;
+    }
+
+    m_ptr = other.m_ptr;
+    m_counter = other.m_counter;
+
+    return *this;
 }
 
 template <typename T> inline T* SharedPtr<T>::operator->()
 {
-    return nullptr;
+    return m_ptr;
 }
 
 template <typename T> inline T& SharedPtr<T>::operator*()
 {
-    // TODO: insert return statement here
+    return *m_ptr;
 }
 
 template <typename T>
@@ -61,7 +82,6 @@ inline SharedPtr<T>::SharedPtr(const U& other)
 
 template <typename T>
 template <typename U>
-inline SharedPtr& SharedPtr<T>::operator=(const U& other)
+inline SharedPtr<T>& SharedPtr<T>::operator=(const U& other)
 {
-    // TODO: insert return statement here
 }
