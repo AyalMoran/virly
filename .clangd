@@ -11,11 +11,10 @@ CompileFlags:
     - -I/home/moranayal/repos/ILRD/git/system_programming/inc
     - -I/home/moranayal/repos/ILRD/git/utils/inc
     - -I/home/moranayal/repos/ILRD/git/cpp/include
+    - -I/home/moranayal/repos/ILRD/git/projects/tcp-udp/include
     - -I/usr/include/c++/13
     - -I/usr/include/x86_64-linux-gnu/c++/13
     - -I/usr/include/c++/13/backward
-    - -I/usr/lib/gcc/x86_64-linux-gnu/13/include
     - -I/usr/local/include
     - -I/usr/include/x86_64-linux-gnu
     - -I/usr/include
-
