@@ -1,10 +1,36 @@
 #include "SharedPtr.hpp"
+#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <sstream>
 
 #include "test_utils.hpp"
+
+using namespace ilrd;
+
+class A
+{
+    public:
+        A(int a) : m_a(a) {}
+         virtual ~A() { std::cout << "A dtor" << std::endl; }
+    private:
+        int m_a;
+};
+
+class B : public A
+{
+    public:
+        B(int a) : A(a) {}
+        virtual ~B() { std::cout << "B dtor" << std::endl; }
+};
+
+class C : public B
+{
+    public:
+        C(int a) : B(a) {}
+        virtual ~C() { std::cout << "C dtor" << std::endl; }
+};
 
 static void RegisterTests(void);
 
@@ -83,20 +109,45 @@ static void TestDiffTypeCCtor(void)
 {
     INIT_SUITE(TestDiffTypeCCtor, "TestDiffTypeCCtor Tests");
     BEGIN_SUITE(TestDiffTypeCCtor);
-    SharedPtr<char> sp1(new char('a'));
-    SharedPtr<int> sp2(sp1);
-    ASSERT_EQ(TestDiffTypeCCtor, 2, sp2.UseCount());
+
+    SharedPtr<A> spA(new B(1));
+
+    SharedPtr<A> spA2(spA);
+    ASSERT_EQ(TestDiffTypeCCtor, 2, spA2.UseCount());
+    ASSERT_EQ(TestDiffTypeCCtor, 2, spA.UseCount());
+
+    SharedPtr<B> spB(new C(2));
+    SharedPtr<B> spB2(spB);
+    ASSERT_EQ(TestDiffTypeCCtor, 2, spB2.UseCount());
+    ASSERT_EQ(TestDiffTypeCCtor, 2, spB.UseCount());
+
+    SharedPtr<A> spA3(new C(3));
+    SharedPtr<A> spA4(spA3);
+    
+    ASSERT_EQ(TestDiffTypeCCtor, 2, spA4.UseCount());
+    ASSERT_EQ(TestDiffTypeCCtor, 2, spA3.UseCount());
+
     END_SUITE(TestDiffTypeCCtor);
 }
 static void TestDiffTypeOpEqual(void)
 {
     INIT_SUITE(TestDiffTypeOpEqual, "TestDiffTypeOpEqual Tests");
     BEGIN_SUITE(TestDiffTypeOpEqual);
-    SharedPtr<int> sp1(new int(5));
-    SharedPtr<double> sp2(new double(10.0));
-    sp2 = sp1;
-    ASSERT_EQ(TestDiffTypeOpEqual, 2, sp2.UseCount());
-    END_SUITE(TestDiffTypeOpEqual);
+
+    SharedPtr<A> spA(new B(1));
+    SharedPtr<A> spA2 = spA;
+    SharedPtr<A> spA3 = spA2;
+    SharedPtr<A> spA4 = spA3;
+    spA = spA4;
+    spA = spA3;
+    spA = spA2;
+    spA = spA;
+    ASSERT_EQ(TestDiffTypeOpEqual, 4, spA.UseCount());
+    ASSERT_EQ(TestDiffTypeOpEqual, 4, spA2.UseCount());
+    ASSERT_EQ(TestDiffTypeOpEqual, 4, spA3.UseCount());
+    ASSERT_EQ(TestDiffTypeOpEqual, 4, spA4.UseCount());
+
+   END_SUITE(TestDiffTypeOpEqual);
 }
 int main()
 {

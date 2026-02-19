@@ -1,12 +1,14 @@
 #include <cstddef>  // std::size_t
 #include <memory>   // std::addressof
-#include <utility>  // std::swap
-#include <algorithm> // std::swap
+
+namespace ilrd
+{
 template <typename T> class SharedPtr
 {
   public:
     // ctor
-    SharedPtr(T* ptr);
+    SharedPtr();
+    explicit SharedPtr(T* ptr);
     // dtor
     ~SharedPtr();
     // cctor
@@ -25,9 +27,7 @@ template <typename T> class SharedPtr
 
     // friend functions
     template <typename U>
-    friend std::size_t* GetUseCount(const SharedPtr<U>& sp);
-    template <typename U>
-    friend U* GetPtr(const SharedPtr<U>& sp);
+    friend class SharedPtr;
 
   private:
     T* m_ptr;
@@ -35,9 +35,25 @@ template <typename T> class SharedPtr
 };
 
 template <typename T>
-inline SharedPtr<T>::SharedPtr(T* ptr) : m_ptr(ptr), m_counter(new std::size_t)
+inline SharedPtr<T>::SharedPtr() : m_ptr(nullptr), m_counter(nullptr)
 {
-    *m_counter = 1;
+    // empty
+}
+
+template <typename T>
+inline SharedPtr<T>::SharedPtr(T* ptr) : m_ptr(ptr) , m_counter(nullptr)
+{
+    try
+    {
+        m_counter = new std::size_t;
+        *m_counter = 1;
+    }
+    catch (std::bad_alloc& e)
+    {
+        delete m_ptr;
+        m_ptr = nullptr;
+        throw e;
+    }
 }
 
 template <typename T> inline SharedPtr<T>::~SharedPtr()
@@ -91,7 +107,7 @@ template <typename T> inline T& SharedPtr<T>::operator*()
 template <typename T>
 template <typename U>
 inline SharedPtr<T>::SharedPtr(const SharedPtr<U>& other)
-    : m_ptr(reinterpret_cast<T*>(GetPtr(other))), m_counter(GetUseCount(other))
+    : m_ptr(other.m_ptr), m_counter(other.m_counter)
 {
     ++*m_counter;
 }
@@ -104,7 +120,6 @@ inline SharedPtr<T>& SharedPtr<T>::operator=(const SharedPtr<U>& other)
     {
         return *this;
     }
-    
     --*m_counter;
     if (0 == *m_counter)
     {
@@ -112,22 +127,15 @@ inline SharedPtr<T>& SharedPtr<T>::operator=(const SharedPtr<U>& other)
         delete m_counter;
     }
 
-    SharedPtr<T> temp(other);
-    std::swap(*this, temp);
+    m_ptr = other.m_ptr;
+    m_counter = other.m_counter;
+    *m_counter += 1;
+
     return *this;
-}
-
-template <typename T> inline std::size_t* GetUseCount(const SharedPtr<T>& sp)
-{
-    return sp.m_counter;
-}
-
-template <typename T> inline T* GetPtr(const SharedPtr<T>& sp)
-{
-    return sp.m_ptr;
 }
 
 template <typename T> inline std::size_t SharedPtr<T>::UseCount() const
 {
-    return *GetUseCount(*this);
+    return *m_counter;
 }
+} // namespace ilrd
