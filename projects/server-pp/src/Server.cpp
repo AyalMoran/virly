@@ -218,7 +218,6 @@ void Server::Run()
                 }
                 else if (m_events[i].events & EPOLLOUT)
                 {
-                    // TODO handle write event
                     HandleWriteEvent(m_events[i].data.fd);
                 }
             }
@@ -331,7 +330,6 @@ void Server::WriteToSocket(int fd)
     if (socket_type == SOCK_STREAM)
     {
         LOG_INFO("Writing to stream socket");
-        // TODO write to stream socket
         if (m_tcpClients.find(fd) == m_tcpClients.end())
         {
             LOG_ERROR("Received write event for unknown TCP client");
@@ -465,7 +463,6 @@ std::string Server::ReadFromSocket(int fd)
     if (socket_type == SOCK_STREAM)
     {
         LOG_INFO("Reading from stream socket");
-        // TODO read from stream socket
         if (m_tcpClients.find(fd) == m_tcpClients.end())
         {
             LOG_ERROR("Received read event for unknown TCP client");

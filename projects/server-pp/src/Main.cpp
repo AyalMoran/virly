@@ -12,10 +12,6 @@ int main()
     {
         server.Run();
     }
-    catch (const std::runtime_error& ex)
-    {
-        LOG_ERROR(ex.what());
-    }
     catch (const std::exception& ex)
     {
         LOG_ERROR(ex.what());
