@@ -1,5 +1,5 @@
-#include "Server.hpp"          // Server 
 #include "Endpoint.hpp"        // Endpoint 
+#include "Server.hpp"          // Server 
 #include "Logger.hpp"          // Logger 
 #include "MessageBuilder.hpp"  // MessageBuilder 
 #include "SignalManager.hpp"   // SignalManager 
