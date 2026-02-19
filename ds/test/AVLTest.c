@@ -10,8 +10,8 @@
 #include <string.h>
 #include <time.h>
 
-#include "avl.h"
-#include "bst.h"
+#include "AVL.h"
+#include "BST.h"
 
 #pragma region testing utils
 /* structs and globals */
