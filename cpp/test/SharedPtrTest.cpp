@@ -1,9 +1,7 @@
 #include "SharedPtr.hpp"
-#include <atomic>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
-#include <sstream>
 
 #include "test_utils.hpp"
 
@@ -129,6 +127,7 @@ static void TestDiffTypeCCtor(void)
 
     END_SUITE(TestDiffTypeCCtor);
 }
+
 static void TestDiffTypeOpEqual(void)
 {
     INIT_SUITE(TestDiffTypeOpEqual, "TestDiffTypeOpEqual Tests");
@@ -149,6 +148,37 @@ static void TestDiffTypeOpEqual(void)
 
    END_SUITE(TestDiffTypeOpEqual);
 }
+
+static void TestNullPtr(void)
+{
+    INIT_SUITE(TestNullPtr, "TestNullPtr Tests");
+    BEGIN_SUITE(TestNullPtr);
+    SharedPtr<int> sp1;
+    ASSERT_EQ(TestNullPtr, 1, sp1.UseCount());
+    SharedPtr<int> sp2;
+    sp2 = sp1;
+    sp1 = sp2;
+    sp1 = sp1;
+    sp1 = sp2;
+    ASSERT_EQ(TestNullPtr, 2, sp2.UseCount());
+
+    SharedPtr<int> sp3(new int(5));
+    sp3 = sp1;
+    ASSERT_EQ(TestNullPtr, 3, sp3.UseCount());
+
+    SharedPtr<int> sp4(nullptr);
+    ASSERT_EQ(TestNullPtr, 1, sp4.UseCount());
+
+    SharedPtr<int> sp5(sp4);
+    ASSERT_EQ(TestNullPtr, 2, sp5.UseCount());
+
+    SharedPtr<int> sp6(new int(5));
+    sp6 = sp4;
+    ASSERT_EQ(TestNullPtr, 3, sp6.UseCount());
+
+    END_SUITE(TestNullPtr);
+}
+
 int main()
 {
     PRINT_TEST_HEADER("OVERALL");
@@ -174,6 +204,7 @@ static void RegisterTests(void)
     REGISTER_TEST(TestOpEqual);
     REGISTER_TEST(TestDiffTypeCCtor);
     REGISTER_TEST(TestDiffTypeOpEqual);
+    REGISTER_TEST(TestNullPtr);
 }
 
 

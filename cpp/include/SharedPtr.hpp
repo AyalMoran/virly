@@ -1,14 +1,16 @@
 #include <cstddef>  // std::size_t
 #include <memory>   // std::addressof
 
+#ifndef ILRD_SHARED_PTR_HPP
+#define ILRD_SHARED_PTR_HPP
+
 namespace ilrd
 {
 template <typename T> class SharedPtr
 {
   public:
     // ctor
-    SharedPtr();
-    explicit SharedPtr(T* ptr);
+    SharedPtr(T* ptr = nullptr);
     // dtor
     ~SharedPtr();
     // cctor
@@ -34,11 +36,6 @@ template <typename T> class SharedPtr
     std::size_t* m_counter;
 };
 
-template <typename T>
-inline SharedPtr<T>::SharedPtr() : m_ptr(nullptr), m_counter(nullptr)
-{
-    // empty
-}
 
 template <typename T>
 inline SharedPtr<T>::SharedPtr(T* ptr) : m_ptr(ptr) , m_counter(nullptr)
@@ -52,17 +49,21 @@ inline SharedPtr<T>::SharedPtr(T* ptr) : m_ptr(ptr) , m_counter(nullptr)
     {
         delete m_ptr;
         m_ptr = nullptr;
+        m_counter = nullptr;
         throw e;
     }
 }
 
 template <typename T> inline SharedPtr<T>::~SharedPtr()
 {
-    --*m_counter;
-    if (0 == *m_counter)
+    if (m_counter)
     {
-        delete m_ptr;
-        delete m_counter;
+        --*m_counter;
+        if (0 == *m_counter)
+        {
+            delete m_ptr;
+            delete m_counter;
+        }
     }
 }
 
@@ -80,16 +81,21 @@ inline SharedPtr<T>& SharedPtr<T>::operator=(const SharedPtr& other)
     {
         return *this;
     }
-    --*m_counter;
-    if (0 == *m_counter)
+    if(m_counter)
     {
-        delete m_ptr;
-        delete m_counter;
+        --*m_counter;
+        if (0 == *m_counter)
+        {
+            delete m_ptr;
+            delete m_counter;
+        }
     }
-
     m_ptr = other.m_ptr;
     m_counter = other.m_counter;
-    *m_counter += 1;
+    if(m_counter)
+    {
+        *m_counter += 1;
+    }
 
     return *this;
 }
@@ -109,7 +115,10 @@ template <typename U>
 inline SharedPtr<T>::SharedPtr(const SharedPtr<U>& other)
     : m_ptr(other.m_ptr), m_counter(other.m_counter)
 {
-    ++*m_counter;
+    if(m_counter)
+    {
+        ++*m_counter;
+    }
 }
 
 template <typename T>
@@ -120,22 +129,37 @@ inline SharedPtr<T>& SharedPtr<T>::operator=(const SharedPtr<U>& other)
     {
         return *this;
     }
-    --*m_counter;
-    if (0 == *m_counter)
+    if(m_counter)
     {
-        delete m_ptr;
-        delete m_counter;
+        --*m_counter;
+        if (0 == *m_counter)
+        {
+            delete m_ptr;
+            delete m_counter;
+        }
     }
-
     m_ptr = other.m_ptr;
     m_counter = other.m_counter;
-    *m_counter += 1;
+    if(m_counter)
+    {
+        *m_counter += 1;
+    }
 
     return *this;
 }
 
 template <typename T> inline std::size_t SharedPtr<T>::UseCount() const
 {
-    return *m_counter;
+    if(m_counter)
+    {
+        return *m_counter;
+    }
+    else
+    {
+        return 0;
+    }
 }
+
 } // namespace ilrd
+
+#endif // ILRD_SHARED_PTR_HPP
