@@ -10,7 +10,7 @@ template <typename T> class SharedPtr
 {
   public:
     // ctor
-    SharedPtr(T* ptr = nullptr);
+    explicit SharedPtr(T* ptr = nullptr);
     // dtor
     ~SharedPtr();
     // cctor
