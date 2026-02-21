@@ -28,17 +28,17 @@ BitArray::BitArray() : m_array(0)
 {
 }
 
-BitArray::ProxyBit::ProxyBit(std::uint64_t& word, std::uint64_t mask)
+BitArray::BitRef::BitRef(std::uint64_t& word, std::uint64_t mask)
     : m_word(word), m_mask(mask)
 {
 }
 
-BitArray::ProxyBit::operator bool() const
+BitArray::BitRef::operator bool() const
 {
     return (m_word & m_mask) != 0ULL;
 }
 
-BitArray::ProxyBit& BitArray::ProxyBit::operator=(bool value)
+BitArray::BitRef& BitArray::BitRef::operator=(bool value)
 {
     if (value)
     {
@@ -51,16 +51,16 @@ BitArray::ProxyBit& BitArray::ProxyBit::operator=(bool value)
     return *this;
 }
 
-BitArray::ProxyBit& BitArray::ProxyBit::operator=(const ProxyBit& other)
+BitArray::BitRef& BitArray::BitRef::operator=(const BitRef& other)
 {
     return (*this = static_cast<bool>(other));
 }
 
-BitArray::ProxyBit BitArray::operator[](std::size_t index)
+BitArray::BitRef BitArray::operator[](std::size_t index)
 {
     RangeCheck(index);
     const std::uint64_t mask = (1ULL << index);
-    return ProxyBit(m_array, mask);
+    return BitRef(m_array, mask);
 }
 
 void BitArray::RangeCheck(std::size_t index)

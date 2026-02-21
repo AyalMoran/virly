@@ -15,15 +15,13 @@ namespace ilrd
 {
 class BitArray
 {
-  public:
-    BitArray();
-    
-    class ProxyBit
+  private:
+    class BitRef
     {
       public:
-        ProxyBit(std::uint64_t& word, std::uint64_t mask);
-        ProxyBit& operator=(bool value);
-        ProxyBit& operator=(const ProxyBit& other);
+        BitRef(std::uint64_t& word, std::uint64_t mask);
+        BitRef& operator=(bool value);
+        BitRef& operator=(const BitRef& other);
 
         operator bool() const;
 
@@ -32,8 +30,10 @@ class BitArray
         std::uint64_t m_mask;
     };
 
+  public:
+    BitArray();
     bool operator[](std::size_t index) const;
-    ProxyBit operator[](std::size_t index);
+    BitRef operator[](std::size_t index);
 
   private:
     static void RangeCheck(std::size_t index);
@@ -44,4 +44,3 @@ class BitArray
 } // namespace ilrd
 
 #endif /* _ILRD_BITARRAY_HPP */
-
