@@ -21,6 +21,7 @@ class TcpSocket : public SocketBase
     void SendLine(const std::string& message) const;
     bool ReceiveLine(std::string& outLine) const;
 
+    Endpoint GetPeer() const;
   private:
     void SendAll(const std::string& data) const;
 };
