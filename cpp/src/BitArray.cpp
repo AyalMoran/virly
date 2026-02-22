@@ -23,22 +23,27 @@
 
 namespace ilrd
 {
+
 // Default Ctor
-BitArray::BitArray() : m_array(0)
+template <std::size_t N>
+BitArray<N>::BitArray() : m_words{}
 {
 }
 
-BitArray::BitRef::BitRef(std::uint64_t& word, std::uint64_t mask)
+template <std::size_t N>
+BitArray<N>::BitRef::BitRef(std::uint64_t& word, std::uint64_t mask)
     : m_word(word), m_mask(mask)
 {
 }
 
-BitArray::BitRef::operator bool() const
+template <std::size_t N>
+BitArray<N>::BitRef::operator bool() const
 {
     return (m_word & m_mask) != 0ULL;
 }
 
-BitArray::BitRef& BitArray::BitRef::operator=(bool value)
+template <std::size_t N>
+typename BitArray<N>::BitRef& BitArray<N>::BitRef::operator=(bool value)
 {
     if (value)
     {
@@ -51,25 +56,30 @@ BitArray::BitRef& BitArray::BitRef::operator=(bool value)
     return *this;
 }
 
-BitArray::BitRef& BitArray::BitRef::operator=(const BitRef& other)
+template <std::size_t N>
+typename BitArray<N>::BitRef& BitArray<N>::BitRef::operator=(const BitRef& other)
 {
     return (*this = static_cast<bool>(other));
 }
 
-BitArray::BitRef BitArray::operator[](std::size_t index)
+template <std::size_t N>
+typename BitArray<N>::BitRef BitArray<N>::operator[](std::size_t index)
 {
     RangeCheck(index);
-    const std::uint64_t mask = (1ULL << index);
-    return BitRef(m_array, mask);
+    const std::size_t word_index = index / kWordBits;
+    const std::uint64_t mask = (1ULL << (index % kWordBits));
+    return BitRef(m_words[word_index], mask);
 }
 
-void BitArray::RangeCheck(std::size_t index)
+template <std::size_t N>
+void BitArray<N>::RangeCheck(std::size_t index)
 {
-    if (index >= static_cast<std::size_t>(CHAR_BIT * sizeof(std::uint64_t)))
+    if (index >= N)
     {
         throw std::out_of_range("BitArray index out of range");
     }
 }
+
 } // namespace ilrd
 
 
