@@ -9,7 +9,22 @@
 
 static int s_count = 0;
 
+typedef struct PublicTransport PublicTransport;
+struct Minibus;
+
 typedef void* VFunc;
+typedef struct
+{
+    void (*fn)(PublicTransport*);
+} DtorSlot;
+typedef struct
+{
+    void (*fn)(PublicTransport*);
+} DisplaySlot;
+typedef struct
+{
+    void (*fn)(struct Minibus*, int);
+} WashSlot;
 
 enum
 {
@@ -18,9 +33,12 @@ enum
     VT_WASH = 2
 };
 
+static void VCall_Dtor(PublicTransport* obj);
+static void VCall_Display(PublicTransport* obj);
+static void VCall_Wash(struct Minibus* obj, int minutes);
+
 /* ===================== PublicTransport ============================= */
 
-typedef struct PublicTransport PublicTransport;
 void PublicTransport_Ctor(PublicTransport* this_ptr);
 void PublicTransport_Dtor(PublicTransport* this_ptr);
 void PublicTransport_CCtor(PublicTransport* this_ptr,
@@ -29,8 +47,11 @@ void PublicTransport_display(PublicTransport* this_ptr);
 void PublicTransport_print_count();
 int PublicTransport_get_ID(PublicTransport* this_ptr);
 
-VFunc g_public_transport_table[] = {(VFunc)PublicTransport_Dtor,
-                                    (VFunc)PublicTransport_display};
+static const DtorSlot g_slot_PublicTransport_Dtor = {PublicTransport_Dtor};
+static const DisplaySlot g_slot_PublicTransport_Display = {PublicTransport_display};
+VFunc g_public_transport_table[] = {(VFunc)&g_slot_PublicTransport_Dtor,
+                                    (VFunc)&g_slot_PublicTransport_Display,
+                                    NULL};
 
 struct PublicTransport
 {
@@ -77,6 +98,21 @@ int PublicTransport_get_ID(PublicTransport* this_ptr)
     return this_ptr->m_license_plate;
 }
 
+static void VCall_Dtor(PublicTransport* obj)
+{
+    ((const DtorSlot*)obj->vptr[VT_DTOR])->fn(obj);
+}
+
+static void VCall_Display(PublicTransport* obj)
+{
+    ((const DisplaySlot*)obj->vptr[VT_DISPLAY])->fn(obj);
+}
+
+static void VCall_Wash(struct Minibus* obj, int minutes)
+{
+    ((const WashSlot*)((PublicTransport*)obj)->vptr[VT_WASH])->fn(obj, minutes);
+}
+
 /* ===================== Minibus ============================= */
 typedef struct Minibus Minibus;
 void Minibus_Ctor(Minibus* this_ptr);
@@ -85,10 +121,15 @@ void Minibus_Dtor(Minibus* this_ptr);
 void Minibus_display(Minibus* this_ptr);
 void Minibus_wash(Minibus* this_ptr, int minutes);
 void Minibus_op_assign(Minibus* this_ptr, const Minibus* other);
+static void Minibus_Dtor_V(PublicTransport* this_ptr);
+static void Minibus_Display_V(PublicTransport* this_ptr);
 
-VFunc g_MinibusVTable[] = {(VFunc)Minibus_Dtor,
-                           (VFunc)Minibus_display,
-                           (VFunc)Minibus_wash};
+static const DtorSlot g_slot_Minibus_Dtor = {Minibus_Dtor_V};
+static const DisplaySlot g_slot_Minibus_Display = {Minibus_Display_V};
+static const WashSlot g_slot_Minibus_Wash = {Minibus_wash};
+VFunc g_MinibusVTable[] = {(VFunc)&g_slot_Minibus_Dtor,
+                           (VFunc)&g_slot_Minibus_Display,
+                           (VFunc)&g_slot_Minibus_Wash};
 
 struct Minibus
 {
@@ -137,15 +178,27 @@ void Minibus_op_assign(Minibus* this_ptr, const Minibus* other)
     this_ptr->m_numSeats = other->m_numSeats;
 }
 
+static void Minibus_Dtor_V(PublicTransport* this_ptr)
+{
+    Minibus_Dtor((Minibus*)this_ptr);
+}
+
+static void Minibus_Display_V(PublicTransport* this_ptr)
+{
+    Minibus_display((Minibus*)this_ptr);
+}
+
 /* =====================ArmyMinibus============================= */
 typedef struct ArmyMinibus ArmyMinibus;
 void ArmyMinibus_Ctor(ArmyMinibus* this_ptr);
 void ArmyMinibus_CCtor(ArmyMinibus* this_ptr, const ArmyMinibus* other);
 void ArmyMinibus_Dtor(ArmyMinibus* this_ptr);
+static void ArmyMinibus_Dtor_V(PublicTransport* this_ptr);
 
-VFunc g_ArmyMinibusVTable[] = {(VFunc)ArmyMinibus_Dtor,
-                               (VFunc)Minibus_display,
-                               (VFunc)Minibus_wash};
+static const DtorSlot g_slot_ArmyMinibus_Dtor = {ArmyMinibus_Dtor_V};
+VFunc g_ArmyMinibusVTable[] = {(VFunc)&g_slot_ArmyMinibus_Dtor,
+                               (VFunc)&g_slot_Minibus_Display,
+                               (VFunc)&g_slot_Minibus_Wash};
 
 struct ArmyMinibus
 {
@@ -176,6 +229,11 @@ void ArmyMinibus_Dtor(ArmyMinibus* this_ptr)
     Minibus_Dtor((Minibus*)this_ptr);
 }
 
+static void ArmyMinibus_Dtor_V(PublicTransport* this_ptr)
+{
+    ArmyMinibus_Dtor((ArmyMinibus*)this_ptr);
+}
+
 /* =====================Taxi============================= */
 
 typedef struct Taxi Taxi;
@@ -184,9 +242,14 @@ void Taxi_CCtor(Taxi* this_ptr, const Taxi* other);
 void Taxi_Dtor(Taxi* this_ptr);
 void Taxi_display(Taxi* this_ptr);
 void Taxi_op_assign(Taxi* this_ptr, const Taxi* other);
+static void Taxi_Dtor_V(PublicTransport* this_ptr);
+static void Taxi_Display_V(PublicTransport* this_ptr);
 
-VFunc g_TaxiVTable[] = {(VFunc)Taxi_Dtor,
-                        (VFunc)Taxi_display};
+static const DtorSlot g_slot_Taxi_Dtor = {Taxi_Dtor_V};
+static const DisplaySlot g_slot_Taxi_Display = {Taxi_Display_V};
+VFunc g_TaxiVTable[] = {(VFunc)&g_slot_Taxi_Dtor,
+                        (VFunc)&g_slot_Taxi_Display,
+                        NULL};
 
 struct Taxi
 {
@@ -230,6 +293,16 @@ void Taxi_op_assign(Taxi* this_ptr, const Taxi* other)
     (void)other;
 }
 
+static void Taxi_Dtor_V(PublicTransport* this_ptr)
+{
+    Taxi_Dtor((Taxi*)this_ptr);
+}
+
+static void Taxi_Display_V(PublicTransport* this_ptr)
+{
+    Taxi_display((Taxi*)this_ptr);
+}
+
 /* ===================== SpecialTaxi ============================= */
 
 typedef struct SpecialTaxi SpecialTaxi;
@@ -237,9 +310,14 @@ void SpecialTaxi_Ctor(SpecialTaxi* this_ptr);
 void SpecialTaxi_CCtor(SpecialTaxi* this_ptr, const SpecialTaxi* other);
 void SpecialTaxi_Dtor(SpecialTaxi* this_ptr);
 void SpecialTaxi_display(SpecialTaxi* this_ptr);
+static void SpecialTaxi_Dtor_V(PublicTransport* this_ptr);
+static void SpecialTaxi_Display_V(PublicTransport* this_ptr);
 
-VFunc g_SpecialTaxiVTable[] = {(VFunc)SpecialTaxi_Dtor,
-                               (VFunc)SpecialTaxi_display};
+static const DtorSlot g_slot_SpecialTaxi_Dtor = {SpecialTaxi_Dtor_V};
+static const DisplaySlot g_slot_SpecialTaxi_Display = {SpecialTaxi_Display_V};
+VFunc g_SpecialTaxiVTable[] = {(VFunc)&g_slot_SpecialTaxi_Dtor,
+                               (VFunc)&g_slot_SpecialTaxi_Display,
+                               NULL};
 
 struct SpecialTaxi
 {
@@ -275,6 +353,16 @@ void SpecialTaxi_display(SpecialTaxi* this_ptr)
            PublicTransport_get_ID((PublicTransport*)this_ptr));
 }
 
+static void SpecialTaxi_Dtor_V(PublicTransport* this_ptr)
+{
+    SpecialTaxi_Dtor((SpecialTaxi*)this_ptr);
+}
+
+static void SpecialTaxi_Display_V(PublicTransport* this_ptr)
+{
+    SpecialTaxi_display((SpecialTaxi*)this_ptr);
+}
+
 /* ===================== PublicConvoy ============================= */
 typedef struct PublicConvoy PublicConvoy;
 void PublicConvoy_Ctor(PublicConvoy* this_ptr);
@@ -282,9 +370,14 @@ void PublicConvoy_CCtor(PublicConvoy* this_ptr, const PublicConvoy* other);
 void PublicConvoy_Dtor(PublicConvoy* this_ptr);
 void PublicConvoy_display(PublicConvoy* this_ptr);
 void PublicConvoy_op_assign(PublicConvoy* this_ptr, const PublicConvoy* other);
+static void PublicConvoy_Dtor_V(PublicTransport* this_ptr);
+static void PublicConvoy_Display_V(PublicTransport* this_ptr);
 
-VFunc g_PublicConvoyVTable[] = {(VFunc)PublicConvoy_Dtor,
-                                (VFunc)PublicConvoy_display};
+static const DtorSlot g_slot_PublicConvoy_Dtor = {PublicConvoy_Dtor_V};
+static const DisplaySlot g_slot_PublicConvoy_Display = {PublicConvoy_Display_V};
+VFunc g_PublicConvoyVTable[] = {(VFunc)&g_slot_PublicConvoy_Dtor,
+                                (VFunc)&g_slot_PublicConvoy_Display,
+                                NULL};
 
 struct PublicConvoy
 {
@@ -331,10 +424,10 @@ void PublicConvoy_Dtor(PublicConvoy* this_ptr)
 {
     ((PublicTransport*)this_ptr)->vptr = g_PublicConvoyVTable;
 
-    ((void (*)(PublicTransport*))this_ptr->m_pt1->vptr[VT_DTOR])(this_ptr->m_pt1);
+    VCall_Dtor(this_ptr->m_pt1);
     free(this_ptr->m_pt1);
 
-    ((void (*)(PublicTransport*))this_ptr->m_pt2->vptr[VT_DTOR])(this_ptr->m_pt2);
+    VCall_Dtor(this_ptr->m_pt2);
     free(this_ptr->m_pt2);
 
     Taxi_Dtor(&this_ptr->m_t);
@@ -352,9 +445,9 @@ void PublicConvoy_op_assign(PublicConvoy* this_ptr, const PublicConvoy* other)
         Minibus_CCtor((Minibus*)new_pt1, (Minibus*)other->m_pt1);
         Taxi_CCtor((Taxi*)new_pt2, (Taxi*)other->m_pt2);
 
-        ((void (*)(PublicTransport*))this_ptr->m_pt1->vptr[VT_DTOR])(this_ptr->m_pt1);
+        VCall_Dtor(this_ptr->m_pt1);
         free(this_ptr->m_pt1);
-        ((void (*)(PublicTransport*))this_ptr->m_pt2->vptr[VT_DTOR])(this_ptr->m_pt2);
+        VCall_Dtor(this_ptr->m_pt2);
         free(this_ptr->m_pt2);
 
         this_ptr->m_pt1 = new_pt1;
@@ -367,15 +460,25 @@ void PublicConvoy_op_assign(PublicConvoy* this_ptr, const PublicConvoy* other)
 
 void PublicConvoy_display(PublicConvoy* this_ptr)
 {
-    ((void (*)(PublicTransport*))this_ptr->m_pt1->vptr[VT_DISPLAY])(this_ptr->m_pt1);
-    ((void (*)(PublicTransport*))this_ptr->m_pt2->vptr[VT_DISPLAY])(this_ptr->m_pt2);
+    VCall_Display(this_ptr->m_pt1);
+    VCall_Display(this_ptr->m_pt2);
     Minibus_display(&this_ptr->m_m);
     Taxi_display(&this_ptr->m_t);
 }
 
+static void PublicConvoy_Dtor_V(PublicTransport* this_ptr)
+{
+    PublicConvoy_Dtor((PublicConvoy*)this_ptr);
+}
+
+static void PublicConvoy_Display_V(PublicTransport* this_ptr)
+{
+    PublicConvoy_display((PublicConvoy*)this_ptr);
+}
+
 void print_info_PublicTransport(PublicTransport* a)
 {
-    ((void (*)(PublicTransport*))a->vptr[VT_DISPLAY])(a);
+    VCall_Display(a);
 }
 
 void print_info_v()
@@ -385,7 +488,7 @@ void print_info_v()
 
 void print_info_Minibus(Minibus* m)
 {
-    ((void (*)(Minibus*, int))(((PublicTransport*)m)->vptr[VT_WASH]))(m, 3);
+    VCall_Wash(m, 3);
 }
 
 PublicTransport print_info(int i)
@@ -435,15 +538,15 @@ int main(int argc, char** argv, char** envp)
                                 (PublicTransport*)array_tx1,
                                 (PublicTransport*)array_mb2};
 
-    ((void (*)(PublicTransport*))array[0]->vptr[VT_DISPLAY])(array[0]);
-    ((void (*)(PublicTransport*))array[1]->vptr[VT_DISPLAY])(array[1]);
-    ((void (*)(PublicTransport*))array[2]->vptr[VT_DISPLAY])(array[2]);
+    VCall_Display(array[0]);
+    VCall_Display(array[1]);
+    VCall_Display(array[2]);
 
-    ((void (*)(PublicTransport*))array[0]->vptr[VT_DTOR])(array[0]);
+    VCall_Dtor(array[0]);
     free(array[0]);
-    ((void (*)(PublicTransport*))array[1]->vptr[VT_DTOR])(array[1]);
+    VCall_Dtor(array[1]);
     free(array[1]);
-    ((void (*)(PublicTransport*))array[2]->vptr[VT_DTOR])(array[2]);
+    VCall_Dtor(array[2]);
     free(array[2]);
 
     PublicTransport arr2[3] = {};
@@ -501,8 +604,8 @@ int main(int argc, char** argv, char** envp)
     taxi_display((Taxi*)&st);
 
     PublicConvoy* ts1 = (PublicConvoy*)malloc(sizeof(PublicConvoy));
-    PublicConvoy* ts2 = (PublicConvoy*)malloc(sizeof(PublicConvoy));
     PublicConvoy_Ctor(ts1);
+    PublicConvoy* ts2 = (PublicConvoy*)malloc(sizeof(PublicConvoy));
     PublicConvoy_CCtor(ts2, ts1);
     PublicConvoy_display(ts1);
     PublicConvoy_display(ts2);
@@ -515,9 +618,9 @@ int main(int argc, char** argv, char** envp)
     ArmyMinibus* army_minibus = (ArmyMinibus*)malloc(sizeof(ArmyMinibus));
     ArmyMinibus_Ctor(army_minibus);
 
-    ((void (*)(PublicTransport*))((PublicTransport*)army_minibus)->vptr[VT_DISPLAY])((PublicTransport*)army_minibus);
+    VCall_Display((PublicTransport*)army_minibus);
 
-    ((void (*)(Minibus*, int))((PublicTransport*)army_minibus)->vptr[VT_WASH])((Minibus*)army_minibus, 5);
+    VCall_Wash((Minibus*)army_minibus, 5);
     ArmyMinibus_Dtor(army_minibus);
     free(army_minibus);
 
