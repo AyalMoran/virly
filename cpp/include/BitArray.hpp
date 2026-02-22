@@ -9,6 +9,15 @@
 
 #include <cstddef> // std::size_t
 #include <cstdint> // std::uint64_t
+/*
+TODO:
+
+1. exception to_string specifically , our implementation
+2. כל הפניות ל-STL עם FUNCTOR ו-lambda לעשות חציחצי
+3. לעשות את הגודל שלהביט ארראי עם טיימפלייט
+4. לא צריך לתמוך בפעולות בין ביטארראיי עם סייזים שונים
+*/
+
 
 /*Declarations for BitArray*/
 namespace ilrd
