@@ -154,27 +154,27 @@ static void TestNullPtr(void)
     INIT_SUITE(TestNullPtr, "TestNullPtr Tests");
     BEGIN_SUITE(TestNullPtr);
     SharedPtr<int> sp1;
-    ASSERT_EQ(TestNullPtr, 1, sp1.UseCount());
+    ASSERT_EQ(TestNullPtr, 0, sp1.UseCount());
     SharedPtr<int> sp2;
     sp2 = sp1;
     sp1 = sp2;
     sp1 = sp1;
     sp1 = sp2;
-    ASSERT_EQ(TestNullPtr, 2, sp2.UseCount());
+    ASSERT_EQ(TestNullPtr, 0, sp2.UseCount());
 
     SharedPtr<int> sp3(new int(5));
     sp3 = sp1;
-    ASSERT_EQ(TestNullPtr, 3, sp3.UseCount());
+    ASSERT_EQ(TestNullPtr, 0, sp3.UseCount());
 
     SharedPtr<int> sp4(nullptr);
-    ASSERT_EQ(TestNullPtr, 1, sp4.UseCount());
+    ASSERT_EQ(TestNullPtr, 0, sp4.UseCount());
 
     SharedPtr<int> sp5(sp4);
-    ASSERT_EQ(TestNullPtr, 2, sp5.UseCount());
+    ASSERT_EQ(TestNullPtr, 0, sp5.UseCount());
 
     SharedPtr<int> sp6(new int(5));
     sp6 = sp4;
-    ASSERT_EQ(TestNullPtr, 3, sp6.UseCount());
+    ASSERT_EQ(TestNullPtr, 0, sp6.UseCount());
 
     END_SUITE(TestNullPtr);
 }
