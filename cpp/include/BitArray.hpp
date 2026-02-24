@@ -18,14 +18,18 @@
 
 namespace ilrd
 {
-//*----------------------------- MACROS and Constants--------------------------
-
 // recursive defines for count()'s LUT building
 #define B2(n) n, n + 1, n + 1, n + 2
 #define B4(n) B2(n), B2(n + 1), B2(n + 1), B2(n + 2)
 #define B6(n) B4(n), B4(n + 1), B4(n + 1), B4(n + 2)
 
+/**
+ * @brief Default number of bits when using `BitArray<>`.
+ */
 const std::size_t DEFAULT_BIT_ARR_SIZE = 32;
+/**
+ * @brief Number of bits in one storage word (`std::size_t`).
+ */
 const std::size_t BITS_IN_WORD = sizeof(std::size_t) * CHAR_BIT;
 
 //*-----------------------------Helper Functions-----------------------------
@@ -38,6 +42,26 @@ static std::size_t GetLastWord(const std::size_t* words)
         extra_bits != 0 ? (1ULL << extra_bits) - 1 : ~0;
     return words[num_words - 1] & last_mask;
 }
+
+/**
+   * @brief Checks whether a bit index is within the
+  valid range.
+   * @param pos Index to validate.
+   * @param size Number of bits in the bit array.
+   * @throws std::out_of_range If `pos >= size`.
+   */
+  static void RangeCheck(std::size_t pos, std::size_t
+  size)
+  {
+    if (pos >= size)
+    {
+        std::string throw_msg = "Bit position " + std::to_string(pos) +
+                                " is out of range for BitArray<" +
+                                std::to_string(size) + ">";
+        throw std::out_of_range(throw_msg);
+    }
+}
+
 //*-----------------------------Functors-----------------------------
 class EqualHelper
 {
@@ -80,8 +104,10 @@ class CountHelper
 
 template <std::size_t N = DEFAULT_BIT_ARR_SIZE> class BitArray
 {
-    /*Private class for BitRef*/
   private:
+    /**
+     * @brief Proxy reference for non-const bit access.
+     */
     class BitRef
     {
       public:
@@ -96,61 +122,153 @@ template <std::size_t N = DEFAULT_BIT_ARR_SIZE> class BitArray
         std::size_t m_mask;
     };
 
-    /*Public class for BitArray*/
   public:
-    /*Ctor*/
+    /**
+     * @brief Constructs a bit array with all bits initialized to `initial_all_value`.
+     * @param initial_all_value Initial value for all bits.
+     */
     BitArray(bool initial_all_value = false);
+    /**
+     * @brief Copy constructor.
+     * @param other Source bit array.
+     */
     BitArray(const BitArray& other);
 
-    //* operators ================================================
-    /*Operator = for non-const*/
+    /**
+     * @brief Copy assignment.
+     * @param other Source bit array.
+     * @return `*this`.
+     */
     BitArray& operator=(const BitArray& other);
-    /*Operator [] for const*/
+    /**
+     * @brief Returns bit value at index.
+     * @param index Bit index.
+     * @return Bit value at `index`.
+     */
     bool operator[](std::size_t index) const;
-    /*Operator [] for non-const*/
+    /**
+     * @brief Returns writable proxy reference to bit at index.
+     * @param index Bit index.
+     * @return Proxy bit reference.
+     */
     BitRef operator[](std::size_t index);
-    /*Operator |=*/
+    /**
+     * @brief Bitwise OR assignment.
+     * @param other Right-hand operand.
+     * @return `*this`.
+     */
     BitArray& operator|=(const BitArray& other);
-    /*Operator &=*/
+    /**
+     * @brief Bitwise AND assignment.
+     * @param other Right-hand operand.
+     * @return `*this`.
+     */
     BitArray& operator&=(const BitArray& other);
-    /*Operator ^=*/
+    /**
+     * @brief Bitwise XOR assignment.
+     * @param other Right-hand operand.
+     * @return `*this`.
+     */
     BitArray& operator^=(const BitArray& other);
-    /*Operator ==*/
+    /**
+     * @brief Equality comparison.
+     * @param other Right-hand operand.
+     * @return `true` if all bits are equal; otherwise `false`.
+     */
     bool operator==(const BitArray& other) const;
-    /*Operator !=*/
+    /**
+     * @brief Inequality comparison.
+     * @param other Right-hand operand.
+     * @return `true` if arrays differ; otherwise `false`.
+     */
     bool operator!=(const BitArray& other) const;
-    /*Operator <<=*/
+    /**
+     * @brief Left-shift assignment.
+     * @param shift Number of positions to shift.
+     * @return `*this`.
+     */
     BitArray& operator<<=(std::size_t shift);
-    /*Operator >>=*/
+    /**
+     * @brief Right-shift assignment.
+     * @param shift Number of positions to shift.
+     * @return `*this`.
+     */
     BitArray& operator>>=(std::size_t shift);
-    // Operator << (const)
+    /**
+     * @brief Returns a left-shifted copy.
+     * @param shift Number of positions to shift.
+     * @return Shifted copy.
+     */
     const BitArray operator<<(std::size_t shift) const;
-    // Operator >> (const)
+    /**
+     * @brief Returns a right-shifted copy.
+     * @param shift Number of positions to shift.
+     * @return Shifted copy.
+     */
     const BitArray operator>>(std::size_t shift) const;
 
-    //* Member Functions ================================================
-    // Set()
+    /**
+     * @brief Sets all bits to `value`.
+     * @param value Value to assign to all bits.
+     * @return `*this`.
+     */
     BitArray& Set(bool value);
-    // Set(pos, value) may throw std::out_of_range
+    /**
+     * @brief Sets a specific bit.
+     * @param pos Bit index.
+     * @param value Value to set.
+     * @return `*this`.
+     * @throws std::out_of_range If `pos >= N`.
+     */
     BitArray& Set(std::size_t pos, bool value = true);
-    // Reset()
+    /**
+     * @brief Resets all bits to `false`.
+     * @return `*this`.
+     */
     BitArray& Reset();
-    // Reset(pos) may throw std::out_of_range
+    /**
+     * @brief Resets a specific bit to `false`.
+     * @param pos Bit index.
+     * @return `*this`.
+     * @throws std::out_of_range If `pos >= N`.
+     */
     BitArray& Reset(std::size_t pos);
-    // Get(pos) may throw std::out_of_range
+    /**
+     * @brief Gets the value of a specific bit.
+     * @param pos Bit index.
+     * @return Bit value at `pos`.
+     * @throws std::out_of_range If `pos >= N`.
+     */
     bool Get(std::size_t pos) const;
-    // Flip()
+    /**
+     * @brief Flips all bits.
+     * @return `*this`.
+     */
     BitArray& Flip();
-    // Flip(pos) may throw std::out_of_range
+    /**
+     * @brief Flips a specific bit.
+     * @param pos Bit index.
+     * @return `*this`.
+     * @throws std::out_of_range If `pos >= N`.
+     */
     BitArray& Flip(std::size_t pos);
 
-    // Count() throw()
+    /**
+     * @brief Counts the number of set bits.
+     * @return Number of bits set to `true`.
+     */
     std::size_t Count() const;
-    // ToString() may throw std::bad_alloc
+    /**
+     * @brief Converts the bit array to a string representation.
+     * @param zero Character used for cleared bits.
+     * @param one Character used for set bits.
+     * @return String representation of the bit array.
+     * @throws std::bad_alloc On allocation failure.
+     */
     std::string ToString(char zero = '0', char one = '1') const;
 
   private:
-    static void RangeCheck(std::size_t pos);
+  
 
   private:
     std::size_t m_words[(N / (sizeof(std::size_t) * CHAR_BIT)) + 1];
@@ -232,7 +350,7 @@ template <std::size_t N> bool BitArray<N>::operator[](std::size_t index) const
 template <std::size_t N>
 typename BitArray<N>::BitRef BitArray<N>::operator[](std::size_t index)
 {
-    RangeCheck(index);
+    RangeCheck(index, N);
     const std::size_t word_index = index / BITS_IN_WORD;
     const std::size_t mask = (1ULL << (index % BITS_IN_WORD));
 
@@ -470,7 +588,7 @@ template <std::size_t N> BitArray<N>& BitArray<N>::Set(bool value)
 template <std::size_t N>
 BitArray<N>& BitArray<N>::Set(std::size_t pos, bool value)
 {
-    RangeCheck(pos);
+    RangeCheck(pos, N);
     const std::size_t word_index = pos / BITS_IN_WORD;
     const std::size_t bit_index = pos % BITS_IN_WORD;
 
@@ -489,7 +607,7 @@ template <std::size_t N> BitArray<N>& BitArray<N>::Reset()
 // Reset(pos) may throw std::out_of_range
 template <std::size_t N> BitArray<N>& BitArray<N>::Reset(std::size_t pos)
 {
-    RangeCheck(pos);
+    RangeCheck(pos, N);
 
     return Set(pos, false);
 }
@@ -497,7 +615,7 @@ template <std::size_t N> BitArray<N>& BitArray<N>::Reset(std::size_t pos)
 // Get(pos) may throw std::out_of_range
 template <std::size_t N> bool BitArray<N>::Get(std::size_t pos) const
 {
-    RangeCheck(pos);
+    RangeCheck(pos, N);
 
     const std::size_t word_index = pos / BITS_IN_WORD;
     const std::size_t bit_index = pos % BITS_IN_WORD;
@@ -526,7 +644,7 @@ template <std::size_t N> BitArray<N>& BitArray<N>::Flip()
 // Flip(pos) may throw std::out_of_range
 template <std::size_t N> BitArray<N>& BitArray<N>::Flip(std::size_t pos)
 {
-    RangeCheck(pos);
+    RangeCheck(pos, N);
 
     return Set(pos, !Get(pos));
 }
@@ -572,17 +690,7 @@ std::string BitArray<N>::ToString(char zero, char one) const
     return result;
 }
 
-// static functions ================================================
-template <std::size_t N> void BitArray<N>::RangeCheck(std::size_t pos)
-{
-    if (pos >= N)
-    {
-        std::string throw_msg = "Bit position " + std::to_string(pos) +
-                                " is out of range for BitArray<" +
-                                std::to_string(N) + ">";
-        throw std::out_of_range(throw_msg);
-    }
-}
+
 } // namespace ilrd
 
 #endif /* _ILRD_BITARRAY_HPP */
