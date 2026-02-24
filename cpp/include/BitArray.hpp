@@ -10,21 +10,11 @@
 #include <algorithm> // std::fill
 #include <climits>   // CHAR_BIT
 #include <cstddef>   // std::size_t
-#include <cstdint>   // std::uint64_t
-#include <iostream>
-#include <iterator>  // std::begin, std::end
+#include <iterator>  // std::begin
 #include <limits>    // std::numeric_limits
 #include <numeric>   // std::accumulate
 #include <stdexcept> // std::out_of_range
 #include <string>    // std::string
-/*
-TODO:
-
-1. exception to_string specifically , our implementation
-2. All STL algorithms should be with lambda or functors (50:50)
-3. לעשות את הגודל שלהביט ארראי עם טיימפלייט
-4. לא צריך לתמוך בפעולות בין ביטארראיי עם סייזים שונים
-*/
 
 namespace ilrd
 {
@@ -36,15 +26,15 @@ namespace ilrd
 #define B6(n) B4(n), B4(n + 1), B4(n + 1), B4(n + 2)
 
 const std::size_t DEFAULT_BIT_ARR_SIZE = 32;
-const std::size_t BITS_IN_WORD = sizeof(std::uint64_t) * CHAR_BIT;
+const std::size_t BITS_IN_WORD = sizeof(std::size_t) * CHAR_BIT;
 
 //*-----------------------------Helper Functions-----------------------------
 template <std::size_t N>
-static std::uint64_t GetLastWord(const std::uint64_t* words)
+static std::size_t GetLastWord(const std::size_t* words)
 {
     constexpr std::size_t num_words = (N + BITS_IN_WORD - 1) / BITS_IN_WORD;
     constexpr std::size_t extra_bits = N % BITS_IN_WORD;
-    constexpr std::uint64_t last_mask =
+    constexpr std::size_t last_mask =
         extra_bits != 0 ? (1ULL << extra_bits) - 1 : ~0;
     return words[num_words - 1] & last_mask;
 }
@@ -52,11 +42,11 @@ static std::uint64_t GetLastWord(const std::uint64_t* words)
 class EqualHelper
 {
   public:
-    bool operator()(const std::uint64_t& this_word,
-                    const std::uint64_t& that_word) const
+    bool operator()(const std::size_t& this_word,
+                    const std::size_t& that_word) const
     {
-        return GetLastWord<sizeof(std::uint64_t) * CHAR_BIT>(&this_word) ==
-               GetLastWord<sizeof(std::uint64_t) * CHAR_BIT>(&that_word);
+        return GetLastWord<sizeof(std::size_t) * CHAR_BIT>(&this_word) ==
+               GetLastWord<sizeof(std::size_t) * CHAR_BIT>(&that_word);
     }
 };
 
@@ -68,10 +58,10 @@ class CountHelper
     {
     }
 
-    void operator()(std::uint64_t word)
+    void operator()(std::size_t word)
     {
         unsigned char* start = reinterpret_cast<unsigned char*>(&word);
-        unsigned char* end = start + sizeof(std::uint64_t);
+        unsigned char* end = start + sizeof(std::size_t);
         if (word == 0)
         {
             return;
@@ -95,15 +85,15 @@ template <std::size_t N = DEFAULT_BIT_ARR_SIZE> class BitArray
     class BitRef
     {
       public:
-        BitRef(std::uint64_t& word, std::uint64_t mask);
+        BitRef(std::size_t& word, std::size_t mask);
         BitRef& operator=(bool value);
         BitRef& operator=(const BitRef& other);
         operator bool() const;
         bool operator!() const;
 
       private:
-        std::uint64_t& m_word;
-        std::uint64_t m_mask;
+        std::size_t& m_word;
+        std::size_t m_mask;
     };
 
     /*Public class for BitArray*/
@@ -163,7 +153,7 @@ template <std::size_t N = DEFAULT_BIT_ARR_SIZE> class BitArray
     static void RangeCheck(std::size_t pos);
 
   private:
-    std::uint64_t m_words[(N / (sizeof(std::uint64_t) * CHAR_BIT)) + 1];
+    std::size_t m_words[(N / (sizeof(std::size_t) * CHAR_BIT)) + 1];
 };
 //*----------------------------- Member Functions --------------------------
 //* Member Functions ================================================
@@ -186,7 +176,7 @@ BitArray<N>::BitArray(const BitArray& other) : m_words()
 
 //* BitRef Member Functions ================================================
 template <std::size_t N>
-BitArray<N>::BitRef::BitRef(std::uint64_t& word, std::uint64_t mask)
+BitArray<N>::BitRef::BitRef(std::size_t& word, std::size_t mask)
     : m_word(word), m_mask(mask)
 {
 }
@@ -244,7 +234,7 @@ typename BitArray<N>::BitRef BitArray<N>::operator[](std::size_t index)
 {
     RangeCheck(index);
     const std::size_t word_index = index / BITS_IN_WORD;
-    const std::uint64_t mask = (1ULL << (index % BITS_IN_WORD));
+    const std::size_t mask = (1ULL << (index % BITS_IN_WORD));
 
     return BitRef(m_words[word_index], mask);
 }
@@ -369,7 +359,7 @@ class Shifter
   public:
     Shifter(std::size_t shift) : m_shift(shift){};
 
-    std::uint64_t operator()(std::uint64_t& a, std::uint64_t& b)
+    std::size_t operator()(std::size_t& a, std::size_t& b)
     {
         if (m_shift == 0)
         {
@@ -413,9 +403,9 @@ BitArray<N>& BitArray<N>::operator<<=(std::size_t shift)
 
     if (num_words > 1)
     {
-        std::reverse_iterator<std::uint64_t*> rbegin_active =
+        std::reverse_iterator<std::size_t*> rbegin_active =
             std::rbegin(m_words) + (total_words - num_words);
-        std::reverse_iterator<std::uint64_t*> rend_active =
+        std::reverse_iterator<std::size_t*> rend_active =
             rbegin_active + num_words;
 
         std::transform(rbegin_active, rend_active - 1, rbegin_active + 1,
@@ -429,7 +419,7 @@ BitArray<N>& BitArray<N>::operator<<=(std::size_t shift)
 
     if (extra_bits != 0)
     {
-        const std::uint64_t mask = (1ULL << extra_bits) - 1;
+        const std::size_t mask = (1ULL << extra_bits) - 1;
         m_words[num_words - 1] &= mask;
     }
     std::fill(std::begin(m_words) + num_words, std::end(m_words), 0ULL);
@@ -467,8 +457,8 @@ BitArray<N>& BitArray<N>::operator>>=(std::size_t shift)
 // Set()
 template <std::size_t N> BitArray<N>& BitArray<N>::Set(bool value)
 {
-    const std::uint64_t fill_value =
-        value ? std::numeric_limits<std::uint64_t>::max() : 0ULL;
+    const std::size_t fill_value =
+        value ? std::numeric_limits<std::size_t>::max() : 0ULL;
     std::fill(
         std::begin(m_words), std::end(m_words),
         fill_value); // TODO: dont change bits that arent part of the bitarray
@@ -520,13 +510,13 @@ template <std::size_t N> BitArray<N>& BitArray<N>::Flip()
 {
 
     std::for_each(std::begin(m_words), std::end(m_words),
-                  [](std::uint64_t& word) { word = ~word; });
+                  [](std::size_t& word) { word = ~word; });
 
     constexpr std::size_t num_words = (N + BITS_IN_WORD - 1) / BITS_IN_WORD;
     constexpr std::size_t extra_bits = N % BITS_IN_WORD;
     if (extra_bits != 0)
     {
-        std::uint64_t mask = (1ULL << extra_bits) - 1;
+        std::size_t mask = (1ULL << extra_bits) - 1;
         m_words[num_words - 1] &= mask;
     }
 
@@ -554,9 +544,9 @@ template <std::size_t N> std::size_t BitArray<N>::Count() const
 
     if (extra_bits != 0)
     {
-        std::uint64_t last_word = m_words[num_words - 1];
-        const std::uint64_t last_mask = (1ULL << extra_bits) - 1;
-        const std::uint64_t last_word_masked = last_word & last_mask;
+        std::size_t last_word = m_words[num_words - 1];
+        const std::size_t last_mask = (1ULL << extra_bits) - 1;
+        const std::size_t last_word_masked = last_word & last_mask;
         last_word = last_word_masked;
         while (last_word != 0)
         {
