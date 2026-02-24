@@ -1,5 +1,5 @@
 /**************************************************************
- * File    : WaitableQueue.cpp
+ * File    : GenericWaitableQueue.cpp
  * Author  : Ayal Moran
  * Reviewer: 
  * Date    : 
@@ -8,7 +8,7 @@
 #include <cassert>     /* assert */
 
 /*============================ INCLUDES ============================*/
-#include "WaitableQueue.hpp"
+#include "PriorityQueue.hpp"
 
 /*========================== DEFINITIONS ===========================*/
 #define TRUE  (1)
