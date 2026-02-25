@@ -14,8 +14,56 @@
 
 namespace ilrd
 {
-template <typename T, class CONTAINER = std::queue<T>> class WaitableQueue
+const int CACHELINE = 64;
+
+template <typename T>
+struct alignas(CACHELINE) CachelinePadded
 {
+    CachelinePadded() = default;
+    CachelinePadded(const T& value) : data(value) {}
+
+    operator T&()
+    {
+        return data;
+    }
+
+    operator const T&() const
+    {
+        return data;
+    }
+
+    T data;
+};
+
+#ifdef PADDING
+template <typename T>
+using WaitableQueueStoredType = CachelinePadded<T>;
+#else
+template <typename T>
+using WaitableQueueStoredType = T;
+#endif // PADDING
+
+template <typename T, class CONTAINER = std::queue<WaitableQueueStoredType<T>>>
+class WaitableQueue
+{
+  private:
+    using stored_type = WaitableQueueStoredType<T>;
+
+    static stored_type Wrap(const T& to_push)
+    {
+        return stored_type{to_push};
+    }
+
+    static const T& Unwrap(const T& value)
+    {
+        return value;
+    }
+
+    static const T& Unwrap(const CachelinePadded<T>& value)
+    {
+        return value.data;
+    }
+
   public:
     WaitableQueue();
 
@@ -29,7 +77,13 @@ template <typename T, class CONTAINER = std::queue<T>> class WaitableQueue
 
   private:
     std::timed_mutex m_mutex;
+#ifdef PADDING
+    char padding1[CACHELINE];
+#endif // PADDING
     std::condition_variable_any m_cond_var;
+#ifdef PADDING
+    char padding2[CACHELINE];
+#endif // PADDING
     CONTAINER m_q;
 };
 
@@ -40,10 +94,11 @@ WaitableQueue<T, CONTAINER>::WaitableQueue() : m_mutex(), m_cond_var(), m_q()
 
 template <typename T, class CONTAINER>
 void WaitableQueue<T, CONTAINER>::Push(const T& to_push)
-{ // CODE_REVIEW: use scope reolution
+{
+    // CODE_REVIEW: use scope resolution
     {
         std::unique_lock<std::timed_mutex> lock(m_mutex);
-        m_q.push(to_push);
+        m_q.push(Wrap(to_push));
     }
     m_cond_var.notify_one();
 }
@@ -52,8 +107,10 @@ template <typename T, class CONTAINER>
 void WaitableQueue<T, CONTAINER>::Pop(T& out_param)
 {
     std::unique_lock<std::timed_mutex> lock(m_mutex);
+
     m_cond_var.wait(lock, [this]() { return !(this->m_q.empty()); });
-    out_param = m_q.front();
+    out_param = Unwrap(m_q.front());
+
     m_q.pop();
     return;
 }
@@ -74,7 +131,7 @@ bool WaitableQueue<T, CONTAINER>::Pop(std::chrono::milliseconds time_out_ms,
     if (m_cond_var.wait_until(lock, timeout_point,
                               [this]() { return !m_q.empty(); }))
     {
-        out_param = m_q.front();
+        out_param = Unwrap(m_q.front());
         m_q.pop();
         return true;
     }
