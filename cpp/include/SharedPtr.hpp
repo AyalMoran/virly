@@ -26,7 +26,10 @@ template <typename T> class SharedPtr
     template <typename U> SharedPtr(const SharedPtr<U>& other);
     // op=
     template <typename U> SharedPtr& operator=(const SharedPtr<U>& other);
-
+    
+    operator bool() const;
+    bool operator==(const SharedPtr& other) const;
+    bool operator!=(const SharedPtr& other) const;
     
     inline std::size_t UseCount() const;
     
@@ -170,6 +173,20 @@ template <typename T> inline std::size_t SharedPtr<T>::UseCount() const
     }
 }
 
+template <typename T> inline SharedPtr<T>::operator bool() const
+{
+    return nullptr != m_ptr;
+}
+
+template <typename T> inline bool SharedPtr<T>::operator==(const SharedPtr& other) const
+{
+    return m_ptr == other.m_ptr;
+}
+
+template <typename T> inline bool SharedPtr<T>::operator!=(const SharedPtr& other) const
+{
+    return m_ptr != other.m_ptr;
+}
 } // namespace ilrd
 
 #endif // ILRD_SHARED_PTR_HPP
