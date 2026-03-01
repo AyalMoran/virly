@@ -10,6 +10,8 @@
 #include <iostream>
 #include <semaphore>
 #include <vector>
+#include <thread>
+#include <chrono>
 
 #include "ThreadPool.hpp"
 #include "test_utils.hpp"
@@ -116,7 +118,6 @@ static void Test_FIFO_SamePriority(void)
     std::atomic<size_t> write_idx(0);
     std::counting_semaphore<kNumTasks + 1> done(0);
 
-    // Intentionally leaked due current ThreadPool shutdown deadlock behavior.
     SharedPtr<ThreadPool> pool(new ThreadPool(1));
 
     for (size_t i = 0; i < kNumTasks; ++i)
@@ -240,6 +241,387 @@ static void Test_AddMultipleThreads(void)
     PRINT_SUITE_SUMMARY(suite);
 }
 
+static void Test_Stop(void)
+{
+    INIT_SUITE(suite, "ThreadPool Stop");
+    BEGIN_SUITE(suite);
+
+    SharedPtr<ThreadPool> pool(new ThreadPool(4));
+
+    for (size_t i = 0; i < 2; ++i)
+    {
+        pool->AddTask(SharedPtr<ThreadPool::FunctionTask>(
+                          new ThreadPool::FunctionTask([&]() { std::this_thread::sleep_for(std::chrono::seconds(1)); })),
+                      UserPriority::HIGH);
+    }
+
+    std::this_thread::sleep_for(std::chrono::seconds(2));
+    
+    pool->StopNow();
+    RUN_TEST(suite, "Pool is stopped", pool);
+    END_SUITE(suite);
+    PRINT_SUITE_SUMMARY(suite);
+}
+
+
+static void Test_GracefulStopDrainsQueuedTasks(void)
+{
+    INIT_SUITE(suite, "GracefulStop drains queued tasks");
+    BEGIN_SUITE(suite);
+
+    constexpr size_t kNumTasks = 64;
+    std::atomic<size_t> executed(0);
+
+    ThreadPool pool(2);
+    for (size_t i = 0; i < kNumTasks; ++i)
+    {
+        pool.AddTask(SharedPtr<ThreadPool::FunctionTask>(
+                         new ThreadPool::FunctionTask([&executed]() {
+                             executed.fetch_add(1, std::memory_order_relaxed);
+                         })),
+                     UserPriority::LOW);
+    }
+
+    pool.Stop();
+
+    RUN_TEST(suite, "all queued tasks were executed", executed.load() == kNumTasks);
+
+    END_SUITE(suite);
+    PRINT_SUITE_SUMMARY(suite);
+}
+
+static void Test_GracefulStopRejectsNewTasks(void)
+{
+    INIT_SUITE(suite, "GracefulStop rejects new tasks");
+    BEGIN_SUITE(suite);
+
+    std::atomic<size_t> executed(0);
+    ThreadPool pool(2);
+
+    for (size_t i = 0; i < 16; ++i)
+    {
+        pool.AddTask(SharedPtr<ThreadPool::FunctionTask>(
+                         new ThreadPool::FunctionTask([&executed]() {
+                             std::this_thread::sleep_for(std::chrono::milliseconds(2));
+                             executed.fetch_add(1, std::memory_order_relaxed);
+                         })),
+                     UserPriority::LOW);
+    }
+
+    pool.Stop();
+    const size_t after_stop = executed.load(std::memory_order_relaxed);
+
+    pool.AddTask(SharedPtr<ThreadPool::FunctionTask>(
+                     new ThreadPool::FunctionTask([&executed]() {
+                         executed.fetch_add(1000, std::memory_order_relaxed);
+                     })),
+                 UserPriority::HIGH);
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(30));
+    RUN_TEST(suite, "AddTask after Stop is ignored",
+             executed.load(std::memory_order_relaxed) == after_stop);
+
+    END_SUITE(suite);
+    PRINT_SUITE_SUMMARY(suite);
+}
+
+static void Test_StopNowDoesNotHangWhenWorkersBlocked(void)
+{
+    INIT_SUITE(suite, "StopNow returns when workers blocked");
+    BEGIN_SUITE(suite);
+
+    ThreadPool pool(4);
+    const auto start = std::chrono::steady_clock::now();
+    pool.StopNow();
+    const auto elapsed = duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now() - start);
+
+    RUN_TEST(suite, "StopNow returned quickly", elapsed < std::chrono::milliseconds(500));
+
+    END_SUITE(suite);
+    PRINT_SUITE_SUMMARY(suite);
+}
+
+static void Test_StopNowCanPreemptBacklog(void)
+{
+    INIT_SUITE(suite, "StopNow preempts backlog");
+    BEGIN_SUITE(suite);
+
+    std::atomic<size_t> executed(0);
+    ThreadPool pool(2);
+
+    constexpr size_t kNumTasks = 200;
+    for (size_t i = 0; i < kNumTasks; ++i)
+    {
+        pool.AddTask(SharedPtr<ThreadPool::FunctionTask>(
+                         new ThreadPool::FunctionTask([&executed]() {
+                             std::this_thread::sleep_for(std::chrono::milliseconds(10));
+                             executed.fetch_add(1, std::memory_order_relaxed);
+                         })),
+                     UserPriority::LOW);
+    }
+
+    std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    pool.StopNow();
+
+    RUN_TEST(suite, "not all queued tasks executed", executed.load() < kNumTasks);
+
+    END_SUITE(suite);
+    PRINT_SUITE_SUMMARY(suite);
+}
+
+static void Test_FifoWithinSamePrioritySingleWorker(void)
+{
+    INIT_SUITE(suite, "FIFO within same priority");
+    BEGIN_SUITE(suite);
+
+    constexpr size_t kNumTasks = 64;
+    std::vector<size_t> order(kNumTasks, static_cast<size_t>(-1));
+    std::atomic<size_t> write_index(0);
+    std::counting_semaphore<kNumTasks + 1> done(0);
+
+    ThreadPool pool(1);
+    for (size_t i = 0; i < kNumTasks; ++i)
+    {
+        pool.AddTask(SharedPtr<ThreadPool::FunctionTask>(
+                         new ThreadPool::FunctionTask([&order, &write_index, &done, i]() {
+                             const size_t idx = write_index.fetch_add(1, std::memory_order_relaxed);
+                             if (idx < order.size())
+                             {
+                                 order[idx] = i;
+                             }
+                             done.release();
+                         })),
+                     UserPriority::LOW);
+    }
+
+    bool all_completed = true;
+    for (size_t i = 0; i < kNumTasks; ++i)
+    {
+        if (!done.try_acquire_for(std::chrono::milliseconds(200)))
+        {
+            all_completed = false;
+            break;
+        }
+    }
+
+    bool fifo = all_completed;
+    for (size_t i = 0; i < kNumTasks && fifo; ++i)
+    {
+        if (order[i] != i)
+        {
+            fifo = false;
+        }
+    }
+
+    RUN_TEST(suite, "all tasks completed", all_completed);
+    RUN_TEST(suite, "execution order is FIFO", fifo);
+
+    pool.Stop();
+
+    END_SUITE(suite);
+    PRINT_SUITE_SUMMARY(suite);
+}
+
+static void Test_PriorityBeatsFifoAcrossLevels(void)
+{
+    INIT_SUITE(suite, "Priority beats FIFO across levels");
+    BEGIN_SUITE(suite);
+
+    std::vector<int> order(9, -1);
+    std::atomic<size_t> count(0);
+    std::counting_semaphore<10> done(0);
+    std::binary_semaphore gate_started(0);
+    std::binary_semaphore gate_open(0);
+
+    ThreadPool pool(1);
+
+    pool.AddTask(SharedPtr<ThreadPool::FunctionTask>(
+                     new ThreadPool::FunctionTask([&gate_started, &gate_open]() {
+                         gate_started.release();
+                         gate_open.acquire();
+                     })),
+                 AdminPriority::MAX);
+    gate_started.acquire();
+
+    auto push_mark = [&](int mark, const Priority& p)
+    {
+        pool.AddTask(SharedPtr<ThreadPool::FunctionTask>(
+                         new ThreadPool::FunctionTask([&order, &count, &done, mark]() {
+                             const size_t idx = count.fetch_add(1, std::memory_order_relaxed);
+                             if (idx < order.size())
+                             {
+                                 order[idx] = mark;
+                             }
+                             done.release();
+                         })),
+                     p);
+    };
+
+    push_mark(1, UserPriority::LOW);
+    push_mark(2, UserPriority::LOW);
+    push_mark(3, UserPriority::LOW);
+    push_mark(4, UserPriority::HIGH);
+    push_mark(5, UserPriority::HIGH);
+    push_mark(6, UserPriority::HIGH);
+    push_mark(7, AdminPriority::MAX);
+    push_mark(8, AdminPriority::MAX);
+    push_mark(9, AdminPriority::MAX);
+    gate_open.release();
+
+    bool all_completed = true;
+    for (size_t i = 0; i < 9; ++i)
+    {
+        if (!done.try_acquire_for(std::chrono::milliseconds(200)))
+        {
+            all_completed = false;
+            break;
+        }
+    }
+
+    bool grouped_by_priority = all_completed;
+    if (grouped_by_priority)
+    {
+        grouped_by_priority =
+            (order.size() == 9) &&
+            (order[0] >= 7 && order[0] <= 9) &&
+            (order[1] >= 7 && order[1] <= 9) &&
+            (order[2] >= 7 && order[2] <= 9) &&
+            (order[3] >= 4 && order[3] <= 6) &&
+            (order[4] >= 4 && order[4] <= 6) &&
+            (order[5] >= 4 && order[5] <= 6) &&
+            (order[6] >= 1 && order[6] <= 3) &&
+            (order[7] >= 1 && order[7] <= 3) &&
+            (order[8] >= 1 && order[8] <= 3);
+    }
+
+    bool fifo_within_priority = all_completed;
+    if (fifo_within_priority)
+    {
+        fifo_within_priority = (order[0] == 7 && order[1] == 8 && order[2] == 9 &&
+                                order[3] == 4 && order[4] == 5 && order[5] == 6 &&
+                                order[6] == 1 && order[7] == 2 && order[8] == 3);
+    }
+
+    RUN_TEST(suite, "all tasks completed", all_completed);
+    RUN_TEST(suite, "higher priorities execute first", grouped_by_priority);
+    RUN_TEST(suite, "FIFO preserved within each priority", fifo_within_priority);
+
+    pool.Stop();
+
+    END_SUITE(suite);
+    PRINT_SUITE_SUMMARY(suite);
+}
+
+static void Test_MultipleStopIsOk(void)
+{
+    INIT_SUITE(suite, "Multiple Stop is OK");
+    BEGIN_SUITE(suite);
+
+    ThreadPool pool1(2);
+    pool1.Stop();
+    pool1.Stop();
+    RUN_TEST(suite, "Stop can be called twice", true);
+
+    ThreadPool pool2(2);
+    pool2.StopNow();
+    pool2.Stop();
+    RUN_TEST(suite, "Stop after StopNow is safe", true);
+
+    END_SUITE(suite);
+    PRINT_SUITE_SUMMARY(suite);
+}
+
+static void Test_DestructorIsGraceful(void)
+{
+    INIT_SUITE(suite, "Destructor is graceful");
+    BEGIN_SUITE(suite);
+
+    constexpr size_t kNumTasks = 48;
+    std::atomic<size_t> executed(0);
+
+    {
+        ThreadPool pool(2);
+        for (size_t i = 0; i < kNumTasks; ++i)
+        {
+            pool.AddTask(SharedPtr<ThreadPool::FunctionTask>(
+                             new ThreadPool::FunctionTask([&executed]() {
+                                 std::this_thread::sleep_for(std::chrono::milliseconds(1));
+                                 executed.fetch_add(1, std::memory_order_relaxed);
+                             })),
+                         UserPriority::LOW);
+        }
+    } 
+
+    RUN_TEST(suite, "all queued tasks finished before destruction",
+             executed.load() == kNumTasks);
+
+    END_SUITE(suite);
+    PRINT_SUITE_SUMMARY(suite);
+}
+
+static void Test_SetNumThreadsGrowAndShrink(void)
+{
+    INIT_SUITE(suite, "SetNumThreads grow and shrink");
+    BEGIN_SUITE(suite);
+
+    ThreadPool pool(4);
+    std::atomic<int> executed(0);
+    std::counting_semaphore<64> done(0);
+
+    pool.SetNumThreads(2);
+
+    for (int i = 0; i < 16; ++i)
+    {
+        pool.AddTask(SharedPtr<ThreadPool::FunctionTask>(
+                         new ThreadPool::FunctionTask([&executed, &done]() {
+                             executed.fetch_add(1, std::memory_order_relaxed);
+                             done.release();
+                         })),
+                     UserPriority::LOW);
+    }
+
+    bool first_batch_done = true;
+    for (int i = 0; i < 16; ++i)
+    {
+        if (!done.try_acquire_for(std::chrono::milliseconds(200)))
+        {
+            first_batch_done = false;
+            break;
+        }
+    }
+
+    pool.SetNumThreads(5);
+
+    for (int i = 0; i < 16; ++i)
+    {
+        pool.AddTask(SharedPtr<ThreadPool::FunctionTask>(
+                         new ThreadPool::FunctionTask([&executed, &done]() {
+                             executed.fetch_add(1, std::memory_order_relaxed);
+                             done.release();
+                         })),
+                     UserPriority::LOW);
+    }
+
+    bool second_batch_done = true;
+    for (int i = 0; i < 16; ++i)
+    {
+        if (!done.try_acquire_for(std::chrono::milliseconds(200)))
+        {
+            second_batch_done = false;
+            break;
+        }
+    }
+
+    RUN_TEST(suite, "tasks complete after shrink", first_batch_done);
+    RUN_TEST(suite, "tasks complete after grow", second_batch_done);
+    RUN_TEST(suite, "all tasks executed", executed.load() == 32);
+
+    pool.Stop();
+
+    END_SUITE(suite);
+    PRINT_SUITE_SUMMARY(suite);
+}
+
 int main(void)
 {
     std::cout << "Hardware concurrency: " << std::thread::hardware_concurrency()
@@ -267,4 +649,14 @@ static void RegisterTests(void)
     REGISTER_TEST(Test_AddFutureTask);
     REGISTER_TEST(Test_AddMultipleThreads);
     REGISTER_TEST(Test_FIFO_SamePriority);
+    REGISTER_TEST(Test_Stop);
+    REGISTER_TEST(Test_MultipleStopIsOk);
+    REGISTER_TEST(Test_GracefulStopDrainsQueuedTasks);
+    REGISTER_TEST(Test_GracefulStopRejectsNewTasks);
+    REGISTER_TEST(Test_StopNowDoesNotHangWhenWorkersBlocked);
+    REGISTER_TEST(Test_StopNowCanPreemptBacklog);
+    REGISTER_TEST(Test_FifoWithinSamePrioritySingleWorker);
+    REGISTER_TEST(Test_PriorityBeatsFifoAcrossLevels);
+    REGISTER_TEST(Test_DestructorIsGraceful);
+    REGISTER_TEST(Test_SetNumThreadsGrowAndShrink);
 }

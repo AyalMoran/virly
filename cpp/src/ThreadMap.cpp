@@ -1,0 +1,68 @@
+#include "ThreadMap.hpp"
+
+#include <utility>
+
+namespace ilrd
+{
+
+ThreadMap::ProxyValue::ProxyValue(ThreadMap& map, std::thread::id id)
+    : m_map(map), m_id(std::move(id))
+{
+}
+
+ThreadMap::ProxyValue& ThreadMap::ProxyValue::operator=(bool is_running)
+{
+    std::lock_guard<std::mutex> lock(m_map.m_mutex);
+    m_map.m_map[m_id] = is_running;
+    return *this;
+}
+
+ThreadMap::ProxyValue::operator bool() const
+{
+    std::lock_guard<std::mutex> lock(m_map.m_mutex);
+    std::unordered_map<std::thread::id, bool>::const_iterator it =
+        m_map.m_map.find(m_id);
+
+    return (it != m_map.m_map.end()) ? it->second : false;
+}
+
+ThreadMap::ProxyValue ThreadMap::operator[](const std::thread::id& id)
+{
+    return ProxyValue(*this, id);
+}
+
+void ThreadMap::Clear()
+{
+    std::lock_guard<std::mutex> lock(m_mutex);
+    m_map.clear();
+}
+
+std::vector<std::thread::id> ThreadMap::ExtractStopped(std::size_t max_count)
+{
+    std::vector<std::thread::id> stopped;
+    if (max_count == 0)
+    {
+        return stopped;
+    }
+
+    stopped.reserve(max_count);
+
+    std::lock_guard<std::mutex> lock(m_mutex);
+    for (std::unordered_map<std::thread::id, bool>::iterator it = m_map.begin();
+         it != m_map.end() && stopped.size() < max_count;)
+    {
+        if (!it->second)
+        {
+            stopped.push_back(it->first);
+            it = m_map.erase(it);
+        }
+        else
+        {
+            ++it;
+        }
+    }
+
+    return stopped;
+}
+
+} // namespace ilrd

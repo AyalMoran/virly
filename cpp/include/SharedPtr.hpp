@@ -1,4 +1,5 @@
 #include <cstddef>  // std::size_t
+#include <atomic>
 #include <memory>   // std::addressof
 
 #ifndef ILRD_SHARED_PTR_HPP
@@ -40,7 +41,7 @@ template <typename T> class SharedPtr
     private:
     void DecreaseAndDelete();
     T* m_ptr;
-    std::size_t* m_counter;
+    std::atomic_size_t* m_counter;
 };
 
 template <typename T>
@@ -48,8 +49,7 @@ inline void SharedPtr<T>::DecreaseAndDelete()
 {
     if (m_counter)
     {
-        --*m_counter;
-        if (0 == *m_counter)
+        if (1 == m_counter->fetch_sub(1, std::memory_order_acq_rel))
         {
             delete m_ptr;
             delete m_counter;
@@ -64,7 +64,7 @@ inline SharedPtr<T>::SharedPtr(T* ptr) : m_ptr(ptr) , m_counter(nullptr)
     {
         try
         {
-            m_counter = new std::size_t(1);
+            m_counter = new std::atomic_size_t(1);
         }
         catch (std::bad_alloc& e)
         {
@@ -87,7 +87,7 @@ inline SharedPtr<T>::SharedPtr(const SharedPtr& other)
 {
     if(other.m_counter)
     {
-        ++*m_counter;
+        m_counter->fetch_add(1, std::memory_order_relaxed);
     }
 }
 
@@ -103,7 +103,7 @@ inline SharedPtr<T>& SharedPtr<T>::operator=(const SharedPtr& other)
     m_counter = other.m_counter;
     if(m_counter)
     {
-        *m_counter += 1;
+        m_counter->fetch_add(1, std::memory_order_relaxed);
     }
 
     return *this;
@@ -136,7 +136,7 @@ inline SharedPtr<T>::SharedPtr(const SharedPtr<U>& other)
 {
     if(m_counter)
     {
-        ++*m_counter;
+        m_counter->fetch_add(1, std::memory_order_relaxed);
     }
 }
 
@@ -155,7 +155,7 @@ inline SharedPtr<T>& SharedPtr<T>::operator=(const SharedPtr<U>& other)
     m_counter = other.m_counter;
     if(m_counter)
     {
-        *m_counter += 1;
+        m_counter->fetch_add(1, std::memory_order_relaxed);
     }
 
     return *this;
@@ -165,7 +165,7 @@ template <typename T> inline std::size_t SharedPtr<T>::UseCount() const
 {
     if(m_counter)
     {
-        return *m_counter;
+        return m_counter->load(std::memory_order_relaxed);
     }
     else
     {
