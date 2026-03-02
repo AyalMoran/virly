@@ -1,5 +1,5 @@
 #include <cstddef>  // std::size_t
-#include <atomic>
+#include <atomic>   // std::atomic_size_t
 #include <memory>   // std::addressof
 
 #ifndef ILRD_SHARED_PTR_HPP

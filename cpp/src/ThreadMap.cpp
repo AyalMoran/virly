@@ -1,6 +1,9 @@
-#include "ThreadMap.hpp"
+#include <utility>      // std::move
+#include <mutex>        // std::mutex
+#include <unordered_map> // std::unordered_map
+#include <vector>       // std::vector
 
-#include <utility>
+#include "ThreadMap.hpp" // ThreadMap
 
 namespace ilrd
 {

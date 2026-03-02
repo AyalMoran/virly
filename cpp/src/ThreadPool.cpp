@@ -5,12 +5,13 @@
  * Date    :
  **************************************************************/
 
-#include "ThreadPool.hpp"
-
-#include <algorithm>
-#include <chrono>
-#include <iostream>
-
+ #include <chrono>     // std::chrono::milliseconds
+ #include <iostream>   // std::cout, std::endl
+ #include <thread>     // std::this_thread
+ #include <vector>     // std::vector
+ 
+ #include "ThreadPool.hpp" // ThreadPool
+ 
 namespace ilrd
 {
 
@@ -91,6 +92,7 @@ ThreadPool::ThreadPool(std::size_t num_threads)
             worker_ptr->thread = std::jthread(
                 [this, worker_token, worker_ptr]() mutable
                 { ThreadFunc(*this, worker_ptr->stop_source)(worker_token); });
+            m_threadsIsRunning[worker_ptr->thread.get_id()] = true;
             m_workers.push_back(std::move(worker));
         }
     }
@@ -208,6 +210,7 @@ void ThreadPool::SetNumThreads(std::size_t num_threads)
             worker_ptr->thread = std::jthread(
                 [this, worker_token, worker_ptr]() mutable
                 { ThreadFunc(*this, worker_ptr->stop_source)(worker_token); });
+            m_threadsIsRunning[worker_ptr->thread.get_id()] = true;
             m_workers.push_back(std::move(worker));
         }
         return;
@@ -223,24 +226,22 @@ void ThreadPool::SetNumThreads(std::size_t num_threads)
     std::size_t removed = 0;
     while (removed < to_remove)
     {
-        std::vector<std::thread::id> stopped_ids =
-            m_threadsIsRunning.ExtractStopped(to_remove - removed);
-
-        for (std::size_t i = 0; i < stopped_ids.size(); ++i)
+        for (std::vector<std::unique_ptr<Worker>>::iterator it = m_workers.begin();
+             it != m_workers.end() && removed < to_remove;)
         {
-            std::vector<std::unique_ptr<Worker>>::iterator it = std::find_if(
-                m_workers.begin(), m_workers.end(),
-                [&stopped_ids, i](const std::unique_ptr<Worker>& worker)
-                { return worker->thread.get_id() == stopped_ids[i]; });
-
-            if (it != m_workers.end())
+            const std::thread::id id = (*it)->thread.get_id();
+            if (!m_threadsIsRunning[id])
             {
                 if ((*it)->thread.joinable())
                 {
                     (*it)->thread.join();
                 }
-                m_workers.erase(it);
+                it = m_workers.erase(it);
                 ++removed;
+            }
+            else
+            {
+                ++it;
             }
         }
 

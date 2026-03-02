@@ -7,20 +7,20 @@
 #ifndef _ILRD_THREADPOOL_HPP
 #define _ILRD_THREADPOOL_HPP
 
-#include <atomic>
-#include <cstddef>
-#include <cstdint>
-#include <memory>
-#include <thread>
-#include <variant>
-#include <vector>
+#include <atomic>   // std::atomic
+#include <cstddef>  // std::size_t
+#include <cstdint>  // std::uint64_t
+#include <memory>   // std::unique_ptr
+#include <thread>   // std::thread
+#include <variant>  // std::variant
+#include <vector>   // std::vector
 
-#include "Pauser.hpp"
-#include "PriorityQueue.hpp"
-#include "SharedPtr.hpp"
-#include "ThreadMap.hpp"
-#include "ThreadPoolTasks.hpp"
-#include "WaitableQueue.hpp"
+#include "Pauser.hpp"            // Pauser
+#include "PriorityQueue.hpp"     // PriorityQueue
+#include "SharedPtr.hpp"         // SharedPtr
+#include "ThreadMap.hpp"         // ThreadMap
+#include "ThreadPoolTasks.hpp"   // ThreadPoolTasks
+#include "WaitableQueue.hpp"     // WaitableQueue
 
 namespace ilrd
 {
