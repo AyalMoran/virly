@@ -23,10 +23,6 @@ bool operator<(const Priority& p1, const Priority& p2)
     std::cout << "p1: " << get_int_value(p1) << " p2: " << get_int_value(p2)
               << std::endl;
 #endif
-    if (get_int_value(p1) == get_int_value(p2))
-    {
-        return false;
-    }
     return get_int_value(p1) < get_int_value(p2);
 }
 
@@ -82,9 +78,13 @@ ThreadPool::ThreadPool(std::size_t num_threads)
     : m_tasksQueue(TaskQueue()), m_workers(), m_threadsIsRunning(), m_seq(0),
       m_acceptingTasks(true), m_isStopped(false), m_pauser()
 {
+    const std::size_t hc = std::thread::hardware_concurrency();
+    const std::size_t threads =
+        (num_threads == 0) ? ((hc == 0) ? 1 : hc) : num_threads;
+
     try
     {
-        for (std::size_t i = 0; i < num_threads; ++i)
+        for (std::size_t i = 0; i < threads; ++i)
         {
             std::unique_ptr<Worker> worker(new Worker());
             Worker* worker_ptr = worker.get();
@@ -247,7 +247,7 @@ void ThreadPool::SetNumThreads(std::size_t num_threads)
 
         if (removed < to_remove)
         {
-            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+            m_threadsIsRunning.WaitForStopped();
         }
     }
 }

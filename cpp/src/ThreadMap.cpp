@@ -2,6 +2,7 @@
 #include <mutex>        // std::mutex
 #include <unordered_map> // std::unordered_map
 #include <vector>       // std::vector
+#include <condition_variable> // std::condition_variable
 
 #include "ThreadMap.hpp" // ThreadMap
 
@@ -17,6 +18,10 @@ ThreadMap::ProxyValue& ThreadMap::ProxyValue::operator=(bool is_running)
 {
     std::lock_guard<std::mutex> lock(m_map.m_mutex);
     m_map.m_map[m_id] = is_running;
+    if (!is_running)
+    {
+        m_map.m_cv.notify_one();
+    }
     return *this;
 }
 
@@ -66,6 +71,26 @@ std::vector<std::thread::id> ThreadMap::ExtractStopped(std::size_t max_count)
     }
 
     return stopped;
+}
+
+void ThreadMap::WaitForStopped()
+{
+    std::unique_lock<std::mutex> lock(m_mutex);
+    m_cv.wait(lock, [this]() { return HasStoppedUnsafe(); });
+}
+
+bool ThreadMap::HasStoppedUnsafe() const
+{
+    for (std::unordered_map<std::thread::id, bool>::const_iterator it = m_map.begin();
+         it != m_map.end(); ++it)
+    {
+        if (!it->second)
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 } // namespace ilrd
