@@ -23,64 +23,64 @@ class PriorityQueue : private std::priority_queue<T, PQ_CONTAINER, COMPARE_FUNC>
     using Base = std::priority_queue<T, PQ_CONTAINER, COMPARE_FUNC>;
 
   public:
-    PriorityQueue();
+    inline PriorityQueue();
 
-    void push(const T& value);
-    void push(T&& value);
-    void pop();
+    inline void push(const T& value);
+    inline void push(T&& value);
+    inline void pop();
 
-    const T& front();
-    const T& front() const;
+    inline const T& front();
+    inline const T& front() const;
 
-    bool empty() const;
-    std::size_t size() const;
+    inline bool empty() const;
+    inline std::size_t size() const;
 };
 
 
 template <typename T, class PQ_CONTAINER, class COMPARE_FUNC>
-PriorityQueue<T, PQ_CONTAINER, COMPARE_FUNC>::PriorityQueue()
+inline PriorityQueue<T, PQ_CONTAINER, COMPARE_FUNC>::PriorityQueue()
     : Base()
 {
 }
 
 template <typename T, class PQ_CONTAINER, class COMPARE_FUNC>
-void PriorityQueue<T, PQ_CONTAINER, COMPARE_FUNC>::push(const T& value)
+inline void PriorityQueue<T, PQ_CONTAINER, COMPARE_FUNC>::push(const T& value)
 {
     Base::push(value);
 }
 
 template <typename T, class PQ_CONTAINER, class COMPARE_FUNC>
-void PriorityQueue<T, PQ_CONTAINER, COMPARE_FUNC>::push(T&& value)
+inline void PriorityQueue<T, PQ_CONTAINER, COMPARE_FUNC>::push(T&& value)
 {
     Base::push(std::move(value));
 }
 
 template <typename T, class PQ_CONTAINER, class COMPARE_FUNC>
-void PriorityQueue<T, PQ_CONTAINER, COMPARE_FUNC>::pop()
+inline void PriorityQueue<T, PQ_CONTAINER, COMPARE_FUNC>::pop()
 {
     Base::pop();
 }
 
 template <typename T, class PQ_CONTAINER, class COMPARE_FUNC>
-const T& PriorityQueue<T, PQ_CONTAINER, COMPARE_FUNC>::front()
+inline const T& PriorityQueue<T, PQ_CONTAINER, COMPARE_FUNC>::front()
 {
     return Base::top();
 }
 
 template <typename T, class PQ_CONTAINER, class COMPARE_FUNC>
-const T& PriorityQueue<T, PQ_CONTAINER, COMPARE_FUNC>::front() const
+inline const T& PriorityQueue<T, PQ_CONTAINER, COMPARE_FUNC>::front() const
 {
     return Base::top();
 }
 
 template <typename T, class PQ_CONTAINER, class COMPARE_FUNC>
-bool PriorityQueue<T, PQ_CONTAINER, COMPARE_FUNC>::empty() const
+inline bool PriorityQueue<T, PQ_CONTAINER, COMPARE_FUNC>::empty() const
 {
     return Base::empty();
 }
 
 template <typename T, class PQ_CONTAINER, class COMPARE_FUNC>
-std::size_t PriorityQueue<T, PQ_CONTAINER, COMPARE_FUNC>::size() const
+inline std::size_t PriorityQueue<T, PQ_CONTAINER, COMPARE_FUNC>::size() const
 {
     return Base::size();
 }
