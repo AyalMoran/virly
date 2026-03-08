@@ -135,7 +135,6 @@ T* Singleton<T>::GetInstance()
 template <typename T>
 void Singleton<T>::AtExit()
 {
-    ScopeLock<Mutex> guard(m_mutex);
     delete m_instance;
     m_instance = 0;
 }
