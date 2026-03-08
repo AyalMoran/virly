@@ -34,7 +34,7 @@ const std::size_t BITS_IN_WORD = sizeof(std::size_t) * CHAR_BIT;
 
 //*-----------------------------Helper Functions-----------------------------
 template <std::size_t N>
-static std::size_t GetLastWord(const std::size_t* words)
+static std::size_t GetLastWord(const std::size_t* words) noexcept
 {
     constexpr std::size_t num_words = (N + BITS_IN_WORD - 1) / BITS_IN_WORD;
     constexpr std::size_t extra_bits = N % BITS_IN_WORD;
@@ -63,26 +63,16 @@ static std::size_t GetLastWord(const std::size_t* words)
 }
 
 //*-----------------------------Functors-----------------------------
-class EqualHelper
-{
-  public:
-    bool operator()(const std::size_t& this_word,
-                    const std::size_t& that_word) const
-    {
-        return GetLastWord<sizeof(std::size_t) * CHAR_BIT>(&this_word) ==
-               GetLastWord<sizeof(std::size_t) * CHAR_BIT>(&that_word);
-    }
-};
-
 class CountHelper
 {
   public:
-    CountHelper(std::size_t& count_bits, const unsigned char* BitCountTable)
+    CountHelper(std::size_t& count_bits,
+                const unsigned char* BitCountTable) noexcept
         : m_countBits(count_bits), m_BitCountTable(BitCountTable)
     {
     }
 
-    void operator()(std::size_t word)
+    void operator()(std::size_t word) noexcept
     {
         unsigned char* start = reinterpret_cast<unsigned char*>(&word);
         unsigned char* end = start + sizeof(std::size_t);
@@ -100,6 +90,25 @@ class CountHelper
     const unsigned char* m_BitCountTable;
 };
 
+class Shifter
+{
+  public:
+    explicit Shifter(std::size_t shift) noexcept : m_shift(shift){};
+
+    std::size_t operator()(std::size_t& a, std::size_t& b) const noexcept
+    {
+        if (m_shift == 0)
+        {
+            return a;
+        }
+
+        return (a << m_shift) | (b >> (BITS_IN_WORD - m_shift));
+    }
+
+  private:
+    std::size_t m_shift;
+};
+
 //*----------------------------- Class BitArray --------------------------
 
 template <std::size_t N = DEFAULT_BIT_ARR_SIZE> class BitArray
@@ -111,11 +120,11 @@ template <std::size_t N = DEFAULT_BIT_ARR_SIZE> class BitArray
     class BitRef
     {
       public:
-        BitRef(std::size_t& word, std::size_t mask);
-        BitRef& operator=(bool value);
-        BitRef& operator=(const BitRef& other);
-        operator bool() const;
-        bool operator!() const;
+        BitRef(std::size_t& word, std::size_t mask) noexcept;
+        BitRef& operator=(bool value) noexcept;
+        BitRef& operator=(const BitRef& other) noexcept;
+        operator bool() const noexcept;
+        bool operator!() const noexcept;
 
       private:
         std::size_t& m_word;
@@ -127,19 +136,19 @@ template <std::size_t N = DEFAULT_BIT_ARR_SIZE> class BitArray
      * @brief Constructs a bit array with all bits initialized to `initial_all_value`.
      * @param initial_all_value Initial value for all bits.
      */
-    BitArray(bool initial_all_value = false);
+    BitArray(bool initial_all_value = false) noexcept;
     /**
      * @brief Copy constructor.
      * @param other Source bit array.
      */
-    BitArray(const BitArray& other);
+    BitArray(const BitArray& other) noexcept;
 
     /**
      * @brief Copy assignment.
      * @param other Source bit array.
      * @return `*this`.
      */
-    BitArray& operator=(const BitArray& other);
+    BitArray& operator=(const BitArray& other) noexcept;
     /**
      * @brief Returns bit value at index.
      * @param index Bit index.
@@ -157,62 +166,62 @@ template <std::size_t N = DEFAULT_BIT_ARR_SIZE> class BitArray
      * @param other Right-hand operand.
      * @return `*this`.
      */
-    BitArray& operator|=(const BitArray& other);
+    BitArray& operator|=(const BitArray& other) noexcept;
     /**
      * @brief Bitwise AND assignment.
      * @param other Right-hand operand.
      * @return `*this`.
      */
-    BitArray& operator&=(const BitArray& other);
+    BitArray& operator&=(const BitArray& other) noexcept;
     /**
      * @brief Bitwise XOR assignment.
      * @param other Right-hand operand.
      * @return `*this`.
      */
-    BitArray& operator^=(const BitArray& other);
+    BitArray& operator^=(const BitArray& other) noexcept;
     /**
      * @brief Equality comparison.
      * @param other Right-hand operand.
      * @return `true` if all bits are equal; otherwise `false`.
      */
-    bool operator==(const BitArray& other) const;
+    bool operator==(const BitArray& other) const noexcept;
     /**
      * @brief Inequality comparison.
      * @param other Right-hand operand.
      * @return `true` if arrays differ; otherwise `false`.
      */
-    bool operator!=(const BitArray& other) const;
+    bool operator!=(const BitArray& other) const noexcept;
     /**
      * @brief Left-shift assignment.
      * @param shift Number of positions to shift.
      * @return `*this`.
      */
-    BitArray& operator<<=(std::size_t shift);
+    BitArray& operator<<=(std::size_t shift) noexcept;
     /**
      * @brief Right-shift assignment.
      * @param shift Number of positions to shift.
      * @return `*this`.
      */
-    BitArray& operator>>=(std::size_t shift);
+    BitArray& operator>>=(std::size_t shift) noexcept;
     /**
      * @brief Returns a left-shifted copy.
      * @param shift Number of positions to shift.
      * @return Shifted copy.
      */
-    const BitArray operator<<(std::size_t shift) const;
+    const BitArray operator<<(std::size_t shift) const noexcept;
     /**
      * @brief Returns a right-shifted copy.
      * @param shift Number of positions to shift.
      * @return Shifted copy.
      */
-    const BitArray operator>>(std::size_t shift) const;
+    const BitArray operator>>(std::size_t shift) const noexcept;
 
     /**
      * @brief Sets all bits to `value`.
      * @param value Value to assign to all bits.
      * @return `*this`.
      */
-    BitArray& Set(bool value);
+    BitArray& Set(bool value) noexcept;
     /**
      * @brief Sets a specific bit.
      * @param pos Bit index.
@@ -225,7 +234,7 @@ template <std::size_t N = DEFAULT_BIT_ARR_SIZE> class BitArray
      * @brief Resets all bits to `false`.
      * @return `*this`.
      */
-    BitArray& Reset();
+    BitArray& Reset() noexcept;
     /**
      * @brief Resets a specific bit to `false`.
      * @param pos Bit index.
@@ -244,7 +253,7 @@ template <std::size_t N = DEFAULT_BIT_ARR_SIZE> class BitArray
      * @brief Flips all bits.
      * @return `*this`.
      */
-    BitArray& Flip();
+    BitArray& Flip() noexcept;
     /**
      * @brief Flips a specific bit.
      * @param pos Bit index.
@@ -257,7 +266,7 @@ template <std::size_t N = DEFAULT_BIT_ARR_SIZE> class BitArray
      * @brief Counts the number of set bits.
      * @return Number of bits set to `true`.
      */
-    std::size_t Count() const;
+    std::size_t Count() const noexcept;
     /**
      * @brief Converts the bit array to a string representation.
      * @param zero Character used for cleared bits.
@@ -268,16 +277,13 @@ template <std::size_t N = DEFAULT_BIT_ARR_SIZE> class BitArray
     std::string ToString(char zero = '0', char one = '1') const;
 
   private:
-  
-
-  private:
-    std::size_t m_words[(N / (sizeof(std::size_t) * CHAR_BIT)) + 1];
+    std::size_t m_words[(N + BITS_IN_WORD - 1) / BITS_IN_WORD];
 };
 //*----------------------------- Member Functions --------------------------
 //* Member Functions ================================================
 // Default Ctor
 template <std::size_t N>
-BitArray<N>::BitArray(bool initial_all_value) : m_words{0ULL}
+BitArray<N>::BitArray(bool initial_all_value) noexcept : m_words{0ULL}
 {
     if (initial_all_value)
     {
@@ -286,7 +292,7 @@ BitArray<N>::BitArray(bool initial_all_value) : m_words{0ULL}
 }
 
 template <std::size_t N>
-BitArray<N>::BitArray(const BitArray& other) : m_words()
+BitArray<N>::BitArray(const BitArray& other) noexcept : m_words()
 {
     std::copy(std::begin(other.m_words), std::end(other.m_words),
               std::begin(m_words));
@@ -294,18 +300,18 @@ BitArray<N>::BitArray(const BitArray& other) : m_words()
 
 //* BitRef Member Functions ================================================
 template <std::size_t N>
-BitArray<N>::BitRef::BitRef(std::size_t& word, std::size_t mask)
+BitArray<N>::BitRef::BitRef(std::size_t& word, std::size_t mask) noexcept
     : m_word(word), m_mask(mask)
 {
 }
 
-template <std::size_t N> BitArray<N>::BitRef::operator bool() const
+template <std::size_t N> BitArray<N>::BitRef::operator bool() const noexcept
 {
     return (m_word & m_mask) != 0ULL;
 }
 
 template <std::size_t N>
-typename BitArray<N>::BitRef& BitArray<N>::BitRef::operator=(bool value)
+typename BitArray<N>::BitRef& BitArray<N>::BitRef::operator=(bool value) noexcept
 {
     if (value)
     {
@@ -320,12 +326,12 @@ typename BitArray<N>::BitRef& BitArray<N>::BitRef::operator=(bool value)
 
 template <std::size_t N>
 typename BitArray<N>::BitRef&
-BitArray<N>::BitRef::operator=(const BitRef& other)
+BitArray<N>::BitRef::operator=(const BitRef& other) noexcept
 {
     return (*this = static_cast<bool>(other));
 }
 
-template <std::size_t N> bool BitArray<N>::BitRef::operator!() const
+template <std::size_t N> bool BitArray<N>::BitRef::operator!() const noexcept
 {
     return !static_cast<bool>(*this);
 }
@@ -334,7 +340,7 @@ template <std::size_t N> bool BitArray<N>::BitRef::operator!() const
 
 // Bit Array Member Functions ================================================
 template <std::size_t N>
-BitArray<N>& BitArray<N>::operator=(const BitArray<N>& other)
+BitArray<N>& BitArray<N>::operator=(const BitArray<N>& other) noexcept
 {
     std::copy(std::begin(other.m_words), std::end(other.m_words),
               std::begin(m_words));
@@ -359,7 +365,7 @@ typename BitArray<N>::BitRef BitArray<N>::operator[](std::size_t index)
 
 /*Operator |= */
 template <std::size_t N>
-BitArray<N>& BitArray<N>::operator|=(const BitArray& other)
+BitArray<N>& BitArray<N>::operator|=(const BitArray& other) noexcept
 {
     constexpr std::size_t num_words = (N + BITS_IN_WORD - 1) / BITS_IN_WORD;
     constexpr std::size_t extra_bits = N % BITS_IN_WORD;
@@ -384,7 +390,7 @@ BitArray<N>& BitArray<N>::operator|=(const BitArray& other)
 }
 /*Operator &=*/
 template <std::size_t N>
-BitArray<N>& BitArray<N>::operator&=(const BitArray& other)
+BitArray<N>& BitArray<N>::operator&=(const BitArray& other) noexcept
 {
     constexpr std::size_t num_words = (N + BITS_IN_WORD - 1) / BITS_IN_WORD;
     constexpr std::size_t extra_bits = N % BITS_IN_WORD;
@@ -408,7 +414,7 @@ BitArray<N>& BitArray<N>::operator&=(const BitArray& other)
 }
 /*Operator ^=*/
 template <std::size_t N>
-BitArray<N>& BitArray<N>::operator^=(const BitArray& other)
+BitArray<N>& BitArray<N>::operator^=(const BitArray& other) noexcept
 {
     constexpr std::size_t num_words = (N + BITS_IN_WORD - 1) / BITS_IN_WORD;
     constexpr std::size_t extra_bits = N % BITS_IN_WORD;
@@ -434,7 +440,7 @@ BitArray<N>& BitArray<N>::operator^=(const BitArray& other)
 
 //*Operator ==
 template <std::size_t N>
-bool BitArray<N>::operator==(const BitArray& other) const
+bool BitArray<N>::operator==(const BitArray& other) const noexcept
 {
     constexpr std::size_t num_words = (N + BITS_IN_WORD - 1) / BITS_IN_WORD;
     std::size_t i = 0;
@@ -451,13 +457,13 @@ bool BitArray<N>::operator==(const BitArray& other) const
 }
 // Operator !=
 template <std::size_t N>
-bool BitArray<N>::operator!=(const BitArray& other) const
+bool BitArray<N>::operator!=(const BitArray& other) const noexcept
 {
     return !(*this == other);
 }
 // Operator << (const)
 template <std::size_t N>
-const BitArray<N> BitArray<N>::operator<<(std::size_t shift) const
+const BitArray<N> BitArray<N>::operator<<(std::size_t shift) const noexcept
 {
     BitArray<N> result(*this);
     result <<= shift;
@@ -465,34 +471,16 @@ const BitArray<N> BitArray<N>::operator<<(std::size_t shift) const
 }
 // Operator >> (const)
 template <std::size_t N>
-const BitArray<N> BitArray<N>::operator>>(std::size_t shift) const
+const BitArray<N> BitArray<N>::operator>>(std::size_t shift) const noexcept
 {
     BitArray<N> result(*this);
     result >>= shift;
     return result;
 }
 
-class Shifter
-{
-  public:
-    Shifter(std::size_t shift) : m_shift(shift){};
-
-    std::size_t operator()(std::size_t& a, std::size_t& b)
-    {
-        if (m_shift == 0)
-        {
-            return a;
-        }
-
-        return (a << m_shift) | (b >> (BITS_IN_WORD - m_shift));
-    }
-
-  private:
-    std::size_t m_shift;
-};
 // Operator <<=
 template <std::size_t N>
-BitArray<N>& BitArray<N>::operator<<=(std::size_t shift)
+BitArray<N>& BitArray<N>::operator<<=(std::size_t shift) noexcept
 {
     constexpr std::size_t num_words = (N + BITS_IN_WORD - 1) / BITS_IN_WORD;
     constexpr std::size_t extra_bits = N % BITS_IN_WORD;
@@ -546,7 +534,7 @@ BitArray<N>& BitArray<N>::operator<<=(std::size_t shift)
 }
 // Operator >>=
 template <std::size_t N>
-BitArray<N>& BitArray<N>::operator>>=(std::size_t shift)
+BitArray<N>& BitArray<N>::operator>>=(std::size_t shift) noexcept
 {
     if (shift >= N)
     {
@@ -573,7 +561,7 @@ BitArray<N>& BitArray<N>::operator>>=(std::size_t shift)
 // Bit Array Member Functions
 // ================================================
 // Set()
-template <std::size_t N> BitArray<N>& BitArray<N>::Set(bool value)
+template <std::size_t N> BitArray<N>& BitArray<N>::Set(bool value) noexcept
 {
     const std::size_t fill_value =
         value ? std::numeric_limits<std::size_t>::max() : 0ULL;
@@ -599,7 +587,7 @@ BitArray<N>& BitArray<N>::Set(std::size_t pos, bool value)
 }
 
 // Reset()
-template <std::size_t N> BitArray<N>& BitArray<N>::Reset()
+template <std::size_t N> BitArray<N>& BitArray<N>::Reset() noexcept
 {
     return Set(false);
 }
@@ -624,7 +612,7 @@ template <std::size_t N> bool BitArray<N>::Get(std::size_t pos) const
 }
 
 // Flip()
-template <std::size_t N> BitArray<N>& BitArray<N>::Flip()
+template <std::size_t N> BitArray<N>& BitArray<N>::Flip() noexcept
 {
 
     std::for_each(std::begin(m_words), std::end(m_words),
@@ -649,29 +637,25 @@ template <std::size_t N> BitArray<N>& BitArray<N>::Flip(std::size_t pos)
     return Set(pos, !Get(pos));
 }
 
-template <std::size_t N> std::size_t BitArray<N>::Count() const
+template <std::size_t N> std::size_t BitArray<N>::Count() const noexcept
 {
     static const unsigned char BitCountTable[UCHAR_MAX + 1] = {B6(0), B6(1),
                                                                B6(1), B6(2)};
     constexpr std::size_t num_words = (N + BITS_IN_WORD - 1) / BITS_IN_WORD;
     constexpr std::size_t extra_bits = N % BITS_IN_WORD;
     std::size_t count_bits = 0;
+    CountHelper counter(count_bits, BitCountTable);
 
-    std::for_each(std::begin(m_words), std::end(m_words) - 1,
-                  CountHelper(count_bits, BitCountTable));
+    std::for_each(std::begin(m_words), std::begin(m_words) + (num_words - 1),
+                  counter);
 
+    std::size_t last_word = m_words[num_words - 1];
     if (extra_bits != 0)
     {
-        std::size_t last_word = m_words[num_words - 1];
         const std::size_t last_mask = (1ULL << extra_bits) - 1;
-        const std::size_t last_word_masked = last_word & last_mask;
-        last_word = last_word_masked;
-        while (last_word != 0)
-        {
-            count_bits += BitCountTable[last_word & 0xFF];
-            last_word >>= CHAR_BIT;
-        }
+        last_word &= last_mask;
     }
+    counter(last_word);
 
     return count_bits;
 }
