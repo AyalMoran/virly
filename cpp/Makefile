@@ -4,7 +4,7 @@ SHELL := /bin/bash
 
 CXX ?= g++
 CC ?= gcc
-CXXSTD ?= c++17
+CXXSTD ?= c++20
 CXXFLAGS ?= -Wall -Wextra -Wpedantic -O2 -Weffc++ -Werror
 CFLAGS ?= -Wall -Wextra -Wpedantic -O2
 CPPFLAGS ?=
