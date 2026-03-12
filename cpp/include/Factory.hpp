@@ -9,9 +9,9 @@
 #define ILRD_FACTORY_HPP
 
 #include <functional>  // std::function
-#include <map>         // std::map
 #include <memory>      // std::unique_ptr
 #include <stdexcept>   // std::runtime_error
+#include <unordered_map> // std::unordered_map
 #include <utility>     // std::move
 
 namespace ilrd
@@ -72,7 +72,7 @@ class Factory
     }
 
   private:
-    using CreatorMap = std::map<Key, Creator>;
+    using CreatorMap = std::unordered_map<Key, Creator>;
     CreatorMap m_creators;
 };
 
