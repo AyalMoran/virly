@@ -109,16 +109,13 @@ bool Logger::Log(const std::string& message, Level level)
 {
     const std::string formatted_line = FormatLine(message, level);
 
+    std::lock_guard<std::mutex> lock(m_flushMutex);
+    if (!m_acceptingLogs)
     {
-        std::lock_guard<std::mutex> lock(m_flushMutex);
-        if (!m_acceptingLogs)
-        {
-            return false;
-        }
-
-        ++m_pendingTasks;
+        return false;
     }
 
+    ++m_pendingTasks;
     m_tasks.Push(LogTask(LogTask::Type::MESSAGE, formatted_line));
     return true;
 }
