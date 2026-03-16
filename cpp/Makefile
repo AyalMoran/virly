@@ -44,6 +44,7 @@ bin_name = $(subst /,_,$(basename $(1)))
 main_dir = $(patsubst %/,%,$(dir $(1)))
 test_file_base = $(basename $(notdir $(1)))
 test_selector = $(patsubst %Test,%,$(call test_file_base,$(1)))
+build_selector = $(call bin_name,$(1))
 
 bin_name = $(if $(filter test/% ,$(1)),$(call test_file_base,$(1)),$(subst /,_,$(basename $(1))))
 
@@ -51,10 +52,14 @@ src_to_obj = $(if $(filter ../%,$(1)),$(BUILD_DIR)/external/$(patsubst ../%,%,$(
 src_to_dep = $(patsubst %.o,%.d,$(call src_to_obj,$(1)))
 
 needs_test_utils = $(filter $(1),$(TEST_UTILS_USERS))
+test_module_sources = $(wildcard src/$(call test_selector,$(1)).cpp) $(TEST_EXTRA_SRCS_$(call test_selector,$(1)))
+
+TEST_EXTRA_SRCS_PriorityQueue := src/WaitableQueue.cpp
+TEST_EXTRA_SRCS_ThreadPool := src/Pauser.cpp src/PriorityQueue.cpp src/ThreadMap.cpp src/ThreadPool.cpp src/ThreadPoolTasks.cpp src/WaitableQueue.cpp
+TEST_EXTRA_SRCS_WaitableQueue := src/PriorityQueue.cpp
 
 define module_lib_sources
-$(if $(filter test/%,$(1)),$(filter src/%,$(LIB_SRCS)),\
-$(if $(filter src/%,$(1)),$(filter src/%,$(LIB_SRCS)),))
+$(if $(filter test/%,$(1)),$(strip $(call test_module_sources,$(1))),)
 endef
 
 define sources_for_main
@@ -66,14 +71,19 @@ endef
 BINARY_TARGETS :=
 TEST_BINARY_TARGETS :=
 
-
 BINARY_TARGETS := $(foreach m,$(BUILD_MAIN_SRCS),$(BIN_DIR)/$(call bin_name,$(m)))
 TEST_MAIN_SRCS := $(filter test/% ,$(MAIN_SRCS))
 TEST_BINARY_TARGETS := $(foreach m,$(TEST_MAIN_SRCS),$(BIN_DIR)/$(call bin_name,$(m)))
 TEST_SELECTORS := $(sort $(foreach t,$(filter %Test.cpp,$(TEST_MAIN_SRCS)),$(call test_selector,$(t))))
-TESTS_DEFINES := -DCOMPILE_TIME_RAND=$(shell printf '%s' $$(( $$(date +%s%N) % 2048 + 64 ))) -DNPROD=2 -DCONS=2
+COMPILE_TIME_RAND ?= $(shell printf '%s' $$(( $$(date +%s%N) % 2048 + 64 )))
+NPROD ?= 2
+CONS ?= 2
+export COMPILE_TIME_RAND NPROD CONS
+TESTS_CPPFLAGS := -DCOMPILE_TIME_RAND=$(COMPILE_TIME_RAND) -DNPROD=$(NPROD) -DCONS=$(CONS)
+BUILD_SELECTORS := $(sort $(foreach m,$(BUILD_MAIN_SRCS),$(call build_selector,$(m))) \
+	$(foreach t,$(filter %Test.cpp,$(TEST_MAIN_SRCS)),$(call test_selector,$(t))))
 
-# Register one explicit link target per discovered main() source.
+# Link each discovered main() to its resolved object list.
 define REGISTER_BINARY
 SRCS_$(2) := $(call sources_for_main,$(1))
 $(BIN_DIR)/$(call bin_name,$(1)): $(foreach s,$(call sources_for_main,$(1)),$(call src_to_obj,$(s))) | $(BIN_DIR)
@@ -83,12 +93,13 @@ $(if $(filter test/ScopeLockTest.cpp,$(1)),$(BIN_DIR)/$(call bin_name,$(1)): LDL
 endef
 
 $(foreach m,$(MAIN_SRCS),$(eval $(call REGISTER_BINARY,$(m),$(call sanitize,$(m)))))
+$(foreach m,$(BUILD_MAIN_SRCS),$(eval SELECT_BIN_$(call build_selector,$(m)) := $(BIN_DIR)/$(call bin_name,$(m))))
 $(foreach t,$(filter %Test.cpp,$(TEST_MAIN_SRCS)),$(eval SELECT_BIN_$(call test_selector,$(t)) := $(BIN_DIR)/$(call bin_name,$(t))))
 
 ALL_BUILD_SRCS := $(sort $(LIB_SRCS) $(MAIN_SRCS) $(if $(strip $(TEST_UTILS_USERS)),$(TEST_UTILS_SRC),))
 DEPFILES := $(foreach s,$(ALL_BUILD_SRCS),$(call src_to_dep,$(s)))
 
-.PHONY: all list run clean help prep $(TEST_SELECTORS)
+.PHONY: all build list run clean help prep $(BUILD_SELECTORS)
 
 all: prep
 	@built=0; failed=0; skipped=0; failed_list=""; \
@@ -105,17 +116,43 @@ all: prep
 	echo "Skipped: $$skipped"; \
 	if [ $$failed -ne 0 ]; then \
 		echo "Failed targets:$$failed_list"; \
+			exit 1; \
+	fi
+
+build: prep
+	@if [ -n "$(strip $(UNKNOWN_BUILD_SELECTORS))" ]; then \
+		echo "Unknown build selector(s): $(UNKNOWN_BUILD_SELECTORS)"; \
+		echo "Available selectors: $(BUILD_SELECTORS)"; \
+		exit 2; \
+	fi
+	@built=0; failed=0; skipped=0; failed_list=""; \
+	for bin in $(BUILD_BINARY_TARGETS); do \
+		if $(MAKE) --no-print-directory "$$bin"; then \
+			built=$$((built + 1)); \
+		else \
+			failed=$$((failed + 1)); \
+			failed_list="$$failed_list $$bin"; \
+		fi; \
+	done; \
+	echo "Built: $$built"; \
+	echo "Failed: $$failed"; \
+	echo "Skipped: $$skipped"; \
+	if [ $$failed -ne 0 ]; then \
+		echo "Failed targets:$$failed_list"; \
 		exit 1; \
 	fi
 
 list:
-	@echo "Discovered main sources and binaries:";
-	@$(foreach s,$(MAIN_SRCS),printf '  %s -> %s/%s\n' "$(s)" "$(BIN_DIR)" "$(call bin_name,$(s))";)
+	@echo "Default build sources and binaries:";
+	@$(foreach s,$(BUILD_MAIN_SRCS),printf '  %s -> %s/%s\n' "$(s)" "$(BIN_DIR)" "$(call bin_name,$(s))";)
+	@echo "";
+	@echo "Build selectors:";
+	@$(foreach s,$(BUILD_SELECTORS),printf '  %s\n' "$(s)";)
 
 run: prep
-	@if [ -n "$(strip $(UNKNOWN_RUN_SELECTORS))" ]; then \
-		echo "Unknown test selector(s): $(UNKNOWN_RUN_SELECTORS)"; \
-		echo "Available selectors: $(TEST_SELECTORS)"; \
+	@if [ -n "$(strip $(UNKNOWN_BUILD_SELECTORS))" ]; then \
+		echo "Unknown run selector(s): $(UNKNOWN_BUILD_SELECTORS)"; \
+		echo "Available selectors: $(BUILD_SELECTORS)"; \
 		exit 2; \
 	fi
 	@build_failed=0; failed_build_list=""; \
@@ -158,9 +195,10 @@ clean:
 help:
 	@echo "Targets:";
 	@echo "  all   - build all discovered executables (best-effort)";
-	@echo "  list  - list discovered executable targets";
-	@echo "  run   - build and run discovered tests under test/ and shapes/test/";
-	@echo "          use selectors: make run RCString";
+	@echo "  build - build selected targets; use selectors: make build RCString src_histo";
+	@echo "  list  - list default build targets and available selectors";
+	@echo "  run   - build and run selected targets; defaults to test targets";
+	@echo "          use selectors: make run RCString ScopeLockTest";
 	@echo "  clean - remove build artifacts and generated binaries";
 	@echo "";
 	@echo "Overridable vars:";
@@ -171,8 +209,7 @@ help:
 prep:
 	@mkdir -p $(BIN_DIR) $(BUILD_DIR)
 
-
-CXXFLAGS += $(TESTS_DEFINES)
+# Selector goals are treated as target names for build/run.
 $(TEST_SELECTORS):
 	@:
 
@@ -216,16 +253,20 @@ $(BUILD_DIR)/external/%.c.o: ../%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -MMD -MP -c $< -o $@
 
+# Test-only defines stay off shared src/ objects.
+$(BUILD_DIR)/test/%.cpp.o: CPPFLAGS += $(TESTS_CPPFLAGS)
+$(BUILD_DIR)/external/utils/src/test_utils.cpp.o: CPPFLAGS += $(TESTS_CPPFLAGS)
 $(call src_to_obj,test/ScopeLockTest.cpp): CXXFLAGS += -pthread
 
 -include $(DEPFILES)
 
-RUN_SELECTORS := $(filter-out run,$(MAKECMDGOALS))
-KNOWN_RUN_SELECTORS := $(filter $(TEST_SELECTORS),$(RUN_SELECTORS))
-UNKNOWN_RUN_SELECTORS := $(filter-out $(TEST_SELECTORS),$(RUN_SELECTORS))
-RUN_BINARY_TARGETS := $(if $(strip $(RUN_SELECTORS)),$(foreach s,$(KNOWN_RUN_SELECTORS),$(SELECT_BIN_$(s))),$(TEST_BINARY_TARGETS))
+SELECTOR_GOALS := $(filter-out all build list run clean help prep,$(MAKECMDGOALS))
+KNOWN_BUILD_SELECTORS := $(filter $(BUILD_SELECTORS),$(SELECTOR_GOALS))
+UNKNOWN_BUILD_SELECTORS := $(filter-out $(BUILD_SELECTORS),$(SELECTOR_GOALS))
+BUILD_BINARY_TARGETS := $(if $(strip $(SELECTOR_GOALS)),$(foreach s,$(KNOWN_BUILD_SELECTORS),$(SELECT_BIN_$(s))),$(BINARY_TARGETS))
+RUN_BINARY_TARGETS := $(if $(strip $(SELECTOR_GOALS)),$(foreach s,$(KNOWN_BUILD_SELECTORS),$(SELECT_BIN_$(s))),$(TEST_BINARY_TARGETS))
 
-ifneq ($(filter run,$(MAKECMDGOALS)),)
+ifneq ($(filter build run,$(MAKECMDGOALS)),)
 %:
 	@:
 endif
