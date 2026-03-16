@@ -22,6 +22,8 @@
 #include "ThreadPoolTasks.hpp"   // ThreadPoolTasks
 #include "WaitableQueue.hpp"     // WaitableQueue
 
+#include "Handleton.hpp"
+
 namespace ilrd
 {
 
@@ -47,7 +49,8 @@ bool operator<(const Priority& p1, const Priority& p2);
 
 class ThreadPool
 {
-  private:
+    private:
+    friend class ilrd::Handleton<ThreadPool>;
     friend class ThreadFunc;
 
   public:
