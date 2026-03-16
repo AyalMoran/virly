@@ -39,6 +39,12 @@ ThreadMap::ProxyValue ThreadMap::operator[](const std::thread::id& id)
     return ProxyValue(*this, id);
 }
 
+ThreadMap::ThreadMap()
+    : m_mutex(), m_cv(), m_map()
+{
+    // empty
+}
+
 void ThreadMap::Clear()
 {
     std::lock_guard<std::mutex> lock(m_mutex);

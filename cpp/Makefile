@@ -11,10 +11,11 @@ CPPFLAGS ?=
 LDFLAGS ?=
 LDLIBS ?=
 
+
 BIN_DIR := bin
 BUILD_DIR := build
 
-CPPFLAGS += -Iinclude -Ishapes/inc
+CPPFLAGS += -Iinclude
 
 ALL_SRCS := $(shell find . -type f \
 	\( -name '*.cpp' -o -name '*.cc' -o -name '*.cxx' -o -name '*.C' -o -name '*.c' \) \
@@ -23,6 +24,8 @@ ALL_SRCS := $(shell find . -type f \
 MAIN_SRCS := $(shell for f in $(ALL_SRCS); do \
 	if awk '/^[[:space:]]*int[[:space:]]+main[[:space:]]*/ { found = 1; exit } END { exit !found }' "$$f"; then echo "$$f"; fi; \
 	done | sort)
+DEFAULT_MAIN_SRCS := $(filter src/% test/%,$(MAIN_SRCS))
+BUILD_MAIN_SRCS := $(if $(filter 1 yes true,$(INCLUDE_OTHER)),$(MAIN_SRCS),$(DEFAULT_MAIN_SRCS))
 
 LIB_SRCS := $(filter-out $(MAIN_SRCS),$(ALL_SRCS))
 
@@ -42,7 +45,7 @@ main_dir = $(patsubst %/,%,$(dir $(1)))
 test_file_base = $(basename $(notdir $(1)))
 test_selector = $(patsubst %Test,%,$(call test_file_base,$(1)))
 
-bin_name = $(if $(filter test/% shapes/test/%,$(1)),$(call test_file_base,$(1)),$(subst /,_,$(basename $(1))))
+bin_name = $(if $(filter test/% ,$(1)),$(call test_file_base,$(1)),$(subst /,_,$(basename $(1))))
 
 src_to_obj = $(if $(filter ../%,$(1)),$(BUILD_DIR)/external/$(patsubst ../%,%,$(1)).o,$(BUILD_DIR)/$(1).o)
 src_to_dep = $(patsubst %.o,%.d,$(call src_to_obj,$(1)))
@@ -51,22 +54,24 @@ needs_test_utils = $(filter $(1),$(TEST_UTILS_USERS))
 
 define module_lib_sources
 $(if $(filter test/%,$(1)),$(filter src/%,$(LIB_SRCS)),\
-$(if $(filter shapes/test/%,$(1)),$(filter shapes/src/%,$(LIB_SRCS)),\
-$(if $(filter other/%,$(1)),$(filter $(call main_dir,$(1))/%,$(LIB_SRCS)),\
-$(if $(filter src/%,$(1)),$(filter src/%,$(LIB_SRCS)),))))
+$(if $(filter src/%,$(1)),$(filter src/%,$(LIB_SRCS)),))
 endef
 
 define sources_for_main
 $(sort $(1) $(call module_lib_sources,$(1)) $(if $(call needs_test_utils,$(1)),$(TEST_UTILS_SRC),))
 endef
 
+
+
 BINARY_TARGETS :=
 TEST_BINARY_TARGETS :=
 
-BINARY_TARGETS := $(foreach m,$(MAIN_SRCS),$(BIN_DIR)/$(call bin_name,$(m)))
-TEST_MAIN_SRCS := $(filter test/% shapes/test/%,$(MAIN_SRCS))
+
+BINARY_TARGETS := $(foreach m,$(BUILD_MAIN_SRCS),$(BIN_DIR)/$(call bin_name,$(m)))
+TEST_MAIN_SRCS := $(filter test/% ,$(MAIN_SRCS))
 TEST_BINARY_TARGETS := $(foreach m,$(TEST_MAIN_SRCS),$(BIN_DIR)/$(call bin_name,$(m)))
 TEST_SELECTORS := $(sort $(foreach t,$(filter %Test.cpp,$(TEST_MAIN_SRCS)),$(call test_selector,$(t))))
+TESTS_DEFINES := -DCOMPILE_TIME_RAND=$(shell printf '%s' $$(( $$(date +%s%N) % 2048 + 64 ))) -DNPROD=2 -DCONS=2
 
 # Register one explicit link target per discovered main() source.
 define REGISTER_BINARY
@@ -160,11 +165,14 @@ help:
 	@echo "";
 	@echo "Overridable vars:";
 	@echo "  CXX, CC, CXXSTD, CXXFLAGS, CFLAGS, CPPFLAGS, LDFLAGS, LDLIBS";
+	@echo "  INCLUDE_OTHER=1 to include ./other demo targets in plain make";
 	@echo "  Example: make CXX=clang++ CXXSTD=c++20"
 
 prep:
 	@mkdir -p $(BIN_DIR) $(BUILD_DIR)
 
+
+CXXFLAGS += $(TESTS_DEFINES)
 $(TEST_SELECTORS):
 	@:
 

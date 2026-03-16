@@ -3,6 +3,12 @@
 namespace ilrd
 {
 
+Pauser::Pauser()
+    : m_mutex(), m_cv(), m_pauseRequested(false), m_targetPaused(0), m_currentPaused(0)
+{
+    // empty
+}
+
 void Pauser::ArmPause(std::size_t workers)
 {
     std::lock_guard<std::mutex> lock(m_mutex);

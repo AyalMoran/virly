@@ -5,7 +5,6 @@
  * Date    :
  **************************************************************/
 
- #include <chrono>     // std::chrono::milliseconds
  #include <iostream>   // std::cout, std::endl
  #include <thread>     // std::this_thread
  #include <vector>     // std::vector
@@ -75,8 +74,8 @@ class ThreadFunc
 };
 
 ThreadPool::ThreadPool(std::size_t num_threads)
-    : m_tasksQueue(TaskQueue()), m_workers(), m_threadsIsRunning(), m_seq(0),
-      m_acceptingTasks(true), m_isStopped(false), m_pauser()
+    : m_tasksQueue(TaskQueue()), m_workers(), m_threadsIsRunning(), m_pauser(), m_seq(0),
+      m_acceptingTasks(true), m_isStopped(false)
 {
     const std::size_t hc = std::thread::hardware_concurrency();
     const std::size_t threads =
