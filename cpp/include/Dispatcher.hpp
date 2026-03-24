@@ -1,8 +1,8 @@
 /**************************************************************
  * File    : Dispatcher.hpp
  * Author  : Ayal Moran
- * Reviewer:
- * Date    :
+ * Reviewer: Chaya T.
+ * Date    : 24-03-2026
  **************************************************************/
 #ifndef ILRD_DISPATCHER_HPP
 #define ILRD_DISPATCHER_HPP
@@ -124,10 +124,13 @@ void Callback<Event, Observer>::Notify(const Event& event)
 template <typename Event, typename Observer>
 void Callback<Event, Observer>::NotifyDeath()
 {
+    ACallback<Event>::NotifyDeath();
+
     if (nullptr != m_onDeath)
     {
         (m_observer.*m_onDeath)();
     }
+    
 }
 
 template <typename Event>
@@ -194,8 +197,8 @@ void Dispatcher<Event>::Unsubscribe(ACallback<Event>* callback) noexcept
         return;
     }
 
-    m_callbacks.erase(it);
     callback->SetDispatcher(nullptr);
+    m_callbacks.erase(it);
 }
 
 template <typename Event>

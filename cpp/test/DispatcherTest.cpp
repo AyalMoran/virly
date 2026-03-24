@@ -1,8 +1,8 @@
 /**************************************************************
  * File    : DispatcherTest.cpp
  * Author  : Ayal Moran
- * Reviewer:
- * Date    :
+ * Reviewer: Chaya T.
+ * Date    : 24-03-2026
  **************************************************************/
 
 #include <functional>
@@ -19,6 +19,11 @@ class DataModel
 {
   public:
     typedef int EventType;
+
+    DataModel()
+        : m_dispatcher()
+    {
+    }
 
     void Subscribe(ACallback<EventType>* callback)
     {
