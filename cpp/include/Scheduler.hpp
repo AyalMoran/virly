@@ -3,20 +3,21 @@
  * Author  : Ayal Moran
  * Reviewer:
  * Date    :
- **************************************************************/
+ **************************************************************/ 
 #ifndef ILRD_SCHEDULER_HPP
 #define ILRD_SCHEDULER_HPP
 
 #include <chrono>  // std::chrono::*
 #include <cstdint> // uint64_t
-#include <memory>  // std::shared_ptr
 #include <mutex>   // std::mutex
 #include <vector>  // std::vector
 #include <signal.h> // sigval
 
 #include "PriorityQueue.hpp" // PriorityQueue
 #include "Singleton.hpp"     // Singleton
+#include "SharedPtr.hpp"     // SharedPtr
 #include "WaitableQueue.hpp" // WaitableQueue
+#include "SharedPtr.hpp" // SharedPtr
 
 namespace ilrd
 {
@@ -32,21 +33,27 @@ class Scheduler
     };
 
     static Scheduler* GetInstance();
-    void AddTask(std::shared_ptr<ISchedulerTask> task,
+    void AddTask(SharedPtr<ISchedulerTask> task,
                  std::chrono::milliseconds dt_msec);
 
   private:
     struct SchedulerTaskWrapper
     {
-        std::shared_ptr<ISchedulerTask> m_schedulerTask;
+        SharedPtr<ISchedulerTask> m_schedulerTask;
         std::chrono::steady_clock::time_point m_executionTime;
         uint64_t m_seq;
-    };
+
+        SchedulerTaskWrapper& operator=(const SharedPtr<ISchedulerTask>& other)
+        {
+          m_schedulerTask = other;
+          return *this;
+        }
+      };
 
     struct SchedulerTaskCompare
     {
-        bool operator()(const std::shared_ptr<SchedulerTaskWrapper>& lhs,
-                        const std::shared_ptr<SchedulerTaskWrapper>& rhs) const;
+        bool operator()(const SharedPtr<SchedulerTaskWrapper>& lhs,
+                        const SharedPtr<SchedulerTaskWrapper>& rhs) const;
     };
 
     Scheduler();
@@ -59,7 +66,7 @@ class Scheduler
     void HandleTimer();
     void ResetTimerLocked();
 
-    using TaskPtr = std::shared_ptr<SchedulerTaskWrapper>;
+    using TaskPtr = SharedPtr<SchedulerTaskWrapper>;
     using TaskQueue =
         WaitableQueue<TaskPtr, PriorityQueue<TaskPtr, std::vector<TaskPtr>,
                                              SchedulerTaskCompare>>;

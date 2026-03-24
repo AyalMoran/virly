@@ -3,7 +3,7 @@
  * Author  : Ayal Moran
  * Reviewer:
  * Date    :
- **************************************************************/
+ **************************************************************/ 
 
 #include <atomic>
 #include <chrono>
@@ -12,6 +12,7 @@
 #include <vector>
 
 #include "Scheduler.hpp"
+#include "SharedPtr.hpp" // SharedPtr
 #include "test_utils.hpp"
 
 using namespace ilrd;
@@ -80,7 +81,7 @@ void Test_SingleTaskTiming()
     const milliseconds requested_delay(120);
     std::atomic<long long> elapsed_ms(-1);
 
-    std::shared_ptr<Scheduler::ISchedulerTask> task(new FunctionSchedulerTask(
+    SharedPtr<Scheduler::ISchedulerTask> task(new FunctionSchedulerTask(
         [&done, &elapsed_ms, start]() {
             const auto elapsed = duration_cast<milliseconds>(
                 steady_clock::now() - start);
@@ -112,14 +113,14 @@ void Test_EarlierTaskPreemptsLater()
     std::atomic<int> late_order(-1);
     std::atomic<int> done(0);
 
-    std::shared_ptr<Scheduler::ISchedulerTask> late_task(
+    SharedPtr<Scheduler::ISchedulerTask> late_task(
         new FunctionSchedulerTask([&]() {
             const int idx = order_idx.fetch_add(1, std::memory_order_relaxed);
             late_order.store(idx, std::memory_order_relaxed);
             done.fetch_add(1, std::memory_order_release);
         }));
 
-    std::shared_ptr<Scheduler::ISchedulerTask> early_task(
+    SharedPtr<Scheduler::ISchedulerTask> early_task(
         new FunctionSchedulerTask([&]() {
             const int idx = order_idx.fetch_add(1, std::memory_order_relaxed);
             early_order.store(idx, std::memory_order_relaxed);
@@ -160,7 +161,7 @@ void Test_ConcurrentAddTaskStress()
             for (int j = 0; j < tasks_per_thread; ++j)
             {
                 const int delay_ms = (i + j) % 30;
-                std::shared_ptr<Scheduler::ISchedulerTask> task(
+                SharedPtr<Scheduler::ISchedulerTask> task(
                     new FunctionSchedulerTask([&done]() {
                         done.fetch_add(1, std::memory_order_release);
                     }));

@@ -3,19 +3,20 @@
  * Author  : Ayal Moran
  * Reviewer:
  * Date    :
- **************************************************************/
+ **************************************************************/ 
 
  /*============================ INCLUDES ============================*/
  
  #include <cerrno>    // errno
 #include <cstring>   // std::strerror
+#include <iostream>
 #include <stdexcept> // std::runtime_error
 #include <chrono>    // std::chrono::*
 #include <time.h>   // timespec
 #include <signal.h> // sigval
+#include <cassert> // assert
 
-
-
+#include "SharedPtr.hpp" // SharedPtr
 #include "Scheduler.hpp"
 #include "Singleton.hpp"
 
@@ -67,7 +68,10 @@ Scheduler::Scheduler()
 
 Scheduler::~Scheduler()
 {
-    timer_delete(m_timer);
+    if(0 != timer_delete(m_timer))
+    {
+        std::cerr << "Failed to delete timer: " << std::strerror(errno) << std::endl;
+    }
 }
 
 bool Scheduler::SchedulerTaskCompare::operator()(const TaskPtr& lhs,
@@ -81,13 +85,10 @@ bool Scheduler::SchedulerTaskCompare::operator()(const TaskPtr& lhs,
     return lhs->m_seq > rhs->m_seq;
 }
 
-void Scheduler::AddTask(std::shared_ptr<ISchedulerTask> task,
+void Scheduler::AddTask(SharedPtr<ISchedulerTask> task,
                         std::chrono::milliseconds dt_msec)
 {
-    if (!task)
-    {
-        return;
-    }
+    assert(task);
 
     if (dt_msec < std::chrono::milliseconds::zero())
     {
@@ -121,12 +122,13 @@ void Scheduler::AddTask(std::shared_ptr<ISchedulerTask> task,
 
 void Scheduler::OnTimer(sigval sv)
 {
-    static_cast<Scheduler*>(sv.sival_ptr)->HandleTimer();
+    Scheduler::GetInstance()->HandleTimer();
+    (void)sv;
 }
 
 void Scheduler::HandleTimer()
 {
-    std::shared_ptr<ISchedulerTask> task_to_run;
+    SharedPtr<ISchedulerTask> task_to_run;
 
     {
         std::lock_guard<std::mutex> lock(m_mutex);
@@ -135,8 +137,15 @@ void Scheduler::HandleTimer()
             return;
         }
 
+        const auto now = std::chrono::steady_clock::now();
+        if (now < m_armedTask->m_executionTime)
+        {
+            ResetTimerLocked();
+            return;
+        }
+
         task_to_run = m_armedTask->m_schedulerTask;
-        m_armedTask.reset();
+        m_armedTask = TaskPtr(nullptr);
 
         TaskPtr next_task;
         if (m_tasks.Pop(std::chrono::milliseconds(0), next_task))

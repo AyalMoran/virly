@@ -35,7 +35,7 @@ class TPKillTask : public TPTaskBase
 template <typename T> class TPFutureTask : public TPTaskBase
 {
   public:
-    explicit TPFutureTask(std::function<T()> fnc) : m_fnc(fnc), m_sem(0)
+    explicit TPFutureTask(std::function<T()> fnc) : m_fnc(fnc), m_ret(), m_sem(0)
     {
     }
 

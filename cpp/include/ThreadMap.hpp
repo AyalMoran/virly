@@ -26,6 +26,8 @@ class ThreadMap
         std::thread::id m_id;
     };
 
+    explicit ThreadMap();
+    
     ProxyValue operator[](const std::thread::id& id);
     void Clear();
     std::vector<std::thread::id> ExtractStopped(std::size_t max_count);
