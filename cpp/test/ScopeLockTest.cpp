@@ -21,7 +21,7 @@ void IncOne(std::vector<int>& numbers)
 
 const int NUM_THREADS = 16;
 
-int main(int argc, char** argv)
+int main()
 {
     std::vector<std::thread> threads(NUM_THREADS);
     std::vector<int> numbers(100000, 0);

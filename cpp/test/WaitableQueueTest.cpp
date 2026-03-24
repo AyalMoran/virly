@@ -199,9 +199,9 @@ int main(void)
 
 static void RegisterTests(void)
 {
-    //  REGISTER_TEST(TestStartsEmpty);
-    //  REGISTER_TEST(TestPushPopSingle);
-    //  REGISTER_TEST(TestPriorityOrderWithPriorityContainer);
-    //  REGISTER_TEST(TestPopBlocksUntilPush);
+    REGISTER_TEST(TestStartsEmpty);
+    REGISTER_TEST(TestPushPopSingle);
+    REGISTER_TEST(TestPriorityOrderWithPriorityContainer);
+    REGISTER_TEST(TestPopBlocksUntilPush);
     REGISTER_TEST(TestProducerConsumer);
 }

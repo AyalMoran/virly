@@ -71,8 +71,6 @@ class WaitableQueue
     void Pop(T& out_param);
     bool Pop(std::chrono::milliseconds time_out_ms, T& out_param);
 
-    // CODE_REVIEW: add documentation on the fragility of this bool's integrity
-    // in a multithreaded application
     bool IsEmpty();
 
   private:
@@ -95,7 +93,6 @@ WaitableQueue<T, CONTAINER>::WaitableQueue() : m_mutex(), m_cond_var(), m_q()
 template <typename T, class CONTAINER>
 void WaitableQueue<T, CONTAINER>::Push(const T& to_push)
 {
-    // CODE_REVIEW: use scope resolution
     {
         std::unique_lock<std::timed_mutex> lock(m_mutex);
         m_q.push(Wrap(to_push));
@@ -119,7 +116,6 @@ template <typename T, class CONTAINER>
 bool WaitableQueue<T, CONTAINER>::Pop(std::chrono::milliseconds time_out_ms,
                                       T& out_param)
 {
-    // CODE_REVIEW: use unique_lock with constructor with now + time_out_ms
     std::chrono::time_point timeout_point =
         std::chrono::steady_clock::now() + time_out_ms;
     std::unique_lock<std::timed_mutex> lock(m_mutex, timeout_point);

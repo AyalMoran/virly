@@ -11,6 +11,8 @@ namespace ilrd
 class Pauser
 {
   public:
+    explicit Pauser();
+
     void ArmPause(std::size_t workers);
     void Pause();
     void WaitUntilPaused();

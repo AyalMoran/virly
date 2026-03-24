@@ -27,12 +27,6 @@ static bool PrintFunction(void)
     return true;
 }
 
-static bool LastTaskFunction(void)
-{
-    std::cout << "LastTaskFunction: " << std::this_thread::get_id()
-              << std::endl;
-    return true;
-}
 /******************************************************
  * START OF ACTUAL TESTS
  ******************************************************/
@@ -98,11 +92,6 @@ static void PrintLOW()
 {
     ordering_array[ordering_index.fetch_add(1)] = 1;
 }
-static void PrintLastTask()
-{
-    std::cout << "PrintLastTask: " << std::this_thread::get_id() << std::endl;
-}
-
 static void PrintAdminTask()
 {
     ordering_array[ordering_index.fetch_add(1)] = 4;
