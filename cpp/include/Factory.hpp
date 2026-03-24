@@ -53,10 +53,7 @@ class Factory
 
     void Add(const Key& key, Creator creator)
     {
-        if (!m_creators.insert(std::make_pair(key, std::move(creator))).second)
-        {
-            throw DuplicateKeyException();
-        }
+        m_creators[key] = std::move(creator);
     }
 
     ProductPtr Create(const Key& key, CtorArgs... args) const
