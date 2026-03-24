@@ -15,6 +15,7 @@
 
 #include "PriorityQueue.hpp" // PriorityQueue
 #include "Singleton.hpp"     // Singleton
+#include "SharedPtr.hpp"     // SharedPtr
 #include "WaitableQueue.hpp" // WaitableQueue
 #include "SharedPtr.hpp" // SharedPtr
 
@@ -41,7 +42,13 @@ class Scheduler
         SharedPtr<ISchedulerTask> m_schedulerTask;
         std::chrono::steady_clock::time_point m_executionTime;
         uint64_t m_seq;
-    };
+
+        SchedulerTaskWrapper& operator=(const SharedPtr<ISchedulerTask>& other)
+        {
+          m_schedulerTask = other;
+          return *this;
+        }
+      };
 
     struct SchedulerTaskCompare
     {
