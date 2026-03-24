@@ -55,6 +55,8 @@ needs_test_utils = $(filter $(1),$(TEST_UTILS_USERS))
 test_module_sources = $(wildcard src/$(call test_selector,$(1)).cpp) $(TEST_EXTRA_SRCS_$(call test_selector,$(1)))
 
 TEST_EXTRA_SRCS_PriorityQueue := src/WaitableQueue.cpp
+TEST_EXTRA_SRCS_AsyncInjection := src/Scheduler.cpp
+TEST_EXTRA_SRCS_DirMonitor := src/DllLoader.cpp
 TEST_EXTRA_SRCS_ThreadPool := src/Pauser.cpp src/PriorityQueue.cpp src/ThreadMap.cpp src/ThreadPool.cpp src/ThreadPoolTasks.cpp src/WaitableQueue.cpp
 TEST_EXTRA_SRCS_WaitableQueue := src/PriorityQueue.cpp
 
@@ -257,6 +259,10 @@ $(BUILD_DIR)/external/%.c.o: ../%.c
 $(BUILD_DIR)/test/%.cpp.o: CPPFLAGS += $(TESTS_CPPFLAGS)
 $(BUILD_DIR)/external/utils/src/test_utils.cpp.o: CPPFLAGS += $(TESTS_CPPFLAGS)
 $(call src_to_obj,test/ScopeLockTest.cpp): CXXFLAGS += -pthread
+$(call src_to_obj,src/DirMonitor.cpp): CXXFLAGS += -pthread
+$(call src_to_obj,test/DirMonitorTest.cpp): CXXFLAGS += -pthread
+$(BIN_DIR)/DirMonitorTest: LDLIBS += -ldl -pthread
+$(BIN_DIR)/DllLoaderTest: LDLIBS += -ldl
 
 -include $(DEPFILES)
 
