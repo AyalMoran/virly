@@ -1,0 +1,555 @@
+openapi: 3.0.3
+info:
+  title: Bank FS API
+  version: 1.0.0
+  description: |
+    Swagger-compatible OpenAPI document for the Bank FS backend.
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+tags:
+  - name: Authentication
+  - name: Account
+  - name: Transactions
+paths:
+  /api/auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: |
+        Creates a pending user account, generates a short-lived verification
+        link, and sends it by email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              default:
+                value:
+                  email: user@example.com
+                  password: StrongPass123!
+                  phone: "+15551234567"
+      responses:
+        '201':
+          description: Verification email sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/verify:
+    get:
+      tags:
+        - Authentication
+      summary: Verify email using a verification link token
+      description: Confirms the user's email and activates the account.
+      parameters:
+        - in: query
+          name: token
+          required: true
+          schema:
+            type: string
+          description: Short-lived email verification token from the verification link
+      responses:
+        '200':
+          description: Email verified successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccessResponse'
+        '400':
+          description: Invalid or expired verification token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/resend-verification:
+    post:
+      tags:
+        - Authentication
+      summary: Resend an email verification link
+      description: |
+        Generates a fresh short-lived verification link for a registered,
+        unverified user and sends it by email. Unknown email addresses and
+        already verified accounts receive the same generic success response to
+        avoid revealing account existence or verification state.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendVerificationRequest'
+            examples:
+              default:
+                value:
+                  email: user@example.com
+      responses:
+        '200':
+          description: Verification email sent or request accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Log in with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              default:
+                value:
+                  email: user@example.com
+                  password: StrongPass123!
+      responses:
+        '200':
+          description: Login succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccessResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Account is not verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Log out the current user
+      description: |
+        Stateless JWT logout commonly happens on the client by discarding the
+        token. This endpoint exists for symmetry and optional server-side token
+        invalidation or audit logging.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Logout acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/accounts/me:
+    get:
+      tags:
+        - Account
+      summary: Get the current user's account summary
+      description: Returns the current balance, paginated transactions, and pagination metadata.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Account summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSummaryResponse'
+        '401':
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/transactions:
+    get:
+      tags:
+        - Transactions
+      summary: List recent transactions for the authenticated user
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - in: query
+          name: counterparty
+          schema:
+            type: string
+            format: email
+          description: Filter transactions by counterparty email
+      responses:
+        '200':
+          description: Recent transaction list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionsResponse'
+        '401':
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Transactions
+      summary: Transfer money to another registered user
+      description: |
+        Creates a debit transaction for the sender and a matching credit
+        transaction for the receiver.
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRequest'
+            examples:
+              default:
+                value:
+                  recipientEmail: receiver@example.com
+                  amount: 125.5
+                  reason: Dinner split
+      responses:
+        '201':
+          description: Transfer completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+        '400':
+          description: Validation error, insufficient balance, or invalid amount
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Recipient not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  parameters:
+    PageParam:
+      in: query
+      name: page
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      description: Page number to return
+    LimitParam:
+      in: query
+      name: limit
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 10
+      description: Maximum number of records to return
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - phone
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: StrongPass123!
+        phone:
+          type: string
+          description: E.164 formatted phone number
+          example: "+15551234567"
+
+    RegisterResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: Verification email sent to user@example.com
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+
+    ResendVerificationRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+
+    AuthSuccessResponse:
+      type: object
+      required:
+        - token
+        - user
+      properties:
+        token:
+          type: string
+          description: JWT access token
+          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example.signature
+        user:
+          $ref: '#/components/schemas/User'
+
+    User:
+      type: object
+      required:
+        - id
+        - email
+        - balance
+      properties:
+        id:
+          type: string
+          example: 6630c4b2e93e5f6c8a321001
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        balance:
+          type: number
+          format: double
+          example: 1042.75
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-04-28T09:15:00.000Z"
+
+    Transaction:
+      type: object
+      required:
+        - id
+        - amount
+        - counterpartyEmail
+        - date
+      properties:
+        id:
+          type: string
+          example: 6630c68ce93e5f6c8a321099
+        amount:
+          type: number
+          format: double
+          description: Signed amount. Debits are negative and credits are positive.
+          example: -125.5
+        counterpartyEmail:
+          type: string
+          format: email
+          example: receiver@example.com
+        date:
+          type: string
+          format: date-time
+          example: "2026-04-28T10:00:00.000Z"
+        reason:
+          type: string
+          nullable: true
+          example: Dinner split
+
+    AccountSummaryResponse:
+      type: object
+      required:
+        - balance
+        - transactions
+        - pagination
+      properties:
+        balance:
+          type: number
+          format: double
+          example: 1042.75
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    TransactionsResponse:
+      type: object
+      required:
+        - transactions
+        - pagination
+      properties:
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    TransferRequest:
+      type: object
+      required:
+        - recipientEmail
+        - amount
+      properties:
+        recipientEmail:
+          type: string
+          format: email
+          example: receiver@example.com
+        amount:
+          type: number
+          format: double
+          exclusiveMinimum: true
+          minimum: 0
+          example: 125.5
+        reason:
+          type: string
+          maxLength: 200
+          example: Dinner split
+
+    TransferResponse:
+      type: object
+      required:
+        - message
+        - transaction
+        - newBalance
+      properties:
+        message:
+          type: string
+          example: Transfer completed successfully.
+        transaction:
+          $ref: '#/components/schemas/Transaction'
+        newBalance:
+          type: number
+          format: double
+          example: 917.25
+
+    Pagination:
+      type: object
+      required:
+        - page
+        - limit
+        - total
+        - totalPages
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        total:
+          type: integer
+          example: 42
+        totalPages:
+          type: integer
+          example: 5
+
+    MessageResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: Logged out successfully
+
+    ErrorResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: Invalid credentials
+        details:
+          type: array
+          items:
+            type: string
+        issues:
+          type: array
+          items:
+            type: object
+            required:
+              - path
+              - message
+            properties:
+              path:
+                type: string
+                example: email
+              message:
+                type: string
+                example: Invalid email
