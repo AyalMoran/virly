@@ -91,7 +91,7 @@ SRCS_$(2) := $(call sources_for_main,$(1))
 $(BIN_DIR)/$(call bin_name,$(1)): $(foreach s,$(call sources_for_main,$(1)),$(call src_to_obj,$(s))) | $(BIN_DIR)
 	@mkdir -p $$(@D)
 	$(if $(filter %.cpp %.cc %.cxx %.C,$(call sources_for_main,$(1))),$(CXX),$(CC)) $(LDFLAGS) $$^ $(LDLIBS) -o $$@
-$(if $(filter test/ScopeLockTest.cpp,$(1)),$(BIN_DIR)/$(call bin_name,$(1)): LDLIBS += -pthread,)
+$(if $(filter test/ScopeLockTest.cpp test/MutexTest.cpp,$(1)),$(BIN_DIR)/$(call bin_name,$(1)): LDLIBS += -pthread,)
 endef
 
 $(foreach m,$(MAIN_SRCS),$(eval $(call REGISTER_BINARY,$(m),$(call sanitize,$(m)))))

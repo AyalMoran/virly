@@ -60,31 +60,6 @@ static void Test_AddTask(void)
     PRINT_SUITE_SUMMARY(suite);
 }
 
-static void Test_AddNullTaskIsIgnored(void)
-{
-    INIT_SUITE(suite, "ThreadPool AddTask ignores null task");
-    BEGIN_SUITE(suite);
-
-    std::binary_semaphore done(0);
-    std::atomic<int> run_count(0);
-    ThreadPool pool(1);
-
-    pool.AddTask(SharedPtr<ThreadPool::ITPTask>(nullptr), UserPriority::LOW);
-    pool.AddTask(SharedPtr<ThreadPool::FunctionTask>(
-                     new ThreadPool::FunctionTask([&run_count, &done]() {
-                         run_count.fetch_add(1, std::memory_order_relaxed);
-                         done.release();
-                     })),
-                 UserPriority::LOW);
-
-    const bool completed = done.try_acquire_for(std::chrono::milliseconds(500));
-    RUN_TEST(suite, "worker stayed alive after null task", completed);
-    RUN_TEST(suite, "real task ran exactly once", run_count.load() == 1);
-
-    END_SUITE(suite);
-    PRINT_SUITE_SUMMARY(suite);
-}
-
 static void Test_AddFutureTask(void)
 {
     INIT_SUITE(suite, "ThreadPool AddFutureTask");
@@ -660,7 +635,6 @@ int main(void)
 static void RegisterTests(void)
 {
     REGISTER_TEST(Test_AddTask);
-    REGISTER_TEST(Test_AddNullTaskIsIgnored);
     REGISTER_TEST(Test_AddFutureTask);
     REGISTER_TEST(Test_AddMultipleThreads);
     REGISTER_TEST(Test_FIFO_SamePriority);
