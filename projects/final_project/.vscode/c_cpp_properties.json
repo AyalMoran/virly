@@ -1,0 +1,40 @@
+{
+  "configurations": [
+    {
+      "name": "Linux",
+      "compilerPath": "/usr/bin/g++",
+      "intelliSenseMode": "gcc-x64",
+      "cppStandard": "c++20",
+      "cStandard": "c89",
+      "compileCommands": "${workspaceFolder}/compile_commands.json",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "${workspaceFolder}/ds/inc/**",
+        "${workspaceFolder}/algo/inc/**",
+        "${workspaceFolder}/exams/inc/**",
+        "${workspaceFolder}/other/inc/**",
+        "${workspaceFolder}/projects/inc/**",
+        "${workspaceFolder}/quizzes/inc/**",
+        "${workspaceFolder}/system_programming/inc/**",
+        "${workspaceFolder}/utils/inc/**",
+        "${workspaceFolder}/cpp/include/**",
+        "${workspaceFolder}/concrete/master/include/**",
+        "${workspaceFolder}/concrete/minion/include/**",
+        "${workspaceFolder}/concrete/common/include/**",
+        "${workspaceFolder}/utils/inc/**",
+        "${workspaceFolder}/framework/include/**",
+        "${workspaceFolder}/framework/test/plugins/**",
+        "${workspaceFolder}/framework/test/**",
+        "${workspaceFolder}/framework/src/**",
+        "${workspaceFolder}/framework/test/plugins/**",
+        "${workspaceFolder}/concrete/master/include/nbd/**"
+        
+      ],
+      "browse": {
+        "path": ["${workspaceFolder}"],
+        "limitSymbolsToIncludedHeaders": false
+      }
+    }
+  ],
+  "version": 4
+}
