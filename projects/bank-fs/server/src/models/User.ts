@@ -22,6 +22,11 @@ const userSchema = new Schema(
       type: Boolean,
       default: false
     },
+    personalDetails: {
+      type: Schema.Types.ObjectId,
+      ref: "PersonalDetails",
+      default: null
+    },
     verificationTokenHash: {
       type: String,
       default: null

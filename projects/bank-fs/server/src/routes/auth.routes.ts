@@ -10,6 +10,7 @@ import {
   verifyVerificationToken
 } from "../utils/auth.js";
 import { randomStartingBalance } from "../utils/otp.js";
+import { ensurePersonalDetails, toAuthUserDto } from "../utils/personal-details.js";
 import { hashToken, verificationTokenExpiry } from "../utils/token.js";
 
 //#region Type Definitions
@@ -53,6 +54,16 @@ async function sendNewVerificationLink(user: InstanceType<typeof User>) {
   )}`;
   await sendVerificationEmail(user.email, verificationUrl);
 }
+
+async function createAuthResponse(user: InstanceType<typeof User>) {
+  const token = createToken(user.id);
+  const personalDetails = await ensurePersonalDetails(user);
+
+  return {
+    token,
+    user: toAuthUserDto(user, personalDetails)
+  };
+}
 //#endregion
 
 //#region Routes
@@ -73,6 +84,7 @@ router.post("/register", async (req, res, next) => {
       phone,
       balance: 0
     });
+    await ensurePersonalDetails(user);
 
     await sendNewVerificationLink(user);
 
@@ -101,15 +113,7 @@ router.get("/verify", async (req, res, next) => {
     }
 
     if (user.isVerified) {
-      const authToken = createToken(user.id);
-      return res.json({
-        token: authToken,
-        user: {
-          id: user.id,
-          email: user.email,
-          balance: user.balance
-        }
-      });
+      return res.json(await createAuthResponse(user));
     }
 
     const isExpired =
@@ -128,15 +132,7 @@ router.get("/verify", async (req, res, next) => {
     user.verificationTokenExpiresAt = null;
     await user.save();
 
-    const authToken = createToken(user.id);
-    return res.json({
-      token: authToken,
-      user: {
-        id: user.id,
-        email: user.email,
-        balance: user.balance
-      }
-    });
+    return res.json(await createAuthResponse(user));
   } catch (error) {
     next(error);
   }
@@ -179,16 +175,7 @@ router.post("/login", async (req, res, next) => {
       return res.status(403).json({ message: "Verify your email before logging in." });
     }
 
-    const token = createToken(user.id);
-
-    return res.json({
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        balance: user.balance
-      }
-    });
+    return res.json(await createAuthResponse(user));
   } catch (error) {
     next(error);
   }

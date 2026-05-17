@@ -1,0 +1,75 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "ANSI C build",
+            "type": "shell",
+            "command": "gcc",
+            "args": [
+                "-ansi",
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-pedantic",
+                "-g",
+                "src/*.cpp",
+                "-Iinclude",
+                "-o",
+                "bin/app"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "CPP2C",
+            "type": "shell",
+            "command": "gcc cpp2c_trans.c -o trans_out -g && ./trans_out > trans.txt",
+            "args": [],
+            "options": {
+                "cwd": "${workspaceFolder}/cpp/other/cpp2c"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+        {
+            "label": "ext2 build",
+            "type": "shell",
+            "command": "gcc",
+            "args": [
+                "-Wall",
+                "-Wextra",
+                "-Werror",
+                "-pedantic",
+                "-g",
+                "test/ext2Test.c",
+                "src/ext2.c",
+                "-Iinc",
+                "-o",
+                "bin/ext2"
+            ],
+            "options": {
+                "cwd": "${workspaceFolder}/system_programming"
+            },
+            "group": {
+                "kind": "build",
+                "isDefault": true
+            },
+            "problemMatcher": [
+                "$gcc"
+            ]
+        },
+    ]
+}
