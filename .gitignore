@@ -35,3 +35,4 @@
 !Makefile
 
 
+projects/bank-fs/scripts/seed-transactions.sh
