@@ -206,6 +206,101 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/accounts/personal-details:
+    get:
+      tags:
+        - Account
+      summary: Get the current user's personal details
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Personal details state and values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalDetailsResponse'
+        '401':
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Account
+      summary: Save the current user's personal details
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonalDetailsRequest'
+      responses:
+        '200':
+          description: Personal details saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalDetailsResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/accounts/personal-details/skip:
+    post:
+      tags:
+        - Account
+      summary: Skip personal details for the current session
+      description: Keeps the personal details status as not_provided so the user is prompted again on future logins.
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Personal details prompt skipped
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MessageResponse'
+                  - $ref: '#/components/schemas/PersonalDetailsResponse'
+        '401':
+          description: Missing or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/transactions:
     get:
       tags:
@@ -382,6 +477,9 @@ components:
         - id
         - email
         - balance
+        - personalDetailsId
+        - personalDetailsStatus
+        - needsPersonalDetails
       properties:
         id:
           type: string
@@ -394,10 +492,170 @@ components:
           type: number
           format: double
           example: 1042.75
+        personalDetailsId:
+          type: string
+          example: 6630c4b2e93e5f6c8a321010
+        personalDetailsStatus:
+          type: string
+          enum:
+            - not_provided
+            - provided
+          example: not_provided
+        needsPersonalDetails:
+          type: boolean
+          example: true
         createdAt:
           type: string
           format: date-time
           example: "2026-04-28T09:15:00.000Z"
+
+    PersonalDetailsRequest:
+      type: object
+      required:
+        - firstName
+        - lastName
+        - dateOfBirth
+        - address
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Ada
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Lovelace
+        dateOfBirth:
+          type: string
+          format: date
+          example: "1990-01-15"
+        address:
+          $ref: '#/components/schemas/PersonalDetailsAddressRequest'
+
+    PersonalDetailsAddressRequest:
+      type: object
+      required:
+        - country
+        - city
+        - street
+        - postalCode
+      properties:
+        country:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: Israel
+        stateRegion:
+          type: string
+          nullable: true
+          maxLength: 120
+          example: Tel Aviv District
+        city:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: Tel Aviv
+        street:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: Rothschild Boulevard 1
+        addressLine2:
+          type: string
+          nullable: true
+          maxLength: 120
+          example: Apt 4
+        postalCode:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: "6516101"
+
+    PersonalDetails:
+      type: object
+      required:
+        - id
+        - status
+        - firstName
+        - lastName
+        - dateOfBirth
+        - address
+        - lastSkippedAt
+      properties:
+        id:
+          type: string
+          example: 6630c4b2e93e5f6c8a321010
+        status:
+          type: string
+          enum:
+            - not_provided
+            - provided
+          example: provided
+        firstName:
+          type: string
+          nullable: true
+          example: Ada
+        lastName:
+          type: string
+          nullable: true
+          example: Lovelace
+        dateOfBirth:
+          type: string
+          nullable: true
+          format: date-time
+          example: "1990-01-15T00:00:00.000Z"
+        address:
+          $ref: '#/components/schemas/PersonalDetailsAddress'
+        lastSkippedAt:
+          type: string
+          nullable: true
+          format: date-time
+          example: "2026-04-28T09:30:00.000Z"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-04-28T09:15:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-04-28T09:20:00.000Z"
+
+    PersonalDetailsAddress:
+      type: object
+      required:
+        - country
+        - city
+        - street
+        - postalCode
+      properties:
+        country:
+          type: string
+          nullable: true
+        stateRegion:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        street:
+          type: string
+          nullable: true
+        addressLine2:
+          type: string
+          nullable: true
+        postalCode:
+          type: string
+          nullable: true
+
+    PersonalDetailsResponse:
+      type: object
+      required:
+        - personalDetails
+      properties:
+        personalDetails:
+          $ref: '#/components/schemas/PersonalDetails'
 
     Transaction:
       type: object
@@ -432,6 +690,7 @@ components:
       type: object
       required:
         - balance
+        - personalDetails
         - transactions
         - pagination
       properties:
@@ -439,6 +698,25 @@ components:
           type: number
           format: double
           example: 1042.75
+        personalDetails:
+          type: object
+          required:
+            - id
+            - status
+            - needsPersonalDetails
+          properties:
+            id:
+              type: string
+              example: 6630c4b2e93e5f6c8a321010
+            status:
+              type: string
+              enum:
+                - not_provided
+                - provided
+              example: not_provided
+            needsPersonalDetails:
+              type: boolean
+              example: true
         transactions:
           type: array
           items:
