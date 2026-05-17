@@ -714,6 +714,10 @@ components:
                 - not_provided
                 - provided
               example: not_provided
+            firstName:
+              type: string
+              nullable: true
+              example: Ada
             needsPersonalDetails:
               type: boolean
               example: true

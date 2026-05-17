@@ -51,6 +51,7 @@ export type AccountSummary = {
   personalDetails: {
     id: string;
     status: PersonalDetailsStatus;
+    firstName: string | null;
     needsPersonalDetails: boolean;
   };
   transactions: Transaction[];

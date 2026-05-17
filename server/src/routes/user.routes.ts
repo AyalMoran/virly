@@ -68,6 +68,7 @@ router.get("/me", requireAuth, async (req, res, next) => {
       personalDetails: {
         id: personalDetails.id,
         status: personalDetails.status,
+        firstName: personalDetails.firstName,
         needsPersonalDetails: personalDetails.status !== "provided"
       },
       transactions: transactions.map(toTransactionDto),
