@@ -87,6 +87,7 @@ router.post("/", requireAuth, async (req, res, next) => {
             counterpartyEmail: recipient.email,
             amount,
             type: "debit",
+            directionLabel: "Sent",
             reason
           },
           {
@@ -94,6 +95,7 @@ router.post("/", requireAuth, async (req, res, next) => {
             counterpartyEmail: sender.email,
             amount,
             type: "credit",
+            directionLabel: "Received",
             reason
           }
         ],
