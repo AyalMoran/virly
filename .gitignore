@@ -19,6 +19,11 @@
 !*.yaml
 !*.png
 !*.env
+!*.css
+!*.html
+!*.xml
+!*.yml
+!*.conf
 
 # MAKEFILES
 !*.mk
