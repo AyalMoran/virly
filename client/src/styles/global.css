@@ -903,14 +903,33 @@ textarea::placeholder {
   grid-template-columns: minmax(0, 1fr) minmax(420px, 0.72fr);
   min-height: 100vh;
   overflow: hidden;
-  background: linear-gradient(
-    to right,
-    rgba(220, 232, 196, 0.94) 0%,
-    rgba(220, 232, 196, 0.92) 43%,
-    rgba(174, 189, 158, 0.76) 52%,
-    rgba(29, 38, 31, 0.82) 64%,
-    rgba(29, 38, 31, 0.88) 100%
-  );
+  background:
+    radial-gradient(circle at 16% 22%, rgba(245, 250, 225, 0.48), transparent 18rem),
+    radial-gradient(circle at 36% 18%, rgba(194, 208, 153, 0.24), transparent 20rem),
+    radial-gradient(circle at 46% 76%, rgba(125, 167, 140, 0.18), transparent 23rem),
+    radial-gradient(circle at 68% 48%, rgba(53, 133, 142, 0.16), transparent 20rem),
+    linear-gradient(115deg, rgba(53, 133, 142, 0.2), rgba(125, 167, 140, 0.1) 28%, transparent 48%),
+    linear-gradient(
+      to right,
+      rgba(220, 232, 196, 0.72) 0%,
+      rgba(226, 236, 201, 0.74) 10%,
+      rgba(229, 238, 204, 0.76) 20%,
+      rgba(218, 231, 194, 0.8) 30%,
+      rgba(207, 222, 184, 0.84) 40%,
+      rgba(196, 215, 177, 0.86) 46%,
+      rgba(183, 204, 170, 0.8) 50%,
+      rgba(169, 196, 164, 0.74) 53%,
+      rgba(151, 184, 158, 0.66) 56%,
+      rgba(139, 181, 164, 0.56) 58%,
+      rgba(123, 182, 173, 0.38) 60%,
+      rgba(107, 159, 151, 0.44) 64%,
+      rgba(92, 148, 144, 0.42) 70%,
+      rgba(77, 137, 139, 0.38) 76%,
+      rgba(95, 151, 145, 0.34) 82%,
+      rgba(132, 176, 157, 0.32) 88%,
+      rgba(176, 205, 178, 0.31) 94%,
+      rgba(220, 232, 196, 0.3) 100%
+    );
 }
 
 .auth-page::before {
@@ -920,14 +939,14 @@ textarea::placeholder {
   z-index: 0;
   pointer-events: none;
   background:
-    radial-gradient(circle at 24% 30%, rgba(230, 238, 201, 0.34), transparent 24rem),
+    radial-gradient(circle at 24% 30%, rgba(230, 238, 201, 0.18), transparent 24rem),
     linear-gradient(
       to right,
-      rgba(220, 232, 196, 0.24) 0%,
-      rgba(220, 232, 196, 0.18) 42%,
+      rgba(220, 232, 196, 0.1) 0%,
+      rgba(220, 232, 196, 0.12) 42%,
       rgba(174, 189, 158, 0.14) 56%,
-      rgba(29, 38, 31, 0.1) 72%,
-      rgba(29, 38, 31, 0.04) 100%
+      rgba(174, 189, 158, 0.1) 74%,
+      rgba(220, 232, 196, 0.08) 100%
     );
 }
 
@@ -945,7 +964,7 @@ textarea::placeholder {
     to right,
     rgba(220, 232, 196, 0),
     rgba(174, 189, 158, 0.22),
-    rgba(29, 38, 31, 0)
+    rgba(220, 232, 196, 0)
   );
 }
 
@@ -955,7 +974,7 @@ textarea::placeholder {
   display: flex;
   flex-direction: column;
   justify-content: center;
-  padding: 34px;
+  padding: 34px; 
   background: transparent;
   overflow: visible;
 }
@@ -983,15 +1002,9 @@ textarea::placeholder {
   position: absolute;
   width: min(76%, 720px);
   aspect-ratio: 1.95;
-  border: 1px solid rgba(255, 255, 255, 0.22);
+  border: 1px transparent rgba(255, 255, 255, 0.22);
   border-radius: 28px;
-  background:
-    radial-gradient(ellipse at 50% 42%, rgba(230, 238, 201, 0.4), rgba(230, 238, 201, 0.12) 48%, transparent 72%),
-    linear-gradient(135deg, rgba(255, 255, 255, 0.18), rgba(53, 133, 142, 0.1));
-  box-shadow:
-    0 28px 90px rgba(18, 58, 64, 0.1),
-    inset 0 1px 0 rgba(255, 255, 255, 0.22);
-  backdrop-filter: blur(16px) saturate(1.08);
+  
 }
 
 .animated-text {
@@ -1729,8 +1742,8 @@ dd {
       rgba(220, 232, 196, 0.94) 0%,
       rgba(220, 232, 196, 0.9) 38%,
       rgba(174, 189, 158, 0.72) 54%,
-      rgba(29, 38, 31, 0.78) 76%,
-      rgba(29, 38, 31, 0.86) 100%
+      rgba(174, 189, 158, 0.4) 76%,
+      rgba(220, 232, 196, 0.24) 100%
     );
   }
 
@@ -1742,7 +1755,7 @@ dd {
         rgba(220, 232, 196, 0.22) 0%,
         rgba(220, 232, 196, 0.16) 38%,
         rgba(174, 189, 158, 0.12) 58%,
-        rgba(29, 38, 31, 0.08) 100%
+        rgba(220, 232, 196, 0.06) 100%
       );
   }
 
@@ -1756,7 +1769,7 @@ dd {
       180deg,
       rgba(220, 232, 196, 0),
       rgba(174, 189, 158, 0.2),
-      rgba(29, 38, 31, 0)
+      rgba(220, 232, 196, 0)
     );
   }
 
