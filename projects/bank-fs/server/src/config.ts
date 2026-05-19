@@ -32,7 +32,7 @@ export const config = {
     }),
     user: getOptionalStringEnv("VIRLY_SMTP_USER", { aliases: ["SMTP_USER"] }),
     pass: getOptionalStringEnv("VIRLY_SMTP_PASS", { aliases: ["SMTP_PASS"] }),
-    from: getStringEnv("VIRLY_SMTP_FROM", "bankfs@example.com", {
+    from: getStringEnv("VIRLY_SMTP_FROM", "virly@example.com", {
       aliases: ["SMTP_FROM"]
     })
   },
