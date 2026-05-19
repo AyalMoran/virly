@@ -1,9 +1,9 @@
 openapi: 3.0.3
 info:
-  title: Bank FS API
+  title: Virly API
   version: 1.0.0
   description: |
-    Swagger-compatible OpenAPI document for the Bank FS backend.
+    Swagger-compatible OpenAPI document for the Virly backend.
 
 servers:
   - url: http://localhost:3000
@@ -914,7 +914,7 @@ components:
       properties:
         message:
           type: string
-          example: Your Bank FS account available balance is 125.00.
+          example: Your Virly account available balance is 125.00.
         conversationId:
           type: string
           example: 4b26485d-5e88-4b2b-a09f-05d66bd01157
