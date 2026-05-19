@@ -51,7 +51,7 @@ The backend is a RESTful HTTP API server built with Node.js and Express. It is r
 
 - Registering user accounts and delivering a verification link by email
 - Authenticating the verification link click to activate the account
-- Authenticating users and issuing JSON Web Tokens (JWT)
+- Authenticating users with HttpOnly cookie sessions backed by signed JSON Web Tokens (JWT)
 - Serving authenticated users their account balance and paginated transaction history
 - Filtering transactions by counterparty
 - Processing money transfers between registered accounts, with an optional reason field
@@ -63,7 +63,9 @@ The backend is a RESTful HTTP API server built with Node.js and Express. It is r
 | API                | Application Programming Interface — a set of definitions and protocols for building and integrating application software |
 | CORS               | Cross-Origin Resource Sharing — a browser mechanism that controls which origins may call an API |
 | HTTP               | Hypertext Transfer Protocol — the communication protocol used between the client and server |
-| JWT                | JSON Web Token — a compact, self-contained token used to represent an authenticated identity |
+| JWT                | JSON Web Token — a compact, signed token used server-side to represent an authenticated identity |
+| Auth cookie        | `virly_auth` — an HttpOnly, Secure, SameSite=Lax cookie containing the signed JWT session |
+| CSRF cookie        | `virly_csrf` — a Secure, SameSite=Lax cookie readable by the frontend and echoed in `X-CSRF-Token` for unsafe authenticated requests |
 | Verification token | A short-lived signed string embedded in the email verification link |
 | Pagination         | A technique for splitting a large result set into discrete pages returned one at a time |
 | REST               | Representational State Transfer — an architectural style for stateless HTTP APIs |
@@ -75,7 +77,7 @@ The backend is a RESTful HTTP API server built with Node.js and Express. It is r
 
 ## 2. Design Overview
 
-Bank FS follows a client-server web architecture. The React frontend owns browser routing, forms, dashboard presentation, local authentication state, and calls to the backend API. The Express backend owns validation, authentication, password hashing, verification-link handling, business rules, MongoDB persistence, and integration with email providers. MongoDB stores users, account state, verification state, and transaction records.
+Virly follows a client-server web architecture. The React frontend owns browser routing, forms, dashboard presentation, local authentication state, and calls to the backend API. The Express backend owns validation, authentication, password hashing, verification-link handling, business rules, MongoDB persistence, and integration with email providers. MongoDB stores users, account state, verification state, and transaction records.
 
 
 ```
@@ -99,19 +101,32 @@ Bank FS follows a client-server web architecture. The React frontend owns browse
 
 ### 2.1.1 Authentication
 
-All protected endpoints require the following header:
+All protected endpoints require the browser to send the `virly_auth` cookie:
 
 ```
-Authorization: Bearer <JWT token>
+Cookie: virly_auth=<JWT session>
 ```
 
-The JWT payload contains only:
+The cookie is set by the backend with `HttpOnly`, `Secure`, `SameSite=Lax`, and `Path=/`. Login controls persistence with `rememberMe`: `true` adds a 30-day `Max-Age` and refreshes expiration on each successful login, while `false` or omitted uses browser-session cookies without `Max-Age`. Browser restore-session settings may preserve session cookies depending on the browser. The JWT payload contains only identity/session metadata:
 
 ```json
-{ "userId": "64a1b2c3d4e5f64840abcdef", "iat": 1414000000, "exp": 1414086400 }
+{
+  "userId": "64a1b2c3d4e5f64840abcdef",
+  "csrfTokenHash": "<sha256>",
+  "iat": 1414000000,
+  "exp": 1414086400
+}
 ```
 
 No user data (balance, email, role) is stored in the token. All user data is fetched fresh from the database on every request using the `userId` as the lookup key.
+
+Authenticated unsafe methods (`POST`, `PUT`, `PATCH`, `DELETE`) also require:
+
+```
+X-CSRF-Token: <value from virly_csrf cookie>
+```
+
+The server compares the submitted CSRF token with the hash bound into the JWT payload. Public auth endpoints such as register, login, verify, and resend verification do not require CSRF because they do not rely on an existing authenticated cookie session.
 
 ### 2.1.2 Endpoint Summary
 
@@ -119,10 +134,12 @@ No user data (balance, email, role) is stored in the token. All user data is fet
 |--------|------|------|---------|
 | POST | `/api/auth/register` | No | Create an unverified user and send a verification email containing a confirmation link. |
 | GET | `/api/auth/verify` | No | Receive the verification link click, validate the token, and activate the account. |
-| POST | `/api/auth/login` | No | Authenticate email and password, then return a JWT. |
+| POST | `/api/auth/login` | No | Authenticate email and password, then set auth and CSRF cookies. |
+| GET | `/api/auth/me` | Yes | Return the current authenticated user from the cookie session. |
+| POST | `/api/auth/logout` | Yes + CSRF | Clear auth and CSRF cookies. |
 | GET | `/api/accounts/me` | Yes | Return current user balance and paginated recent transactions. |
 | GET | `/api/transactions` | Yes | Return a paginated transaction list, optionally filtered by counterparty email. |
-| POST | `/api/transactions` | Yes | Transfer money from the authenticated user to another registered user, with an optional reason. |
+| POST | `/api/transactions` | Yes + CSRF | Transfer money from the authenticated user to another registered user, with an optional reason. |
 
 **Request / response contracts (summary):**
 
@@ -136,20 +153,33 @@ No user data (balance, email, role) is stored in the token. All user data is fet
 
 `GET /api/auth/verify?token=<verificationToken>`
 - Query param: `token` — the signed verification token from the email link
-- 200: `{ token, user: { id, email, balance } }`
+- 200: sets `virly_auth` and `virly_csrf`, returns `{ user: { id, email, balance, personalDetailsId, personalDetailsStatus, needsPersonalDetails } }`
 - 400: token missing, malformed, or expired
 - 404: no user found for this token
 
-> The user clicks the button in their email. The browser navigates to this URL. The server validates the token, marks the account as verified, issues a JWT, and returns it to the client. No form entry is required from the user.
+> The user clicks the button in their email. The browser navigates to this URL. The server validates the token, marks the account as verified, sets the session cookies, and returns the authenticated user to the client. No form entry is required from the user.
 
 `POST /api/auth/login`
-- Body: `{ email, password }`
-- 200: `{ token, user: { id, email, balance } }`
+- Body: `{ email, password, rememberMe }` — `rememberMe` defaults to `false`
+- 200: sets `virly_auth` and `virly_csrf`, persistent for 30 days when `rememberMe` is true or browser-session cookies when false, and returns `{ user: { id, email, balance, personalDetailsId, personalDetailsStatus, needsPersonalDetails } }`
 - 401: wrong credentials
 - 403: account not verified
 
+`GET /api/auth/me`
+- Cookie: `virly_auth` required
+- 200: `{ user: { id, email, balance, personalDetailsId, personalDetailsStatus, needsPersonalDetails } }`
+- 401: missing or invalid auth cookie
+- 404: user no longer exists
+
+`POST /api/auth/logout`
+- Cookie: `virly_auth` required
+- Header: `X-CSRF-Token` required
+- 200: clears `virly_auth` and `virly_csrf`, returns `{ message }`
+- 401: missing or invalid auth cookie
+- 403: missing or invalid CSRF token
+
 `GET /api/accounts/me`
-- Header: Bearer token required
+- Cookie: `virly_auth` required
 - Query params: `page` (default: 1), `limit` (default: 10, max: 50)
 - 200:
 ```json
@@ -164,7 +194,7 @@ No user data (balance, email, role) is stored in the token. All user data is fet
 - 401: unauthorized
 
 `GET /api/transactions`
-- Header: Bearer token required
+- Cookie: `virly_auth` required
 - Query params:
   - `page` (default: 1)
   - `limit` (default: 10, max: 50)
@@ -184,11 +214,13 @@ No user data (balance, email, role) is stored in the token. All user data is fet
 > When `counterparty` is provided, only transactions where the other party's email matches are returned, allowing a user to view the full history with a specific person.
 
 `POST /api/transactions`
-- Header: Bearer token required
+- Cookie: `virly_auth` required
+- Header: `X-CSRF-Token` required
 - Body: `{ recipientEmail, amount, reason }` — `reason` is optional, max 200 characters
 - 201: `{ message, newBalance, transaction: { id, counterpartyEmail, amount, reason, date } }`
 - 400: insufficient balance, invalid amount, self-transfer, or reason too long
 - 401: unauthorized
+- 403: missing or invalid CSRF token
 - 404: recipient not found
 
 
