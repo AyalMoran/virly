@@ -17,10 +17,10 @@ export async function getAccountBalance(
 
   return {
     toolName: "getAccountBalance",
-    summary: `Your Bank FS account available balance is ${user.balance.toFixed(2)}.`,
+    summary: `Your Virly account available balance is ${user.balance.toFixed(2)}.`,
     metadata: {
       recordCount: 1,
-      accountLabel: "Bank FS account"
+      accountLabel: "Virly account"
     }
   };
 }

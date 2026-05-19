@@ -4,14 +4,12 @@ import { z } from "zod";
 import { config } from "../config.js";
 import { User } from "../models/User.js";
 import { sendVerificationEmail } from "../services/email.service.js";
-import {
-  createToken,
-  createVerificationToken,
-  verifyVerificationToken
-} from "../utils/auth.js";
+import { createVerificationToken, verifyVerificationToken } from "../utils/auth.js";
 import { randomStartingBalance } from "../utils/otp.js";
 import { ensurePersonalDetails, toAuthUserDto } from "../utils/personal-details.js";
+import { clearAuthCookies, setAuthCookies } from "../utils/session.js";
 import { hashToken, verificationTokenExpiry } from "../utils/token.js";
+import { requireAuth } from "../middleware/auth.js";
 
 //#region Type Definitions
 
@@ -31,7 +29,8 @@ const verifyQuerySchema = z.object({
 
 const loginSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(1)
+  password: z.string().min(1),
+  rememberMe: z.boolean().default(false)
 });
 
 const resendVerificationSchema = z.object({
@@ -56,11 +55,9 @@ async function sendNewVerificationLink(user: InstanceType<typeof User>) {
 }
 
 async function createAuthResponse(user: InstanceType<typeof User>) {
-  const token = createToken(user.id);
   const personalDetails = await ensurePersonalDetails(user);
 
   return {
-    token,
     user: toAuthUserDto(user, personalDetails)
   };
 }
@@ -113,6 +110,7 @@ router.get("/verify", async (req, res, next) => {
     }
 
     if (user.isVerified) {
+      setAuthCookies(res, user.id, { rememberMe: false });
       return res.json(await createAuthResponse(user));
     }
 
@@ -132,6 +130,7 @@ router.get("/verify", async (req, res, next) => {
     user.verificationTokenExpiresAt = null;
     await user.save();
 
+    setAuthCookies(res, user.id, { rememberMe: false });
     return res.json(await createAuthResponse(user));
   } catch (error) {
     next(error);
@@ -158,7 +157,7 @@ router.post("/resend-verification", async (req, res, next) => {
 
 router.post("/login", async (req, res, next) => {
   try {
-    const { email, password } = loginSchema.parse(req.body);
+    const { email, password, rememberMe } = loginSchema.parse(req.body);
     const normalizedEmail = email.toLowerCase();
     const user = await User.findOne({ email: normalizedEmail });
 
@@ -170,15 +169,35 @@ router.post("/login", async (req, res, next) => {
     if (!isValidPassword) {
       return res.status(401).json({ message: "Invalid email or password." });
     }
-    
+
     if (!user.isVerified) {
       return res.status(403).json({ message: "Verify your email before logging in." });
+    }
+
+    setAuthCookies(res, user.id, { rememberMe });
+    return res.json(await createAuthResponse(user));
+  } catch (error) {
+    next(error);
+  }
+});
+
+router.get("/me", requireAuth, async (req, res, next) => {
+  try {
+    const user = await User.findById(req.userId);
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found." });
     }
 
     return res.json(await createAuthResponse(user));
   } catch (error) {
     next(error);
   }
+});
+
+router.post("/logout", requireAuth, (_req, res) => {
+  clearAuthCookies(res);
+  return res.json({ message: "Logged out." });
 });
 //#endregion
 

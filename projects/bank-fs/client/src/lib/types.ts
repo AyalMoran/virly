@@ -64,7 +64,6 @@ export type TransactionsResponse = {
 };
 
 export type AuthSuccessResponse = {
-  token: string;
   user: User;
 };
 
@@ -77,6 +76,7 @@ export type RegisterRequest = {
 export type LoginRequest = {
   email: string;
   password: string;
+  rememberMe: boolean;
 };
 
 export type PersonalDetailsRequest = {

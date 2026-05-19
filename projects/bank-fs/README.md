@@ -37,7 +37,7 @@ npm install
 cp server/.env.example server/.env
 ```
 
-3. Start MongoDB locally or point `BANK_FS_MONGODB_URI` to your database.
+3. Start MongoDB locally or point `VIRLY_MONGODB_URI` to your database.
 
 4. Run the backend:
 

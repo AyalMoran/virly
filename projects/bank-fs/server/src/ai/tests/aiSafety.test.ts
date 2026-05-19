@@ -14,16 +14,16 @@ function createFakeTools(executed: string[]): AssistantToolExecutors {
       executed.push("getUserAccounts");
       return {
         toolName: "getUserAccounts",
-        summary: "Bank FS account",
-        metadata: { recordCount: 1, accountLabel: "Bank FS account" }
+        summary: "Virly account",
+        metadata: { recordCount: 1, accountLabel: "Virly account" }
       };
     },
     async getAccountBalance() {
       executed.push("getAccountBalance");
       return {
         toolName: "getAccountBalance",
-        summary: "Your Bank FS account available balance is 125.00.",
-        metadata: { recordCount: 1, accountLabel: "Bank FS account" }
+        summary: "Your Virly account available balance is 125.00.",
+        metadata: { recordCount: 1, accountLabel: "Virly account" }
       };
     },
     async getRecentTransactions() {
