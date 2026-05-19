@@ -12,6 +12,7 @@ tags:
   - name: Authentication
   - name: Account
   - name: Transactions
+  - name: AI Assistant
 paths:
   /api/auth/register:
     post:
@@ -32,6 +33,7 @@ paths:
                 value:
                   email: user@example.com
                   password: StrongPass123!
+                  rememberMe: true
                   phone: "+15551234567"
       responses:
         '201':
@@ -58,7 +60,7 @@ paths:
       tags:
         - Authentication
       summary: Verify email using a verification link token
-      description: Confirms the user's email and activates the account.
+      description: Confirms the user's email, activates the account, and sets auth cookies.
       parameters:
         - in: query
           name: token
@@ -125,6 +127,7 @@ paths:
       tags:
         - Authentication
       summary: Log in with email and password
+      description: Sets the HttpOnly auth cookie and readable CSRF cookie on success.
       requestBody:
         required: true
         content:
@@ -161,12 +164,11 @@ paths:
       tags:
         - Authentication
       summary: Log out the current user
-      description: |
-        Stateless JWT logout commonly happens on the client by discarding the
-        token. This endpoint exists for symmetry and optional server-side token
-        invalidation or audit logging.
+      description: Clears the auth and CSRF cookies.
       security:
-        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
       responses:
         '200':
           description: Logout acknowledged
@@ -175,7 +177,34 @@ paths:
               schema:
                 $ref: '#/components/schemas/MessageResponse'
         '401':
-          description: Missing or invalid token
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing or invalid CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get the current authenticated user
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Current authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccessResponse'
+        '401':
+          description: Missing or invalid auth cookie
           content:
             application/json:
               schema:
@@ -188,7 +217,7 @@ paths:
       summary: Get the current user's account summary
       description: Returns the current balance, paginated transactions, and pagination metadata.
       security:
-        - bearerAuth: []
+        - cookieAuth: []
       parameters:
         - $ref: '#/components/parameters/PageParam'
         - $ref: '#/components/parameters/LimitParam'
@@ -200,7 +229,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/AccountSummaryResponse'
         '401':
-          description: Missing or invalid token
+          description: Missing or invalid auth cookie
           content:
             application/json:
               schema:
@@ -212,7 +241,7 @@ paths:
         - Account
       summary: Get the current user's personal details
       security:
-        - bearerAuth: []
+        - cookieAuth: []
       responses:
         '200':
           description: Personal details state and values
@@ -221,7 +250,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/PersonalDetailsResponse'
         '401':
-          description: Missing or invalid token
+          description: Missing or invalid auth cookie
           content:
             application/json:
               schema:
@@ -238,7 +267,9 @@ paths:
         - Account
       summary: Save the current user's personal details
       security:
-        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
       requestBody:
         required: true
         content:
@@ -259,7 +290,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Missing or invalid token
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing or invalid CSRF token
           content:
             application/json:
               schema:
@@ -278,7 +315,9 @@ paths:
       summary: Skip personal details for the current session
       description: Keeps the personal details status as not_provided so the user is prompted again on future logins.
       security:
-        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
       responses:
         '200':
           description: Personal details prompt skipped
@@ -289,7 +328,13 @@ paths:
                   - $ref: '#/components/schemas/MessageResponse'
                   - $ref: '#/components/schemas/PersonalDetailsResponse'
         '401':
-          description: Missing or invalid token
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing or invalid CSRF token
           content:
             application/json:
               schema:
@@ -307,7 +352,7 @@ paths:
         - Transactions
       summary: List recent transactions for the authenticated user
       security:
-        - bearerAuth: []
+        - cookieAuth: []
       parameters:
         - $ref: '#/components/parameters/PageParam'
         - $ref: '#/components/parameters/LimitParam'
@@ -325,7 +370,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/TransactionsResponse'
         '401':
-          description: Missing or invalid token
+          description: Missing or invalid auth cookie
           content:
             application/json:
               schema:
@@ -339,7 +384,9 @@ paths:
         Creates a debit transaction for the sender and a matching credit
         transaction for the receiver.
       security:
-        - bearerAuth: []
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
       requestBody:
         required: true
         content:
@@ -372,7 +419,63 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
-          description: Missing or invalid token
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing or invalid CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/ai/chat:
+    post:
+      tags:
+        - AI Assistant
+      summary: Ask the read-only AI assistant a question
+      description: |
+        Runs the authenticated read-only AI assistant. The assistant may query
+        allowlisted account-information tools, but it cannot create, modify,
+        cancel, approve, or execute transfers.
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiChatRequest'
+            examples:
+              default:
+                value:
+                  message: What is my balance?
+                  conversationId: optional-existing-id
+      responses:
+        '200':
+          description: Assistant response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiChatResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing or invalid CSRF token
           content:
             application/json:
               schema:
@@ -397,12 +500,19 @@ components:
         maximum: 50
         default: 10
       description: Maximum number of records to return
+    CsrfTokenHeader:
+      in: header
+      name: X-CSRF-Token
+      required: true
+      schema:
+        type: string
+      description: Value from the readable virly_csrf cookie. Required for authenticated unsafe methods.
 
   securitySchemes:
-    bearerAuth:
-      type: http
-      scheme: bearer
-      bearerFormat: JWT
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: virly_auth
 
   schemas:
     RegisterRequest:
@@ -447,6 +557,10 @@ components:
         password:
           type: string
           format: password
+        rememberMe:
+          type: boolean
+          default: false
+          description: When true, auth and CSRF cookies are persistent for 30 days and refreshed on each successful login. When false or omitted, browser-session cookies are used.
 
     ResendVerificationRequest:
       type: object
@@ -461,13 +575,8 @@ components:
     AuthSuccessResponse:
       type: object
       required:
-        - token
         - user
       properties:
-        token:
-          type: string
-          description: JWT access token
-          example: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.example.signature
         user:
           $ref: '#/components/schemas/User'
 
@@ -778,6 +887,62 @@ components:
           type: number
           format: double
           example: 917.25
+
+    AiChatRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          example: What is my checking balance?
+        conversationId:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: 4b26485d-5e88-4b2b-a09f-05d66bd01157
+
+    AiChatResponse:
+      type: object
+      required:
+        - message
+        - conversationId
+        - intent
+        - toolCalls
+      properties:
+        message:
+          type: string
+          example: Your Bank FS account available balance is 125.00.
+        conversationId:
+          type: string
+          example: 4b26485d-5e88-4b2b-a09f-05d66bd01157
+        intent:
+          type: string
+          enum:
+            - balance_inquiry
+            - recent_transactions
+            - verified_recipients
+            - transfer_limits
+            - transfer_status
+            - general_help
+            - unsafe_request
+            - unsupported
+          example: balance_inquiry
+        toolCalls:
+          type: array
+          items:
+            type: string
+            enum:
+              - getUserAccounts
+              - getAccountBalance
+              - getRecentTransactions
+              - getVerifiedRecipients
+              - getTransferLimits
+          example:
+            - getUserAccounts
+            - getAccountBalance
 
     Pagination:
       type: object

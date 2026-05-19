@@ -1,14 +1,16 @@
 {
-  "name": "bank-fs-server",
+  "name": "virly-server",
   "version": "1.0.0",
   "private": true,
   "type": "module",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "build": "tsc -p tsconfig.json",
-    "start": "node dist/index.js"
+    "start": "node dist/index.js",
+    "test": "tsx --test \"src/**/*.test.ts\""
   },
   "dependencies": {
+    "@langchain/langgraph": "^0.2.74",
     "bcryptjs": "^2.4.3",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

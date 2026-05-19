@@ -11,7 +11,7 @@ services:
     environment:
       NODE_ENV: development
       BANK_FS_PORT: ${BANK_FS_PORT:-3000}
-      BANK_FS_MONGODB_URI: ${BANK_FS_MONGODB_URI:-mongodb://mongo:27017/bank-fs?replicaSet=rs0}
+      BANK_FS_MONGODB_URI: ${BANK_FS_MONGODB_URI:-mongodb://mongo:27017/virly?replicaSet=rs0}
     depends_on:
       mongo:
         condition: service_healthy
