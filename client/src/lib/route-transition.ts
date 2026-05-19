@@ -1,6 +1,6 @@
 export const authTransitionState = { transitionFromAuth: true };
 
-const authTransitionKey = "bank-fs-auth-transition";
+const authTransitionKey = "virly-auth-transition";
 
 export function markAuthTransition() {
   sessionStorage.setItem(authTransitionKey, "1");

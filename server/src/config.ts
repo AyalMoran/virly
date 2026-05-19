@@ -4,36 +4,46 @@ import { getIntEnv, getOptionalStringEnv, getStringEnv } from "./utils/env.js";
 dotenv.config();
 
 export const config = {
-  port: getIntEnv("BANK_FS_PORT", {
+  port: getIntEnv("VIRLY_PORT", {
     defaultValue: 3000,
     min: 1,
     max: 65535,
     aliases: ["PORT"]
   }),
-  clientUrl: getStringEnv("BANK_FS_CLIENT_URL", "http://localhost:5173", {
+  clientUrl: getStringEnv("VIRLY_CLIENT_URL", "http://localhost:5173", {
     aliases: ["CLIENT_URL"]
   }),
-  serverUrl: getStringEnv("BANK_FS_SERVER_URL", "http://localhost:3000", {
+  serverUrl: getStringEnv("VIRLY_SERVER_URL", "http://localhost:3000", {
     aliases: ["SERVER_URL"]
   }),
-  mongoUri: getStringEnv("BANK_FS_MONGODB_URI", "mongodb://127.0.0.1:27017/bank-fs", {
+  mongoUri: getStringEnv("VIRLY_MONGODB_URI", "mongodb://127.0.0.1:27017/virly", {
     aliases: ["MONGODB_URI"]
   }),
-  jwtSecret: getStringEnv("BANK_FS_JWT_SECRET", "change-me-in-production", {
+  jwtSecret: getStringEnv("VIRLY_JWT_SECRET", "change-me-in-production", {
     aliases: ["JWT_SECRET"]
   }),
   smtp: {
-    host: getOptionalStringEnv("BANK_FS_SMTP_HOST", { aliases: ["SMTP_HOST"] }),
-    port: getIntEnv("BANK_FS_SMTP_PORT", {
+    host: getOptionalStringEnv("VIRLY_SMTP_HOST", { aliases: ["SMTP_HOST"] }),
+    port: getIntEnv("VIRLY_SMTP_PORT", {
       defaultValue: 587,
       min: 1,
       max: 65535,
       aliases: ["SMTP_PORT"]
     }),
-    user: getOptionalStringEnv("BANK_FS_SMTP_USER", { aliases: ["SMTP_USER"] }),
-    pass: getOptionalStringEnv("BANK_FS_SMTP_PASS", { aliases: ["SMTP_PASS"] }),
-    from: getStringEnv("BANK_FS_SMTP_FROM", "bankfs@example.com", {
+    user: getOptionalStringEnv("VIRLY_SMTP_USER", { aliases: ["SMTP_USER"] }),
+    pass: getOptionalStringEnv("VIRLY_SMTP_PASS", { aliases: ["SMTP_PASS"] }),
+    from: getStringEnv("VIRLY_SMTP_FROM", "bankfs@example.com", {
       aliases: ["SMTP_FROM"]
+    })
+  },
+  ai: {
+    perTransferLimit: getIntEnv("VIRLY_AI_MOCK_PER_TRANSFER_LIMIT", {
+      defaultValue: 500,
+      min: 1
+    }),
+    dailyTransferLimit: getIntEnv("VIRLY_AI_MOCK_DAILY_TRANSFER_LIMIT", {
+      defaultValue: 1000,
+      min: 1
     })
   }
 };

@@ -17,10 +17,10 @@ export async function getUserAccounts(
 
   return {
     toolName: "getUserAccounts",
-    summary: "Bank FS account",
+    summary: "Virly account",
     metadata: {
       recordCount: 1,
-      accountLabel: "Bank FS account"
+      accountLabel: "Virly account"
     }
   };
 }

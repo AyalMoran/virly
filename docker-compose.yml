@@ -10,8 +10,8 @@ services:
       - ./server/.env
     environment:
       NODE_ENV: development
-      BANK_FS_PORT: ${BANK_FS_PORT:-3000}
-      BANK_FS_MONGODB_URI: ${BANK_FS_MONGODB_URI:-mongodb://mongo:27017/virly?replicaSet=rs0}
+      VIRLY_PORT: ${VIRLY_PORT:-3000}
+      VIRLY_MONGODB_URI: ${VIRLY_MONGODB_URI:-mongodb://mongo:27017/virly?replicaSet=rs0}
     depends_on:
       mongo:
         condition: service_healthy

@@ -24,10 +24,10 @@ export async function sendVerificationEmail(email: string, verificationUrl: stri
   await transporter.sendMail({
     from: config.smtp.from,
     to: email,
-    subject: "Verify your Bank FS account",
+    subject: "Verify your Virly account",
     text: `Verify your account by opening this link. It expires in 10 minutes: ${verificationUrl}`,
     html: `
-      <p>Verify your Bank FS account by clicking the button below.</p>
+      <p>Verify your Virly account by clicking the button below.</p>
       <p><a href="${verificationUrl}" style="display:inline-block;padding:12px 18px;background:#111827;color:#ffffff;text-decoration:none;border-radius:6px;">Verify account</a></p>
       <p>This link expires in 10 minutes.</p>
     `

@@ -29,12 +29,7 @@ export class ApiError extends Error {
   }
 }
 
-let authToken: string | null = null;
 let onUnauthorized: (() => void) | null = null;
-
-export function setAuthToken(token: string | null) {
-  authToken = token;
-}
 
 export function setUnauthorizedHandler(handler: (() => void) | null) {
   onUnauthorized = handler;
@@ -42,6 +37,21 @@ export function setUnauthorizedHandler(handler: (() => void) | null) {
 
 function normalizeEmail(email: string) {
   return email.trim().toLowerCase();
+}
+
+function readCookie(name: string) {
+  const prefix = `${name}=`;
+  return (
+    document.cookie
+      .split(";")
+      .map((cookie) => cookie.trim())
+      .find((cookie) => cookie.startsWith(prefix))
+      ?.slice(prefix.length) ?? null
+  );
+}
+
+function isUnsafeMethod(method: string | undefined) {
+  return ["POST", "PUT", "PATCH", "DELETE"].includes(method?.toUpperCase() ?? "GET");
 }
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
@@ -52,12 +62,16 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     headers.set("Content-Type", "application/json");
   }
 
-  if (authToken) {
-    headers.set("Authorization", `Bearer ${authToken}`);
+  if (isUnsafeMethod(options.method)) {
+    const csrfToken = readCookie("virly_csrf");
+    if (csrfToken) {
+      headers.set("X-CSRF-Token", decodeURIComponent(csrfToken));
+    }
   }
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
+    credentials: "include",
     headers
   });
 
@@ -102,7 +116,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({
         email: normalizeEmail(payload.email),
-        password: payload.password
+        password: payload.password,
+        rememberMe: payload.rememberMe
       })
     });
   },
@@ -110,6 +125,9 @@ export const api = {
     return request<{ message: string }>("/api/auth/logout", {
       method: "POST"
     });
+  },
+  me() {
+    return request<AuthSuccessResponse>("/api/auth/me");
   },
   accountSummary(page = 1, limit = 10) {
     return request<AccountSummary>(`/api/accounts/me?page=${page}&limit=${limit}`);
