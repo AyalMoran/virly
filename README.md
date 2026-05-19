@@ -1,4 +1,4 @@
-# Bank FS
+# Virly
 
 Full-stack banking MVP built with:
 
