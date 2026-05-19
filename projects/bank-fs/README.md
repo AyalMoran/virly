@@ -5,14 +5,14 @@ Full-stack banking MVP built with:
 - React + TypeScript + Vite
 - Node.js + Express + TypeScript
 - MongoDB + Mongoose
-- JWT authentication
+- HttpOnly cookie authentication with signed JWT sessions
 - Email-button verification with a short-lived signed token
 
 ## Features
 
 - User registration with email, password, and phone number
 - Email verification link flow
-- Secure login with hashed passwords and JWT
+- Secure login with hashed passwords, HttpOnly auth cookies, and CSRF protection
 - Protected dashboard
 - Random starting balance for new accounts
 - Money transfer between registered users
@@ -76,6 +76,15 @@ The email link points to:
 ```http
 GET /api/auth/verify?token=<verificationToken>
 ```
+
+Successful login and email verification set two cookies:
+
+- `virly_auth`: HttpOnly, Secure, SameSite=Lax JWT session cookie
+- `virly_csrf`: Secure, SameSite=Lax CSRF cookie readable by the frontend
+
+On login, the Remember me checkbox controls cookie persistence. When checked, both cookies are persistent for 30 days and the expiration is refreshed on each successful login. When unchecked, the backend sets browser-session cookies without `Max-Age`; browsers generally clear those when the browser session ends, although "restore previous session" settings may preserve them.
+
+Email verification auto-login uses browser-session cookies by default. The frontend sends API requests with credentials included. Authenticated unsafe requests (`POST`, `PUT`, `PATCH`, `DELETE`) also send `X-CSRF-Token` with the value from `virly_csrf`.
 
 ## Default API
 
