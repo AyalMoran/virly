@@ -1,7 +1,7 @@
-# Bank FS MVP Sequence Diagrams
+# Virly MVP Sequence Diagrams
 
-This document captures the main Bank FS MVP interactions as Mermaid sequence diagrams.
-It is based on the current repository documentation in `README.md` and `docs/bank-fs-project.md`.
+This document captures the main Virly MVP interactions as Mermaid sequence diagrams.
+It is based on the current repository documentation in `README.md` and `docs/virly-project.md`.
 
 ## Participants
 
@@ -85,15 +85,15 @@ sequenceDiagram
         else Token valid
             BackendAPI->>Database: Mark user as verified
             Database-->>BackendAPI: User updated
-            BackendAPI->>BackendAPI: Generate JWT token
-            BackendAPI-->>Frontend: Redirect with auth token
-            Frontend->>Frontend: Store JWT
+            BackendAPI->>BackendAPI: Generate JWT session and CSRF token
+            BackendAPI-->>Frontend: 200 user data + Set-Cookie virly_auth/virly_csrf
+            Frontend->>Frontend: Store user state only
             Frontend-->>User: Redirect to dashboard
         end
     end
 ```
 
-## 3. Login and JWT Issuance
+## 3. Login and Cookie Session Issuance
 
 ```mermaid
 sequenceDiagram
@@ -103,7 +103,7 @@ sequenceDiagram
     participant BackendAPI as Backend API
     participant Database
 
-    User->>Frontend: Submit email and password
+    User->>Frontend: Submit email, password, and Remember me choice
     Frontend->>BackendAPI: POST /api/auth/login
     BackendAPI->>Database: Find user by email
 
@@ -123,9 +123,9 @@ sequenceDiagram
                 BackendAPI-->>Frontend: 403 Account not verified
                 Frontend-->>User: Prompt for verification
             else User verified
-                BackendAPI->>BackendAPI: Generate JWT token
-                BackendAPI-->>Frontend: 200 Auth success + token + user data
-                Frontend->>Frontend: Store JWT
+                BackendAPI->>BackendAPI: Generate JWT session and CSRF token
+                BackendAPI-->>Frontend: 200 Auth success + user data + Set-Cookie
+                Frontend->>Frontend: Store user state only
                 Frontend-->>User: Redirect to dashboard
             end
         end
@@ -143,13 +143,15 @@ sequenceDiagram
     participant Database
 
     User->>Frontend: Open dashboard
-    Frontend->>BackendAPI: GET /api/account/me<br/>Authorization: Bearer JWT
-    BackendAPI->>BackendAPI: Validate JWT
+    Frontend->>BackendAPI: GET /api/auth/me<br/>Cookie: virly_auth
+    BackendAPI->>BackendAPI: Validate auth cookie
 
-    alt Missing or invalid token
+    alt Missing or invalid auth cookie
         BackendAPI-->>Frontend: 401 Unauthorized
         Frontend-->>User: Redirect to login
-    else Token valid
+    else Cookie valid
+        BackendAPI-->>Frontend: 200 Current user
+        Frontend->>BackendAPI: GET /api/accounts/me<br/>Cookie: virly_auth
         BackendAPI->>Database: Load user profile and balance
         Database-->>BackendAPI: User account data
         BackendAPI->>Database: Load recent transactions
@@ -170,12 +172,15 @@ sequenceDiagram
     participant Database
 
     User->>Frontend: Submit recipient email and amount
-    Frontend->>BackendAPI: POST /api/transfers<br/>Authorization: Bearer JWT
-    BackendAPI->>BackendAPI: Validate JWT and amount
+    Frontend->>BackendAPI: POST /api/transactions<br/>Cookie: virly_auth<br/>X-CSRF-Token: virly_csrf
+    BackendAPI->>BackendAPI: Validate auth cookie, CSRF token, and amount
 
-    alt Missing token or invalid JWT
+    alt Missing or invalid auth cookie
         BackendAPI-->>Frontend: 401 Unauthorized
         Frontend-->>User: Redirect to login
+    else Missing or invalid CSRF token
+        BackendAPI-->>Frontend: 403 Invalid CSRF token
+        Frontend-->>User: Show transfer error
     else Invalid amount
         BackendAPI-->>Frontend: 400 Invalid amount
         Frontend-->>User: Show amount validation error
@@ -219,13 +224,13 @@ sequenceDiagram
     participant Database
 
     User->>Frontend: Refresh transaction history
-    Frontend->>BackendAPI: GET /api/transactions?limit=10<br/>Authorization: Bearer JWT
-    BackendAPI->>BackendAPI: Validate JWT
+    Frontend->>BackendAPI: GET /api/transactions?limit=10<br/>Cookie: virly_auth
+    BackendAPI->>BackendAPI: Validate auth cookie
 
-    alt Missing or invalid token
+    alt Missing or invalid auth cookie
         BackendAPI-->>Frontend: 401 Unauthorized
         Frontend-->>User: Redirect to login
-    else Token valid
+    else Cookie valid
         BackendAPI->>Database: Query recent transactions for user
         Database-->>BackendAPI: Transaction list
         BackendAPI-->>Frontend: 200 Transactions response
@@ -243,15 +248,9 @@ sequenceDiagram
     participant BackendAPI as Backend API
 
     User->>Frontend: Click Sign Out
-    Frontend->>BackendAPI: POST /api/auth/logout<br/>Authorization: Bearer JWT
-
-    alt Logout endpoint available
-        BackendAPI-->>Frontend: 200 Logout acknowledged
-    else Client-side JWT logout only
-        Frontend->>Frontend: Skip server call
-    end
-
-    Frontend->>Frontend: Remove stored JWT and session state
+    Frontend->>BackendAPI: POST /api/auth/logout<br/>Cookie: virly_auth<br/>X-CSRF-Token: virly_csrf
+    BackendAPI-->>Frontend: 200 Logout acknowledged + clear cookies
+    Frontend->>Frontend: Clear user state
     Frontend-->>User: Redirect to login page
 ```
 
