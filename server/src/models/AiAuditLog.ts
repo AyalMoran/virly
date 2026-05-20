@@ -18,6 +18,11 @@ const aiAuditLogSchema = new Schema(
       default: null,
       index: true
     },
+    assistantId: {
+      type: String,
+      required: true,
+      default: "oshri"
+    },
     intent: {
       type: String,
       required: true

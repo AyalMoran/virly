@@ -1,3 +1,5 @@
+import type { AssistantId } from "./assistants.js";
+
 export type AssistantIntent =
   | "balance_inquiry"
   | "recent_transactions"
@@ -34,10 +36,30 @@ export type AssistantToolResult = {
   metadata: ToolResultMetadata;
 };
 
+export type IntentClassification = {
+  intent: AssistantIntent;
+  refusalReason?: string;
+};
+
+export type ComposeAssistantResponseInput = {
+  assistantId: AssistantId;
+  userMessage: string;
+  intent: AssistantIntent;
+  toolResults: AssistantToolResult[];
+  refusalReason?: string;
+  fallbackMessage: string;
+};
+
+export type AssistantLlmProvider = {
+  classifyIntent(message: string): Promise<IntentClassification>;
+  composeResponse(input: ComposeAssistantResponseInput): Promise<string>;
+};
+
 export type AssistantGraphState = {
   userId?: string;
   conversationId: string;
   requestId?: string;
+  assistantId: AssistantId;
   messages: ChatMessage[];
   detectedIntent?: AssistantIntent;
   selectedAccountId?: string;
@@ -64,6 +86,7 @@ export type AuditLogInput = {
   userId: string;
   conversationId: string;
   requestId?: string;
+  assistantId: AssistantId;
   intent: AssistantIntent;
   toolsRequested: string[];
   toolsExecuted: string[];
@@ -76,12 +99,14 @@ export type RunAssistantInput = {
   userId?: string;
   conversationId: string;
   requestId?: string;
+  assistantId?: AssistantId;
   message: string;
 };
 
 export type RunAssistantResult = {
   message: string;
   conversationId: string;
+  assistantId: AssistantId;
   intent: AssistantIntent;
   toolCalls: AssistantToolName[];
   refusalReason?: string;

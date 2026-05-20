@@ -455,6 +455,7 @@ paths:
                 value:
                   message: What is my balance?
                   conversationId: optional-existing-id
+                  assistantId: oshri
       responses:
         '200':
           description: Assistant response
@@ -903,12 +904,22 @@ components:
           minLength: 1
           maxLength: 120
           example: 4b26485d-5e88-4b2b-a09f-05d66bd01157
+        assistantId:
+          type: string
+          default: oshri
+          enum:
+            - oshri
+            - chaya
+            - yehuda
+            - yohai_daniel
+          example: oshri
 
     AiChatResponse:
       type: object
       required:
         - message
         - conversationId
+        - assistantId
         - intent
         - toolCalls
       properties:
@@ -918,6 +929,14 @@ components:
         conversationId:
           type: string
           example: 4b26485d-5e88-4b2b-a09f-05d66bd01157
+        assistantId:
+          type: string
+          enum:
+            - oshri
+            - chaya
+            - yehuda
+            - yohai_daniel
+          example: oshri
         intent:
           type: string
           enum:

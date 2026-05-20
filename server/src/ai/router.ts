@@ -1,15 +1,25 @@
 import {
   AssistantIntent,
-  AssistantToolName
+  AssistantLlmProvider,
+  AssistantToolName,
+  IntentClassification
 } from "./state.js";
 import { getUnsafeRequestReason } from "./policy.js";
 
-type IntentClassification = {
-  intent: AssistantIntent;
-  refusalReason?: string;
-};
+const validIntents: AssistantIntent[] = [
+  "balance_inquiry",
+  "recent_transactions",
+  "verified_recipients",
+  "transfer_limits",
+  "transfer_status",
+  "general_help",
+  "unsafe_request",
+  "unsupported"
+];
 
-export function classifyAssistantIntent(message: string): IntentClassification {
+export function classifyAssistantIntentDeterministic(
+  message: string
+): IntentClassification {
   const refusalReason = getUnsafeRequestReason(message);
   if (refusalReason) {
     return { intent: "unsafe_request", refusalReason };
@@ -42,6 +52,47 @@ export function classifyAssistantIntent(message: string): IntentClassification {
   }
 
   return { intent: "unsupported" };
+}
+
+function normalizeClassification(
+  classification: IntentClassification
+): IntentClassification {
+  if (!validIntents.includes(classification.intent)) {
+    return { intent: "unsupported" };
+  }
+
+  if (classification.intent === "unsafe_request" && !classification.refusalReason) {
+    return {
+      intent: "unsafe_request",
+      refusalReason: "write_action_not_supported"
+    };
+  }
+
+  return classification;
+}
+
+export async function classifyAssistantIntent(
+  message: string,
+  llmProvider?: AssistantLlmProvider
+): Promise<IntentClassification> {
+  const refusalReason = getUnsafeRequestReason(message);
+  if (refusalReason) {
+    return { intent: "unsafe_request", refusalReason };
+  }
+
+  if (!llmProvider) {
+    return classifyAssistantIntentDeterministic(message);
+  }
+
+  try {
+    return normalizeClassification(await llmProvider.classifyIntent(message));
+  } catch (error) {
+    console.warn(
+      "AI intent classifier failed; using deterministic fallback.",
+      error instanceof Error ? error.message : error
+    );
+    return classifyAssistantIntentDeterministic(message);
+  }
 }
 
 export function getReadOnlyToolsForIntent(

@@ -191,7 +191,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({
         message: payload.message.trim(),
-        ...(payload.conversationId ? { conversationId: payload.conversationId } : {})
+        ...(payload.conversationId ? { conversationId: payload.conversationId } : {}),
+        ...(payload.assistantId ? { assistantId: payload.assistantId } : {})
       })
     });
   }
