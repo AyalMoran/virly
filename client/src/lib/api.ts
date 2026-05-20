@@ -1,5 +1,7 @@
 import type {
   AccountSummary,
+  AiChatRequest,
+  AiChatResponse,
   ApiErrorBody,
   AuthSuccessResponse,
   LoginRequest,
@@ -181,6 +183,15 @@ export const api = {
         recipientEmail: normalizeEmail(payload.recipientEmail),
         amount: payload.amount,
         ...(reason ? { reason } : {})
+      })
+    });
+  },
+  aiChat(payload: AiChatRequest) {
+    return request<AiChatResponse>("/api/ai/chat", {
+      method: "POST",
+      body: JSON.stringify({
+        message: payload.message.trim(),
+        ...(payload.conversationId ? { conversationId: payload.conversationId } : {})
       })
     });
   }
