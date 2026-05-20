@@ -163,7 +163,6 @@ test("missing authentication fails safely on the chat endpoint", async () => {
     if (!address || typeof address === "string") {
       throw new Error("Expected local HTTP server address.");
     }
-
     const response = await fetch(`http://127.0.0.1:${address.port}/api/ai/chat`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },

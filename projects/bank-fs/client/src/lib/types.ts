@@ -109,6 +109,18 @@ export type TransferResponse = {
   transaction: Transaction;
 };
 
+export type AiChatRequest = {
+  message: string;
+  conversationId?: string;
+};
+
+export type AiChatResponse = {
+  message: string;
+  conversationId: string;
+  intent: string;
+  toolCalls: string[];
+};
+
 export type ApiIssue = {
   path: string;
   message: string;
