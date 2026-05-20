@@ -44,6 +44,12 @@ export const config = {
     dailyTransferLimit: getIntEnv("VIRLY_AI_MOCK_DAILY_TRANSFER_LIMIT", {
       defaultValue: 1000,
       min: 1
+    }),
+    model: getStringEnv("VIRLY_AI_MODEL", "gpt-4o-mini", {
+      aliases: ["AI_MODEL"]
+    }),
+    openAIApiKey: getStringEnv("OPENAI_API_KEY", "", {
+      aliases: ["OPENAI_API_KEY"]
     })
   }
 };

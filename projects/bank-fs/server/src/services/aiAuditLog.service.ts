@@ -6,6 +6,7 @@ export async function writeAiAuditLog(input: AuditLogInput) {
     userId: input.userId,
     conversationId: input.conversationId,
     requestId: input.requestId ?? null,
+    assistantId: input.assistantId,
     intent: input.intent,
     toolsRequested: input.toolsRequested,
     toolsExecuted: input.toolsExecuted,

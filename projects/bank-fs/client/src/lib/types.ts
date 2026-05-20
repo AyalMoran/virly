@@ -109,14 +109,18 @@ export type TransferResponse = {
   transaction: Transaction;
 };
 
+export type AssistantId = "oshri" | "chaya" | "yehuda" | "yohai_daniel";
+
 export type AiChatRequest = {
   message: string;
   conversationId?: string;
+  assistantId?: AssistantId;
 };
 
 export type AiChatResponse = {
   message: string;
   conversationId: string;
+  assistantId: AssistantId;
   intent: string;
   toolCalls: string[];
 };
