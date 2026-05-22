@@ -1,5 +1,7 @@
 import type {
   ChatMessage,
+  ConversationAnswerFrame,
+  ConversationEntity,
   CounterpartyMemory,
   CounterpartyRef,
   CounterpartyReferenceResolution,
@@ -8,6 +10,8 @@ import type {
 
 export const MAX_CONVERSATION_MESSAGES = 20;
 export const MAX_COUNTERPARTIES = 5;
+const MAX_CONTEXT_ENTITIES = 12;
+const MAX_ANSWER_FRAMES = 8;
 
 export function maskEmail(email: string) {
   const [localPart, domain] = email.split("@");
@@ -21,8 +25,25 @@ export function maskEmail(email: string) {
 export function createEmptyCounterpartyMemory(): CounterpartyMemory {
   return {
     turn: 0,
-    mentionedCounterparties: []
+    mentionedCounterparties: [],
+    entities: [],
+    answerFrames: [],
+    mode: "idle",
+    pendingConfirmation: null,
+    clarification: null
   };
+}
+
+function normalizeEntities(entities?: ConversationEntity[]) {
+  return (entities ?? [])
+    .filter((entity) => entity.id && entity.type)
+    .slice(-MAX_CONTEXT_ENTITIES);
+}
+
+function normalizeAnswerFrames(answerFrames?: ConversationAnswerFrame[]) {
+  return (answerFrames ?? [])
+    .filter((frame) => frame.id && frame.intent)
+    .slice(-MAX_ANSWER_FRAMES);
 }
 
 export function normalizeCounterpartyMemory(
@@ -33,7 +54,15 @@ export function normalizeCounterpartyMemory(
   return {
     turn: memory?.turn ?? 0,
     lastCounterparty: memory?.lastCounterparty ?? undefined,
-    mentionedCounterparties: memory?.mentionedCounterparties ?? []
+    mentionedCounterparties: (memory?.mentionedCounterparties ?? []).slice(
+      0,
+      MAX_COUNTERPARTIES
+    ),
+    entities: normalizeEntities(memory?.entities),
+    answerFrames: normalizeAnswerFrames(memory?.answerFrames),
+    pendingConfirmation: memory?.pendingConfirmation ?? null,
+    clarification: memory?.clarification ?? null,
+    mode: memory?.mode ?? "idle"
   };
 }
 
@@ -89,7 +118,12 @@ export function rememberCounterparty(
   return {
     turn,
     lastCounterparty: updatedCounterparty,
-    mentionedCounterparties: nextMentioned
+    mentionedCounterparties: nextMentioned,
+    entities: memory.entities ?? [],
+    answerFrames: memory.answerFrames ?? [],
+    pendingConfirmation: memory.pendingConfirmation ?? null,
+    clarification: memory.clarification ?? null,
+    mode: memory.mode ?? "idle"
   };
 }
 
@@ -113,7 +147,12 @@ function getOrdinalFromMessage(message: string) {
     [/\b(second|2nd)\b/, 2],
     [/\b(third|3rd)\b/, 3],
     [/\b(fourth|4th)\b/, 4],
-    [/\b(fifth|5th)\b/, 5]
+    [/\b(fifth|5th)\b/, 5],
+    [/(הראשון|ראשון)/, 1],
+    [/(השני|שני)/, 2],
+    [/(השלישי|שלישי)/, 3],
+    [/(הרביעי|רביעי)/, 4],
+    [/(החמישי|חמישי)/, 5]
   ];
 
   return ordinalMap.find(([pattern]) => pattern.test(normalized))?.[1];
@@ -171,7 +210,10 @@ export function resolveCounterpartyReferenceDeterministic(
 
   if (
     /\b(this|that)\s+(person|recipient|counterparty)\b/.test(normalized) ||
-    /\b(with|to)\s+(them|that person|this person)\b/.test(normalized)
+    /\b(with|to)\s+(them|that person|this person)\b/.test(normalized) ||
+    /(לו|לה|אליו|אליה|איתו|איתה|אותו|אותה|האדם הזה|הבן אדם הזה|הנמען הזה|האחרון)/.test(
+      message
+    )
   ) {
     return memory.lastCounterparty;
   }
@@ -179,8 +221,9 @@ export function resolveCounterpartyReferenceDeterministic(
   const ordinal = getOrdinalFromMessage(normalized);
   if (
     ordinal &&
-    /\b(person|recipient|counterparty)\b/.test(normalized) &&
-    /\b(talked|discussed|mentioned|we've|weve)\b/.test(normalized)
+    ((/\b(person|recipient|counterparty)\b/.test(normalized) &&
+      /\b(talked|discussed|mentioned|we've|weve)\b/.test(normalized)) ||
+      /(אדם|בן אדם|נמען|דיברנו|הזכרנו)/.test(message))
   ) {
     return resolveByOrdinal(memory, ordinal);
   }

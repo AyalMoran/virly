@@ -78,6 +78,35 @@ const aiConversationSchema = new Schema(
       mentionedCounterparties: {
         type: [counterpartyRefSchema],
         default: []
+      },
+      entities: {
+        type: [Schema.Types.Mixed],
+        default: []
+      },
+      answerFrames: {
+        type: [Schema.Types.Mixed],
+        default: []
+      },
+      pendingConfirmation: {
+        type: Schema.Types.Mixed,
+        default: null
+      },
+      clarification: {
+        type: Schema.Types.Mixed,
+        default: null
+      },
+      mode: {
+        type: String,
+        enum: [
+          "idle",
+          "answering_read_only",
+          "awaiting_clarification",
+          "transfer_draft_in_progress",
+          "transfer_confirmation_pending",
+          "transfer_confirmed",
+          "transfer_denied"
+        ],
+        default: "idle"
       }
     },
     expiresAt: {

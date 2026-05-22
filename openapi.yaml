@@ -495,6 +495,14 @@ paths:
           schema:
             type: string
           description: Pending transfer confirmation id.
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 120
+          description: Optional client-generated retry key for this confirmation action.
       requestBody:
         required: true
         content:
@@ -505,9 +513,13 @@ paths:
               confirm:
                 value:
                   action: confirm
+                  version: 1
+                  idempotencyKey: 1a36fd87-995c-4d73-b1a0-5bb8de8eea51
               deny:
                 value:
                   action: deny
+                  version: 1
+                  idempotencyKey: 1a36fd87-995c-4d73-b1a0-5bb8de8eea51
       responses:
         '200':
           description: Confirmation result
@@ -999,11 +1011,20 @@ components:
           type: string
           enum:
             - balance_inquiry
+            - account_summary
             - recent_transactions
+            - transaction_search
+            - transaction_summary
+            - transaction_count
+            - transaction_detail
+            - counterparty_lookup
             - last_sent_counterparty
             - counterparty_transactions
             - counterparty_total_sent
             - transfer_prepare
+            - transfer_modify_pending
+            - transfer_cancel_pending
+            - pending_confirmation_status
             - verified_recipients
             - transfer_limits
             - transfer_status
@@ -1034,21 +1055,37 @@ components:
       type: object
       required:
         - id
+        - version
         - type
+        - status
         - recipientEmail
         - recipientFirstName
         - recipientLastName
         - amount
+        - currency
+        - recipient
+        - amountDetails
         - reason
+        - warnings
         - expiresAt
+        - confirmAction
+        - denyAction
       properties:
         id:
           type: string
           example: 6650cc68782e55fbbf857111
+        version:
+          type: integer
+          minimum: 1
+          example: 1
         type:
           type: string
           enum:
             - transfer
+        status:
+          type: string
+          enum:
+            - pending
         recipientEmail:
           type: string
           format: email
@@ -1064,24 +1101,135 @@ components:
         amount:
           type: number
           example: 50
+        currency:
+          type: string
+          enum:
+            - ILS
+          example: ILS
+        recipient:
+          type: object
+          required:
+            - email
+            - firstName
+            - lastName
+            - displayName
+            - verified
+          properties:
+            email:
+              type: string
+              format: email
+              example: moran@example.com
+            firstName:
+              type: string
+              nullable: true
+              example: Moran
+            lastName:
+              type: string
+              nullable: true
+              example: Ayal
+            displayName:
+              type: string
+              example: Moran Ayal
+            verified:
+              type: boolean
+              example: true
+        amountDetails:
+          type: object
+          required:
+            - value
+            - currency
+            - formatted
+          properties:
+            value:
+              type: number
+              example: 50
+            currency:
+              type: string
+              enum:
+                - ILS
+            formatted:
+              type: string
+              example: ₪50.00
         reason:
           type: string
           nullable: true
           example: Dinner
+        warnings:
+          type: array
+          items:
+            type: object
+            required:
+              - code
+              - message
+            properties:
+              code:
+                type: string
+                enum:
+                  - MISSING_RECIPIENT_NAME
+                  - NEW_RECIPIENT
+                  - HIGH_AMOUNT
+                  - NEAR_DAILY_LIMIT
+                  - CURRENCY_ASSUMED
+              message:
+                type: string
+        confirmAction:
+          $ref: '#/components/schemas/AiConfirmationActionDescriptor'
+        denyAction:
+          $ref: '#/components/schemas/AiConfirmationActionDescriptor'
         expiresAt:
           type: string
           format: date-time
+
+    AiConfirmationActionDescriptor:
+      type: object
+      required:
+        - method
+        - path
+        - body
+      properties:
+        method:
+          type: string
+          enum:
+            - POST
+        path:
+          type: string
+          example: /api/ai/confirmations/6650cc68782e55fbbf857111
+        body:
+          type: object
+          required:
+            - action
+            - version
+          properties:
+            action:
+              type: string
+              enum:
+                - confirm
+                - deny
+            version:
+              type: integer
+              minimum: 1
+              example: 1
 
     AiConfirmationRequest:
       type: object
       required:
         - action
+        - version
       properties:
         action:
           type: string
           enum:
             - confirm
             - deny
+        version:
+          type: integer
+          minimum: 1
+          example: 1
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 120
+          example: 1a36fd87-995c-4d73-b1a0-5bb8de8eea51
 
     AiConfirmationResponse:
       oneOf:

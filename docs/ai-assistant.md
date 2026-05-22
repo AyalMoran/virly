@@ -17,6 +17,7 @@ backend-authoritative decisions.
 - `server/src/ai/state.ts` owns the shared TypeScript contracts for graph state, intents, tool names, LLM provider methods, transfer drafts, and confirmations.
 - `server/src/ai/llm.ts` adapts `@langchain/openai` `ChatOpenAI` with Zod structured output for classification, transfer draft extraction, counterparty reference resolution, and final wording.
 - `server/src/ai/router.ts` performs deterministic safety prechecks, deterministic fallback classification, and fixed intent-to-tool routing.
+- `server/src/ai/messageNormalization.ts` extracts language, direction, currency, amount, counterparty, and pending-confirmation slot metadata without changing the user's text.
 - `server/src/ai/policy.ts` contains the central safety policy and refusal messages.
 - `server/src/ai/counterpartyMemory.ts` contains bounded counterparty memory helpers and deterministic reference fallback.
 - `server/src/ai/tools/` contains approved read-only tools. Tools always scope queries by authenticated `userId`.
@@ -33,7 +34,9 @@ Current graph order in `server/src/ai/graph.ts`:
 START
   -> loadAuthenticatedContext
   -> loadConversationContext
+  -> normalizeUserMessage
   -> classifyIntent
+  -> extractRequestSlots
   -> extractTransferDraft
   -> resolveCounterpartyReference
   -> prepareTransferConfirmation
@@ -57,7 +60,22 @@ START
 - Loads bounded counterparty memory:
   - `lastCounterparty`
   - `mentionedCounterparties`, max 5
+  - structured `entities`, max 12
+  - structured `answerFrames`, max 8
+  - `mode`, `pendingConfirmation`, and the latest `clarification`
   - LRU behavior is implemented by `rememberCounterparty`.
+
+### `normalizeUserMessage`
+
+- Preserves the original text and adds metadata only.
+- Detects Hebrew, English, mixed language, and RTL/LTR/mixed direction.
+- Marks currency symbols and date-expression candidates.
+- Extracts deterministic request slots after classification:
+  - explicit email or contextual recipient words
+  - literal amount and currency
+  - transaction direction
+  - pending-confirmation references
+- Hebrew is not translated into English as the main strategy; original phrases such as `לו`, `לה`, `שקל`, and `שישי האחרון` are preserved for downstream parsing.
 
 ### `classifyIntent`
 
@@ -69,14 +87,29 @@ START
   - optional `refusalReason`
 - It must not extract entities, choose tools, execute actions, or ask the user questions.
 
+### `extractRequestSlots`
+
+- Runs after classification so intent and entity parsing remain separate.
+- Extracts deterministic slot metadata for counterparty, amount, currency, transaction direction, ordinals, and pending-confirmation references.
+- Slot metadata can enrich the transfer draft, but it is still not trusted execution input.
+
 Supported intents:
 
 - `balance_inquiry`
+- `account_summary`
 - `recent_transactions`
+- `transaction_search`
+- `transaction_summary`
+- `transaction_count`
+- `transaction_detail`
+- `counterparty_lookup`
 - `last_sent_counterparty`
 - `counterparty_transactions`
 - `counterparty_total_sent`
 - `transfer_prepare`
+- `transfer_modify_pending`
+- `transfer_cancel_pending`
+- `pending_confirmation_status`
 - `verified_recipients`
 - `transfer_limits`
 - `transfer_status`
@@ -99,8 +132,14 @@ Important intent distinction:
   - `recipientReference`
   - `recipientEmail`
   - `amount`
+  - `amountText`
+  - `amountReferenceText`
+  - `currency`
+  - `currencyMentioned`
+  - `currencySupported`
   - `reason`
 - The LLM may parse what the user wrote, but it does not resolve authority, verify recipients, check balances, or create transactions.
+- The backend rejects unsupported transfer currencies before pending-transfer preparation. The app currently prepares transfers only in ILS; USD/EUR mentions require clarification instead of silent conversion.
 
 ### `resolveCounterpartyReference`
 
@@ -113,6 +152,7 @@ Important intent distinction:
 - Deterministic fallback handles simple English references such as "this person" and ordinals.
 - For read-only counterparty intents, unresolved references become a clarification response and no tools run.
 - For `transfer_prepare`, unresolved references continue to `prepareTransferConfirmation`, which asks a transfer-specific missing-recipient question.
+- Clarification state is persisted so replies like "the second one" can be interpreted against the latest clarification rather than free-form chat text in a later phase.
 
 ### `prepareTransferConfirmation`
 
@@ -131,6 +171,7 @@ Important intent distinction:
 - Creates `AiPendingTransfer` only when required details are valid.
 - Stores a snapshot of recipient email plus first and last name when provided.
 - Returns a `TransferConfirmation` payload for the chat UI.
+- The confirmation payload includes `version`, `status`, nested recipient details, nested amount details, warnings, and explicit confirm/deny action bodies. The card payload is the source of truth for review; assistant wording is secondary.
 
 ### `routeReadOnlyTools`
 
@@ -152,6 +193,12 @@ Important intent distinction:
 
 - Saves the latest user and assistant messages.
 - Persists updated bounded counterparty memory.
+- Persists structured context:
+  - conversation `mode`
+  - recent `entities`
+  - recent `answerFrames`
+  - pending confirmation snapshot when one is created
+  - latest clarification request
 - Refreshes the conversation TTL through `AiConversation`.
 
 ### Audit
@@ -200,6 +247,11 @@ Do not add entities or missing fields here. Transfer entities belong to
   recipientReference?: string | null;
   recipientEmail?: string | null;
   amount?: number | null;
+  amountText?: string | null;
+  amountReferenceText?: string | null;
+  currency?: "ILS" | "USD" | "EUR" | "UNKNOWN" | null;
+  currencyMentioned?: boolean;
+  currencySupported?: boolean;
   reason?: string | null;
 }
 ```
@@ -209,13 +261,16 @@ Purpose:
 - parse the user's transfer request into a draft
 - preserve contextual recipient text such as "him", "this person", `לו`, or a name
 - extract a positive numeric amount when clear
+- preserve contextual amount phrases such as "same amount as last time" without inventing a number
+- preserve explicit currency mentions
 - extract a short optional reason
 
 Constraints:
 
 - This schema is not trusted execution input by itself.
 - Recipient resolution and balance checks happen in backend services.
-- Currency is not represented in v1; the app uses the same amount semantics as the existing transfer page.
+- The app currently supports transfer preparation in ILS only.
+- USD/EUR mentions are not silently treated as ILS; the assistant asks for clarification.
 
 ### Counterparty Reference Resolution Schema
 
@@ -267,6 +322,11 @@ Fields:
 - `memory.turn`
 - `memory.lastCounterparty`
 - `memory.mentionedCounterparties`, max 5
+- `memory.entities`, max 12 structured references to backend facts
+- `memory.answerFrames`, max 8 recent answer summaries with entity/tool refs
+- `memory.mode`
+- `memory.pendingConfirmation`
+- `memory.clarification`
 - `expiresAt`, TTL refreshed to 30 days on save
 
 This is conversational context, not an authorization record.
@@ -280,12 +340,14 @@ Fields:
 - `userId`
 - `conversationId`
 - `assistantId`
+- `version`, currently starts at `1`
+- `currency`, currently `ILS`
 - `recipientEmail`
 - `recipientFirstName`
 - `recipientLastName`
 - `amount`
 - `reason`
-- `status`: `pending`, `confirmed`, or `denied`
+- `status`: `pending`, `confirmed`, `denied`, or `expired`
 - `expiresAt`, TTL index
 
 Rules:
@@ -335,13 +397,45 @@ Transfer-preparation response:
   "toolCalls": [],
   "confirmation": {
     "id": "pending-transfer-id",
+    "version": 1,
     "type": "transfer",
+    "status": "pending",
     "recipientEmail": "moran@example.com",
     "recipientFirstName": "Moran",
     "recipientLastName": "Ayal",
     "amount": 50,
+    "currency": "ILS",
+    "recipient": {
+      "email": "moran@example.com",
+      "firstName": "Moran",
+      "lastName": "Ayal",
+      "displayName": "Moran Ayal",
+      "verified": true
+    },
+    "amountDetails": {
+      "value": 50,
+      "currency": "ILS",
+      "formatted": "₪50.00"
+    },
     "reason": "Dinner",
-    "expiresAt": "2026-05-22T12:00:00.000Z"
+    "warnings": [],
+    "expiresAt": "2026-05-22T12:00:00.000Z",
+    "confirmAction": {
+      "method": "POST",
+      "path": "/api/ai/confirmations/pending-transfer-id",
+      "body": {
+        "action": "confirm",
+        "version": 1
+      }
+    },
+    "denyAction": {
+      "method": "POST",
+      "path": "/api/ai/confirmations/pending-transfer-id",
+      "body": {
+        "action": "deny",
+        "version": 1
+      }
+    }
   }
 }
 ```
@@ -352,7 +446,9 @@ Transfer-preparation response:
 
 ```json
 {
-  "action": "confirm"
+  "action": "confirm",
+  "version": 1,
+  "idempotencyKey": "client-generated-uuid"
 }
 ```
 
@@ -360,9 +456,13 @@ or:
 
 ```json
 {
-  "action": "deny"
+  "action": "deny",
+  "version": 1,
+  "idempotencyKey": "client-generated-uuid"
 }
 ```
+
+The idempotency key can also be sent as an `Idempotency-Key` header.
 
 Confirm response:
 
@@ -391,6 +491,7 @@ Deny response:
 ```
 
 Both endpoints require auth cookies and `X-CSRF-Token` for unsafe methods.
+Confirmation requests must include the current card `version`. Idempotency keys are accepted to make client retries return the same stored result when available.
 
 ## Possible Flows
 
@@ -516,4 +617,4 @@ Current environment variables:
 
 - Phase 1: read-only assistant, implemented.
 - Phase 2: transfer preparation with explicit chat confirmation, implemented.
-- Phase 3: richer fraud/risk review, step-up auth, idempotency keys, and support handoff.
+- Phase 3: richer fraud/risk review, step-up auth, pending-transfer modification, and support handoff.

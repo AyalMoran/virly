@@ -198,12 +198,20 @@ export const api = {
       })
     });
   },
-  aiConfirmation(id: string, action: AiConfirmationAction) {
+  aiConfirmation(id: string, action: AiConfirmationAction, version: number) {
+    const idempotencyKey =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+
     return request<AiConfirmationResponse>(
       `/api/ai/confirmations/${encodeURIComponent(id)}`,
       {
         method: "POST",
-        body: JSON.stringify({ action })
+        headers: {
+          "Idempotency-Key": idempotencyKey
+        },
+        body: JSON.stringify({ action, version, idempotencyKey })
       }
     );
   }
