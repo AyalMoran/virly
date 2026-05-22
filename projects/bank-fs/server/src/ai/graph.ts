@@ -1,5 +1,13 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { DEFAULT_ASSISTANT_ID } from "./assistants.js";
+import {
+  createEmptyCounterpartyMemory,
+  rememberCounterpartiesFromMetadata,
+  rememberCounterparty,
+  resolveCounterpartyReferenceDeterministic,
+  resolveReferenceAgainstMemory,
+  trimConversationMessages
+} from "./counterpartyMemory.js";
 import { buildRefusalMessage } from "./policy.js";
 import {
   classifyAssistantIntent,
@@ -12,10 +20,15 @@ import type {
   AssistantToolName,
   AssistantToolExecutors,
   AuditLogger,
+  ConversationStore,
+  CounterpartyMemory,
+  TransferDraft,
+  TransferPreparationService,
   RunAssistantInput,
   RunAssistantResult
 } from "./state.js";
 import { readOnlyToolExecutors } from "./tools/index.js";
+import { prepareAiPendingTransfer } from "../services/aiPendingTransfer.service.js";
 
 const AssistantStateAnnotation = Annotation.Root({
   userId: Annotation<string | undefined>(),
@@ -23,11 +36,17 @@ const AssistantStateAnnotation = Annotation.Root({
   requestId: Annotation<string | undefined>(),
   assistantId: Annotation<AssistantGraphState["assistantId"]>(),
   messages: Annotation<AssistantGraphState["messages"]>(),
+  counterpartyMemory: Annotation<AssistantGraphState["counterpartyMemory"]>(),
+  currentTurn: Annotation<number>(),
   detectedIntent: Annotation<AssistantGraphState["detectedIntent"]>(),
   selectedAccountId: Annotation<string | undefined>(),
+  resolvedCounterparty: Annotation<AssistantGraphState["resolvedCounterparty"]>(),
+  transferDraft: Annotation<AssistantGraphState["transferDraft"]>(),
+  confirmation: Annotation<AssistantGraphState["confirmation"]>(),
   requestedToolNames: Annotation<AssistantGraphState["requestedToolNames"]>(),
   executedToolNames: Annotation<AssistantGraphState["executedToolNames"]>(),
   toolResults: Annotation<AssistantGraphState["toolResults"]>(),
+  clarificationMessage: Annotation<string | undefined>(),
   refusalReason: Annotation<string | undefined>(),
   responseMessage: Annotation<string | undefined>()
 });
@@ -35,6 +54,8 @@ const AssistantStateAnnotation = Annotation.Root({
 type GraphOptions = {
   tools: AssistantToolExecutors;
   llmProvider?: AssistantLlmProvider;
+  conversationStore?: ConversationStore;
+  transferPreparationService: TransferPreparationService;
 };
 
 export type RunAssistantOptions = Partial<GraphOptions> & {
@@ -66,6 +87,35 @@ function loadAuthenticatedContext(
   return {};
 }
 
+function buildConversationLoader(conversationStore?: ConversationStore) {
+  return async function loadConversationContext(
+    state: AssistantGraphState
+  ): Promise<Partial<AssistantGraphState>> {
+    if (!state.userId || !conversationStore) {
+      return {};
+    }
+
+    const currentMessage = getUserMessage(state);
+    const context = await conversationStore.load(
+      state.userId,
+      state.conversationId
+    );
+    const counterpartyMemory: CounterpartyMemory = {
+      ...context.memory,
+      turn: context.memory.turn + 1
+    };
+
+    return {
+      messages: trimConversationMessages([
+        ...context.messages,
+        { role: "user", content: currentMessage, createdAt: new Date() }
+      ]),
+      counterpartyMemory,
+      currentTurn: counterpartyMemory.turn
+    };
+  };
+}
+
 function buildIntentClassifier(llmProvider?: AssistantLlmProvider) {
   return async function classifyIntent(
     state: AssistantGraphState
@@ -76,7 +126,11 @@ function buildIntentClassifier(llmProvider?: AssistantLlmProvider) {
 
     const classification = await classifyAssistantIntent(
       getUserMessage(state),
-      llmProvider
+      llmProvider,
+      {
+        messages: state.messages,
+        counterpartyMemory: state.counterpartyMemory
+      }
     );
     return {
       detectedIntent: classification.intent,
@@ -85,11 +139,166 @@ function buildIntentClassifier(llmProvider?: AssistantLlmProvider) {
   };
 }
 
+function extractTransferDraftDeterministic(message: string): TransferDraft {
+  const email = message.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
+  const amountMatch = message.match(
+    /(?:\$|usd|nis|ils|shekels?|שקל|שח|ש״ח)?\s*(\d+(?:\.\d{1,2})?)/i
+  );
+  const amount = amountMatch ? Number(amountMatch[1]) : null;
+  const referenceMatch = message.match(
+    /\b(him|her|them|this person|that person|this recipient|that recipient)\b/i
+  );
+
+  return {
+    recipientEmail: email?.toLowerCase() ?? null,
+    recipientReference: email ? null : referenceMatch?.[0] ?? message.trim(),
+    amount: Number.isFinite(amount) && amount ? amount : null,
+    reason: null
+  };
+}
+
+function buildTransferDraftExtractor(llmProvider?: AssistantLlmProvider) {
+  return async function extractTransferDraft(
+    state: AssistantGraphState
+  ): Promise<Partial<AssistantGraphState>> {
+    if (state.refusalReason || state.detectedIntent !== "transfer_prepare") {
+      return {};
+    }
+
+    if (llmProvider) {
+      try {
+        const transferDraft = await llmProvider.extractTransferDraft({
+          userMessage: getUserMessage(state),
+          messages: state.messages,
+          counterpartyMemory: state.counterpartyMemory
+        });
+
+        return { transferDraft };
+      } catch (error) {
+        console.warn(
+          "AI transfer draft extractor failed; using deterministic fallback.",
+          error instanceof Error ? error.message : error
+        );
+      }
+    }
+
+    return {
+      transferDraft: extractTransferDraftDeterministic(getUserMessage(state))
+    };
+  };
+}
+
+function needsCounterpartyResolution(state: AssistantGraphState) {
+  return (
+    state.detectedIntent === "counterparty_transactions" ||
+    state.detectedIntent === "counterparty_total_sent" ||
+    (state.detectedIntent === "transfer_prepare" &&
+      !state.transferDraft?.recipientEmail)
+  );
+}
+
+function buildCounterpartyResolver(llmProvider?: AssistantLlmProvider) {
+  return async function resolveCounterpartyReference(
+    state: AssistantGraphState
+  ): Promise<Partial<AssistantGraphState>> {
+    if (state.refusalReason || !needsCounterpartyResolution(state)) {
+      return {};
+    }
+
+    if (llmProvider) {
+      try {
+        const resolution = await llmProvider.resolveCounterpartyReference({
+          userMessage: getUserMessage(state),
+          intent: state.detectedIntent ?? "unsupported",
+          messages: state.messages,
+          memory: state.counterpartyMemory,
+          transferDraft: state.transferDraft
+        });
+        const resolvedCounterparty = resolveReferenceAgainstMemory(
+          state.counterpartyMemory,
+          resolution
+        );
+
+        if (resolvedCounterparty) {
+          return {
+            resolvedCounterparty,
+            counterpartyMemory: rememberCounterparty(
+              state.counterpartyMemory,
+              resolvedCounterparty,
+              state.currentTurn
+            )
+          };
+        }
+      } catch (error) {
+        console.warn(
+          "AI counterparty resolver failed; using deterministic fallback.",
+          error instanceof Error ? error.message : error
+        );
+      }
+    }
+
+    const deterministicCounterparty = resolveCounterpartyReferenceDeterministic(
+      getUserMessage(state),
+      state.counterpartyMemory
+    );
+    if (deterministicCounterparty) {
+      return {
+        resolvedCounterparty: deterministicCounterparty,
+        counterpartyMemory: rememberCounterparty(
+          state.counterpartyMemory,
+          deterministicCounterparty,
+          state.currentTurn
+        )
+      };
+    }
+
+    if (state.detectedIntent === "transfer_prepare") {
+      return {};
+    }
+
+    return {
+      clarificationMessage:
+        "I need to know which recipient you mean before I can answer that. Please choose a specific recipient from your recent conversation."
+    };
+  };
+}
+
+function buildTransferConfirmationPreparer(
+  transferPreparationService: TransferPreparationService
+) {
+  return async function prepareTransferConfirmation(
+    state: AssistantGraphState
+  ): Promise<Partial<AssistantGraphState>> {
+    if (
+      !state.userId ||
+      state.refusalReason ||
+      state.clarificationMessage ||
+      state.detectedIntent !== "transfer_prepare"
+    ) {
+      return {};
+    }
+
+    const result = await transferPreparationService({
+      userId: state.userId,
+      conversationId: state.conversationId,
+      assistantId: state.assistantId,
+      draft: state.transferDraft ?? {},
+      resolvedCounterparty: state.resolvedCounterparty
+    });
+
+    if (result.status === "needs_clarification") {
+      return { clarificationMessage: result.message };
+    }
+
+    return { confirmation: result.confirmation };
+  };
+}
+
 function buildToolRouter(tools: AssistantToolExecutors) {
   return async function routeReadOnlyTools(
     state: AssistantGraphState
   ): Promise<Partial<AssistantGraphState>> {
-    if (!state.userId || state.refusalReason) {
+    if (!state.userId || state.refusalReason || state.clarificationMessage) {
       return {
         requestedToolNames: [],
         executedToolNames: [],
@@ -115,21 +324,33 @@ function buildToolRouter(tools: AssistantToolExecutors) {
       const toolResult = await tools[toolName]({
         userId: state.userId,
         conversationId: state.conversationId,
-        message: getUserMessage(state)
+        message: getUserMessage(state),
+        resolvedCounterparty: state.resolvedCounterparty
       });
       toolResults.push(toolResult);
       executedToolNames.push(toolName);
     }
 
+    const counterpartyMemory = rememberCounterpartiesFromMetadata(
+      state.counterpartyMemory,
+      toolResults.map((result) => result.metadata),
+      state.currentTurn
+    );
+
     return {
       requestedToolNames,
       executedToolNames,
-      toolResults
+      toolResults,
+      counterpartyMemory
     };
   };
 }
 
 function composeDeterministicResponse(state: AssistantGraphState) {
+  if (state.clarificationMessage) {
+    return state.clarificationMessage;
+  }
+
   if (state.refusalReason) {
     return state.refusalReason === "authentication_required"
       ? "Authentication is required to use the assistant."
@@ -138,7 +359,7 @@ function composeDeterministicResponse(state: AssistantGraphState) {
 
   const intent = state.detectedIntent ?? "unsupported";
   if (intent === "general_help") {
-    return "I can help with read-only account questions such as balances, recent transactions, verified recipients, and transfer limits. Transfers must be completed through the secure app flow.";
+    return "I can help with account questions such as balances, recent transactions, verified recipients, transfer limits, and preparing transfers for explicit confirmation.";
   }
 
   if (intent === "transfer_status") {
@@ -146,7 +367,11 @@ function composeDeterministicResponse(state: AssistantGraphState) {
   }
 
   if (intent === "unsupported") {
-    return "I can help with read-only account information, recent transactions, verified recipients, transfer limits, and general app guidance.";
+    return "I can help with account information, recent transactions, verified recipients, transfer limits, transfer preparation, and general app guidance.";
+  }
+
+  if (intent === "transfer_prepare" && state.confirmation) {
+    return "Please review the transfer details and use the confirmation buttons before I send anything.";
   }
 
   if (state.toolResults.length === 0) {
@@ -170,8 +395,13 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
       const responseMessage = await llmProvider.composeResponse({
         assistantId: state.assistantId,
         userMessage: getUserMessage(state),
+        messages: state.messages,
         intent: state.detectedIntent ?? "unsupported",
         toolResults: state.toolResults,
+        counterpartyMemory: state.counterpartyMemory,
+        resolvedCounterparty: state.resolvedCounterparty,
+        transferDraft: state.transferDraft,
+        confirmation: state.confirmation,
         refusalReason: state.refusalReason,
         fallbackMessage
       });
@@ -189,17 +419,57 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
   };
 }
 
+function buildConversationSaver(conversationStore?: ConversationStore) {
+  return async function saveConversation(
+    state: AssistantGraphState
+  ): Promise<Partial<AssistantGraphState>> {
+    if (!state.userId || !conversationStore) {
+      return {};
+    }
+
+    await conversationStore.save({
+      userId: state.userId,
+      conversationId: state.conversationId,
+      assistantId: state.assistantId,
+      messages: trimConversationMessages([
+        ...state.messages,
+        {
+          role: "assistant",
+          content: state.responseMessage ?? "I could not process that request.",
+          createdAt: new Date()
+        }
+      ]),
+      memory: state.counterpartyMemory
+    });
+
+    return {};
+  };
+}
+
 function buildAssistantGraph(options: GraphOptions) {
   return new StateGraph(AssistantStateAnnotation)
     .addNode("loadAuthenticatedContext", loadAuthenticatedContext)
+    .addNode("loadConversationContext", buildConversationLoader(options.conversationStore))
     .addNode("classifyIntent", buildIntentClassifier(options.llmProvider))
+    .addNode("extractTransferDraft", buildTransferDraftExtractor(options.llmProvider))
+    .addNode("resolveCounterpartyReference", buildCounterpartyResolver(options.llmProvider))
+    .addNode(
+      "prepareTransferConfirmation",
+      buildTransferConfirmationPreparer(options.transferPreparationService)
+    )
     .addNode("routeReadOnlyTools", buildToolRouter(options.tools))
     .addNode("composeResponse", buildResponseComposer(options.llmProvider))
+    .addNode("saveConversation", buildConversationSaver(options.conversationStore))
     .addEdge(START, "loadAuthenticatedContext")
-    .addEdge("loadAuthenticatedContext", "classifyIntent")
-    .addEdge("classifyIntent", "routeReadOnlyTools")
+    .addEdge("loadAuthenticatedContext", "loadConversationContext")
+    .addEdge("loadConversationContext", "classifyIntent")
+    .addEdge("classifyIntent", "extractTransferDraft")
+    .addEdge("extractTransferDraft", "resolveCounterpartyReference")
+    .addEdge("resolveCounterpartyReference", "prepareTransferConfirmation")
+    .addEdge("prepareTransferConfirmation", "routeReadOnlyTools")
     .addEdge("routeReadOnlyTools", "composeResponse")
-    .addEdge("composeResponse", END)
+    .addEdge("composeResponse", "saveConversation")
+    .addEdge("saveConversation", END)
     .compile();
 }
 
@@ -209,14 +479,20 @@ export async function runAssistantGraph(
 ): Promise<RunAssistantResult> {
   const graph = buildAssistantGraph({
     tools: options.tools ?? readOnlyToolExecutors,
-    llmProvider: options.llmProvider
+    llmProvider: options.llmProvider,
+    conversationStore: options.conversationStore,
+    transferPreparationService:
+      options.transferPreparationService ?? prepareAiPendingTransfer
   });
+  const emptyMemory = createEmptyCounterpartyMemory();
   const initialState: AssistantGraphState = {
     userId: input.userId,
     conversationId: input.conversationId,
     requestId: input.requestId,
     assistantId: input.assistantId ?? DEFAULT_ASSISTANT_ID,
     messages: [{ role: "user", content: input.message }],
+    counterpartyMemory: emptyMemory,
+    currentTurn: emptyMemory.turn + 1,
     requestedToolNames: [],
     executedToolNames: [],
     toolResults: []
@@ -243,6 +519,7 @@ export async function runAssistantGraph(
     assistantId: finalState.assistantId,
     intent,
     toolCalls: finalState.executedToolNames,
+    confirmation: finalState.confirmation,
     refusalReason: finalState.refusalReason
   };
 }
