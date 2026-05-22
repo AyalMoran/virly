@@ -2,6 +2,7 @@ import {
   AssistantIntent,
   AssistantLlmProvider,
   AssistantToolName,
+  ClassifyAssistantIntentInput,
   IntentClassification
 } from "./state.js";
 import { getUnsafeRequestReason } from "./policy.js";
@@ -9,6 +10,10 @@ import { getUnsafeRequestReason } from "./policy.js";
 const validIntents: AssistantIntent[] = [
   "balance_inquiry",
   "recent_transactions",
+  "last_sent_counterparty",
+  "counterparty_transactions",
+  "counterparty_total_sent",
+  "transfer_prepare",
   "verified_recipients",
   "transfer_limits",
   "transfer_status",
@@ -26,6 +31,33 @@ export function classifyAssistantIntentDeterministic(
   }
 
   const normalized = message.toLowerCase();
+
+  if (
+    /\b(last|most recent)\b.*\b(person|recipient|counterparty|who)\b.*\b(sent|paid|transferred)\b/i.test(normalized) ||
+    /\b(who|person|recipient|counterparty)\b.*\b(last|most recent)\b.*\b(sent|paid|transferred)\b/i.test(normalized)
+  ) {
+    return { intent: "last_sent_counterparty" };
+  }
+
+  if (
+    /\b(total|ever|altogether|in total|sum)\b.*\b(send|sent|paid|transferred)\b.*\b(this|that|person|recipient|counterparty|them)\b/i.test(normalized) ||
+    /\bhow much\b.*\b(send|sent|paid|transferred)\b.*\b(this|that|person|recipient|counterparty|them)\b/i.test(normalized)
+  ) {
+    return { intent: "counterparty_total_sent" };
+  }
+
+  if (
+    /\b(transaction|transactions|activity|history|recent|last\s+\d+)\b.*\b(with|to|from)\b.*\b(this|that|person|recipient|counterparty|them)\b/i.test(normalized)
+  ) {
+    return { intent: "counterparty_transactions" };
+  }
+
+  if (
+    /\b(send|transfer|pay|move|wire|return|give)\b.*\b(\$|usd|dollar|dollars|nis|shekel|shekels|money|[0-9])/i.test(normalized) ||
+    /\b(send|transfer|pay|move|wire|return|give)\b.*\b(to|for)\b/i.test(normalized)
+  ) {
+    return { intent: "transfer_prepare" };
+  }
 
   if (/\b(balance|available funds|how much.*have)\b/i.test(normalized)) {
     return { intent: "balance_inquiry" };
@@ -73,7 +105,8 @@ function normalizeClassification(
 
 export async function classifyAssistantIntent(
   message: string,
-  llmProvider?: AssistantLlmProvider
+  llmProvider?: AssistantLlmProvider,
+  context?: Pick<ClassifyAssistantIntentInput, "messages" | "counterpartyMemory">
 ): Promise<IntentClassification> {
   const refusalReason = getUnsafeRequestReason(message);
   if (refusalReason) {
@@ -85,7 +118,17 @@ export async function classifyAssistantIntent(
   }
 
   try {
-    return normalizeClassification(await llmProvider.classifyIntent(message));
+    return normalizeClassification(
+      await llmProvider.classifyIntent({
+        userMessage: message,
+        messages: context?.messages ?? [{ role: "user", content: message }],
+        counterpartyMemory:
+          context?.counterpartyMemory ?? {
+            turn: 0,
+            mentionedCounterparties: []
+          }
+      })
+    );
   } catch (error) {
     console.warn(
       "AI intent classifier failed; using deterministic fallback.",
@@ -103,6 +146,12 @@ export function getReadOnlyToolsForIntent(
       return ["getUserAccounts", "getAccountBalance"];
     case "recent_transactions":
       return ["getRecentTransactions"];
+    case "last_sent_counterparty":
+      return ["getLastSentCounterparty"];
+    case "counterparty_transactions":
+      return ["getTransactionsWithCounterparty"];
+    case "counterparty_total_sent":
+      return ["getTotalSentToCounterparty"];
     case "verified_recipients":
       return ["getVerifiedRecipients"];
     case "transfer_limits":
@@ -117,6 +166,9 @@ export function isReadOnlyToolName(toolName: string): toolName is AssistantToolN
     "getUserAccounts",
     "getAccountBalance",
     "getRecentTransactions",
+    "getLastSentCounterparty",
+    "getTransactionsWithCounterparty",
+    "getTotalSentToCounterparty",
     "getVerifiedRecipients",
     "getTransferLimits"
   ].includes(toolName);

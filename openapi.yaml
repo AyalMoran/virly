@@ -435,11 +435,12 @@ paths:
     post:
       tags:
         - AI Assistant
-      summary: Ask the read-only AI assistant a question
+      summary: Ask the AI assistant a question
       description: |
-        Runs the authenticated read-only AI assistant. The assistant may query
-        allowlisted account-information tools, but it cannot create, modify,
-        cancel, approve, or execute transfers.
+        Runs the authenticated AI assistant. The assistant may query allowlisted
+        account-information tools and prepare a transfer confirmation, but it
+        cannot execute a transfer from chat text. Money movement requires the
+        separate confirmation endpoint.
       security:
         - cookieAuth: []
       parameters:
@@ -471,6 +472,63 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         '401':
           description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/ai/confirmations/{id}:
+    post:
+      tags:
+        - AI Assistant
+      summary: Confirm or deny an AI-prepared transfer
+      description: |
+        Executes or cancels a pending transfer prepared by the AI assistant.
+        Confirmation ids are scoped to the authenticated user and expire.
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Pending transfer confirmation id.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiConfirmationRequest'
+            examples:
+              confirm:
+                value:
+                  action: confirm
+              deny:
+                value:
+                  action: deny
+      responses:
+        '200':
+          description: Confirmation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiConfirmationResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Confirmation expired or already used
           content:
             application/json:
               schema:
@@ -942,6 +1000,10 @@ components:
           enum:
             - balance_inquiry
             - recent_transactions
+            - last_sent_counterparty
+            - counterparty_transactions
+            - counterparty_total_sent
+            - transfer_prepare
             - verified_recipients
             - transfer_limits
             - transfer_status
@@ -957,11 +1019,103 @@ components:
               - getUserAccounts
               - getAccountBalance
               - getRecentTransactions
+              - getLastSentCounterparty
+              - getTransactionsWithCounterparty
+              - getTotalSentToCounterparty
               - getVerifiedRecipients
               - getTransferLimits
           example:
             - getUserAccounts
             - getAccountBalance
+        confirmation:
+          $ref: '#/components/schemas/AiTransferConfirmation'
+
+    AiTransferConfirmation:
+      type: object
+      required:
+        - id
+        - type
+        - recipientEmail
+        - recipientFirstName
+        - recipientLastName
+        - amount
+        - reason
+        - expiresAt
+      properties:
+        id:
+          type: string
+          example: 6650cc68782e55fbbf857111
+        type:
+          type: string
+          enum:
+            - transfer
+        recipientEmail:
+          type: string
+          format: email
+          example: moran@example.com
+        recipientFirstName:
+          type: string
+          nullable: true
+          example: Moran
+        recipientLastName:
+          type: string
+          nullable: true
+          example: Ayal
+        amount:
+          type: number
+          example: 50
+        reason:
+          type: string
+          nullable: true
+          example: Dinner
+        expiresAt:
+          type: string
+          format: date-time
+
+    AiConfirmationRequest:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          enum:
+            - confirm
+            - deny
+
+    AiConfirmationResponse:
+      oneOf:
+        - type: object
+          required:
+            - status
+            - message
+            - newBalance
+            - transaction
+          properties:
+            status:
+              type: string
+              enum:
+                - confirmed
+            message:
+              type: string
+              example: Transfer completed successfully.
+            newBalance:
+              type: number
+              example: 75
+            transaction:
+              $ref: '#/components/schemas/Transaction'
+        - type: object
+          required:
+            - status
+            - message
+          properties:
+            status:
+              type: string
+              enum:
+                - denied
+            message:
+              type: string
+              example: Transfer cancelled.
 
     Pagination:
       type: object

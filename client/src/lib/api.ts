@@ -1,5 +1,7 @@
 import type {
   AccountSummary,
+  AiConfirmationAction,
+  AiConfirmationResponse,
   AiChatRequest,
   AiChatResponse,
   ApiErrorBody,
@@ -195,5 +197,14 @@ export const api = {
         ...(payload.assistantId ? { assistantId: payload.assistantId } : {})
       })
     });
+  },
+  aiConfirmation(id: string, action: AiConfirmationAction) {
+    return request<AiConfirmationResponse>(
+      `/api/ai/confirmations/${encodeURIComponent(id)}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ action })
+      }
+    );
   }
 };

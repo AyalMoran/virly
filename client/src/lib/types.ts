@@ -117,13 +117,39 @@ export type AiChatRequest = {
   assistantId?: AssistantId;
 };
 
+export type AiTransferConfirmation = {
+  id: string;
+  type: "transfer";
+  recipientEmail: string;
+  recipientFirstName: string | null;
+  recipientLastName: string | null;
+  amount: number;
+  reason: string | null;
+  expiresAt: string;
+};
+
 export type AiChatResponse = {
   message: string;
   conversationId: string;
   assistantId: AssistantId;
   intent: string;
   toolCalls: string[];
+  confirmation?: AiTransferConfirmation;
 };
+
+export type AiConfirmationResponse =
+  | {
+      status: "confirmed";
+      message: string;
+      newBalance: number;
+      transaction: Transaction;
+    }
+  | {
+      status: "denied";
+      message: string;
+    };
+
+export type AiConfirmationAction = "confirm" | "deny";
 
 export type ApiIssue = {
   path: string;
