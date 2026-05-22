@@ -24,6 +24,17 @@ const aiPendingTransferSchema = new Schema(
       lowercase: true,
       trim: true
     },
+    version: {
+      type: Number,
+      required: true,
+      default: 1
+    },
+    currency: {
+      type: String,
+      enum: ["ILS"],
+      required: true,
+      default: "ILS"
+    },
     recipientFirstName: {
       type: String,
       default: null
@@ -44,10 +55,15 @@ const aiPendingTransferSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "confirmed", "denied"],
+      enum: ["pending", "confirmed", "denied", "expired"],
       required: true,
       default: "pending",
       index: true
+    },
+    idempotencyResults: {
+      type: Map,
+      of: Schema.Types.Mixed,
+      default: {}
     },
     expiresAt: {
       type: Date,

@@ -13,8 +13,8 @@ export const assistantSystemPolicy = [
 
 const unsafePatterns: Array<{ pattern: RegExp; reason: string }> = [
   {
-    pattern: /\b(cancel|modify|approve)\b.*\b(transfer|payment|recipient)\b/i,
-    reason: "write_action_not_supported"
+    pattern: /\b(send|transfer|pay|execute|approve|confirm)\b.*\b(without|no|skip|bypass)\b.*\b(confirm|confirmation|verification|approval)\b/i,
+    reason: "chat_text_is_not_authorization"
   },
   {
     pattern: /\b(add|modify|update|change|delete)\b.*\b(recipient|account|user|profile|data)\b/i,

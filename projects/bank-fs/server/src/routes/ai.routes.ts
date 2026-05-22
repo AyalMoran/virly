@@ -19,7 +19,9 @@ const chatSchema = z.object({
 });
 
 const confirmationSchema = z.object({
-  action: z.enum(["confirm", "deny"])
+  action: z.enum(["confirm", "deny"]),
+  version: z.number().int().positive(),
+  idempotencyKey: z.string().trim().min(8).max(120).optional()
 });
 const confirmationIdSchema = z
   .string()
@@ -68,11 +70,14 @@ router.post("/confirmations/:id", requireAuth, async (req, res, next) => {
     }
 
     const payload = confirmationSchema.parse(req.body);
+    const idempotencyHeader = req.header("idempotency-key")?.trim();
     const pendingTransferId = confirmationIdSchema.parse(req.params.id);
     const result = await respondToAiPendingTransfer({
       userId: req.userId,
       pendingTransferId,
-      action: payload.action
+      action: payload.action,
+      version: payload.version,
+      idempotencyKey: payload.idempotencyKey ?? idempotencyHeader
     });
 
     return res.json(result);

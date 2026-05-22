@@ -33,15 +33,66 @@ export type AiConfirmationResult =
 function toConfirmation(
   pendingTransfer: PendingTransferDocument
 ): TransferConfirmation {
+  const recipientFirstName = pendingTransfer.recipientFirstName ?? null;
+  const recipientLastName = pendingTransfer.recipientLastName ?? null;
+  const displayName =
+    [recipientFirstName, recipientLastName].filter(Boolean).join(" ") ||
+    pendingTransfer.recipientEmail;
+  const version = pendingTransfer.version ?? 1;
+  const path = `/api/ai/confirmations/${pendingTransfer.id}`;
+
   return {
     id: pendingTransfer.id,
+    version,
     type: "transfer",
+    status: "pending",
     recipientEmail: pendingTransfer.recipientEmail,
-    recipientFirstName: pendingTransfer.recipientFirstName ?? null,
-    recipientLastName: pendingTransfer.recipientLastName ?? null,
+    recipientFirstName,
+    recipientLastName,
     amount: pendingTransfer.amount,
+    currency: "ILS",
+    recipient: {
+      email: pendingTransfer.recipientEmail,
+      firstName: recipientFirstName,
+      lastName: recipientLastName,
+      displayName,
+      verified: Boolean(recipientFirstName || recipientLastName)
+    },
+    amountDetails: {
+      value: pendingTransfer.amount,
+      currency: "ILS",
+      formatted: new Intl.NumberFormat("he-IL", {
+        style: "currency",
+        currency: "ILS"
+      }).format(pendingTransfer.amount)
+    },
     reason: pendingTransfer.reason ?? null,
-    expiresAt: pendingTransfer.expiresAt.toISOString()
+    warnings:
+      recipientFirstName || recipientLastName
+        ? []
+        : [
+            {
+              code: "MISSING_RECIPIENT_NAME",
+              message: "Recipient profile name is not provided."
+            }
+          ],
+    expiresAt: pendingTransfer.expiresAt.toISOString(),
+    confirmAction: {
+      method: "POST",
+      path,
+      body: {
+        action: "confirm",
+        version
+      }
+    },
+    denyAction: {
+      method: "POST",
+      path,
+      body: {
+        action: "deny",
+        version
+      }
+    }
   };
 }
 
@@ -54,6 +105,26 @@ function getStatusError() {
 
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function readIdempotencyResult(
+  source: unknown,
+  key: string
+): AiConfirmationResult | undefined {
+  const results = source as
+    | Map<string, AiConfirmationResult>
+    | Record<string, AiConfirmationResult>
+    | undefined;
+
+  if (!results) {
+    return undefined;
+  }
+
+  if (results instanceof Map) {
+    return results.get(key);
+  }
+
+  return results[key];
 }
 
 async function resolveRecipientEmailFromName(reference?: string | null) {
@@ -181,6 +252,7 @@ export async function prepareAiPendingTransfer(
       ? personalDetails.lastName ?? null
       : null,
     amount,
+    currency: "ILS",
     reason: input.draft.reason?.trim() || null,
     status: "pending",
     expiresAt: new Date(Date.now() + PENDING_TRANSFER_TTL_MS)
@@ -197,17 +269,51 @@ export async function respondToAiPendingTransfer(
     userId: string;
     pendingTransferId: string;
     action: AiConfirmationAction;
+    version: number;
+    idempotencyKey?: string;
   }
 ): Promise<AiConfirmationResult> {
+  const idempotencyPath = input.idempotencyKey
+    ? `idempotencyResults.${input.idempotencyKey}`
+    : undefined;
+
   if (input.action === "deny") {
+    if (input.idempotencyKey) {
+      const existing = await AiPendingTransfer.findOne({
+        _id: input.pendingTransferId,
+        userId: input.userId,
+        [idempotencyPath as string]: { $exists: true }
+      }).lean();
+      const previous = readIdempotencyResult(
+        existing?.idempotencyResults,
+        input.idempotencyKey
+      );
+      if (previous) {
+        return previous;
+      }
+    }
+
     const denied = await AiPendingTransfer.findOneAndUpdate(
       {
         _id: input.pendingTransferId,
         userId: input.userId,
+        version: input.version,
         status: "pending",
         expiresAt: { $gt: new Date() }
       },
-      { $set: { status: "denied" } },
+      {
+        $set: {
+          status: "denied",
+          ...(idempotencyPath
+            ? {
+                [idempotencyPath]: {
+                  status: "denied",
+                  message: "Transfer cancelled."
+                }
+              }
+            : {})
+        }
+      },
       { new: true }
     );
 
@@ -227,9 +333,26 @@ export async function respondToAiPendingTransfer(
     let result: AiConfirmationResult | undefined;
 
     await session.withTransaction(async () => {
+      if (input.idempotencyKey) {
+        const existing = await AiPendingTransfer.findOne({
+          _id: input.pendingTransferId,
+          userId: input.userId,
+          [idempotencyPath as string]: { $exists: true }
+        }).session(session);
+        const previous = readIdempotencyResult(
+          existing?.idempotencyResults,
+          input.idempotencyKey
+        );
+        if (previous) {
+          result = previous;
+          return;
+        }
+      }
+
       const pendingTransfer = await AiPendingTransfer.findOne({
         _id: input.pendingTransferId,
         userId: input.userId,
+        version: input.version,
         status: "pending",
         expiresAt: { $gt: new Date() }
       }).session(session);
@@ -248,15 +371,17 @@ export async function respondToAiPendingTransfer(
         session
       );
 
-      pendingTransfer.status = "confirmed";
-      await pendingTransfer.save({ session });
-
       result = {
         status: "confirmed",
         message: transferResult.message,
         newBalance: transferResult.newBalance,
         transaction: transferResult.transaction
       };
+      pendingTransfer.status = "confirmed";
+      if (input.idempotencyKey) {
+        pendingTransfer.set(`idempotencyResults.${input.idempotencyKey}`, result);
+      }
+      await pendingTransfer.save({ session });
     });
 
     if (!result) {

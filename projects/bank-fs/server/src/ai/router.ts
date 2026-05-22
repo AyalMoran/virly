@@ -9,11 +9,20 @@ import { getUnsafeRequestReason } from "./policy.js";
 
 const validIntents: AssistantIntent[] = [
   "balance_inquiry",
+  "account_summary",
   "recent_transactions",
+  "transaction_search",
+  "transaction_summary",
+  "transaction_count",
+  "transaction_detail",
+  "counterparty_lookup",
   "last_sent_counterparty",
   "counterparty_transactions",
   "counterparty_total_sent",
   "transfer_prepare",
+  "transfer_modify_pending",
+  "transfer_cancel_pending",
+  "pending_confirmation_status",
   "verified_recipients",
   "transfer_limits",
   "transfer_status",
@@ -32,38 +41,63 @@ export function classifyAssistantIntentDeterministic(
 
   const normalized = message.toLowerCase();
 
+  if (/(^|\b)(yes|confirm|approve|send it|go ahead|do it)(\b|$)/i.test(normalized) || /(כן|תאשר|יאללה|שלח|בצע)/.test(message)) {
+    return { intent: "pending_confirmation_status" };
+  }
+
+  if (/\b(cancel|deny|stop)\b.*\b(transfer|payment|confirmation|it)\b/i.test(normalized) || /(בטל|תבטל|אל תשלח)/.test(message)) {
+    return { intent: "transfer_cancel_pending" };
+  }
+
+  if (/\b(change|modify|update|make it)\b.*\b(transfer|payment|amount|recipient|reason|it)\b/i.test(normalized) || /(תשנה|שנה|עדכן|במקום)/.test(message)) {
+    return { intent: "transfer_modify_pending" };
+  }
+
   if (
     /\b(last|most recent)\b.*\b(person|recipient|counterparty|who)\b.*\b(sent|paid|transferred)\b/i.test(normalized) ||
-    /\b(who|person|recipient|counterparty)\b.*\b(last|most recent)\b.*\b(sent|paid|transferred)\b/i.test(normalized)
+    /\b(who|person|recipient|counterparty)\b.*\b(last|most recent)\b.*\b(sent|paid|transferred)\b/i.test(normalized) ||
+    /(למי).*?(העברתי|שלחתי).*?(אחרונה|האחרון|פעם אחרונה)/.test(message) ||
+    /(מי).*?(הנמען האחרון|האחרון).*?(שלחתי|העברתי)/.test(message)
   ) {
     return { intent: "last_sent_counterparty" };
   }
 
   if (
     /\b(total|ever|altogether|in total|sum)\b.*\b(send|sent|paid|transferred)\b.*\b(this|that|person|recipient|counterparty|them)\b/i.test(normalized) ||
-    /\bhow much\b.*\b(send|sent|paid|transferred)\b.*\b(this|that|person|recipient|counterparty|them)\b/i.test(normalized)
+    /\bhow much\b.*\b(send|sent|paid|transferred)\b.*\b(this|that|person|recipient|counterparty|them)\b/i.test(normalized) ||
+    /(כמה).*?(שלחתי|העברתי).*?(לו|לה|אליו|אליה|לנמען|לאדם)/.test(message)
   ) {
     return { intent: "counterparty_total_sent" };
   }
 
   if (
-    /\b(transaction|transactions|activity|history|recent|last\s+\d+)\b.*\b(with|to|from)\b.*\b(this|that|person|recipient|counterparty|them)\b/i.test(normalized)
+    /\b(transaction|transactions|activity|history|recent|last\s+\d+)\b.*\b(with|to|from)\b.*\b(this|that|person|recipient|counterparty|them)\b/i.test(normalized) ||
+    /(עסקאות|העברות).*?(עם|ל|אל).*?(לו|לה|אליו|אליה|הנמען|האדם)/.test(message)
   ) {
     return { intent: "counterparty_transactions" };
   }
 
   if (
     /\b(send|transfer|pay|move|wire|return|give)\b.*\b(\$|usd|dollar|dollars|nis|shekel|shekels|money|[0-9])/i.test(normalized) ||
-    /\b(send|transfer|pay|move|wire|return|give)\b.*\b(to|for)\b/i.test(normalized)
+    /\b(send|transfer|pay|move|wire|return|give)\b.*\b(to|for)\b/i.test(normalized) ||
+    /(תעביר|תשלח|שלח|תחזיר|תן).*?(\d+|כסף|שקל|שח|ש״ח|דולר|אירו|לו|לה|אליו|אליה)/.test(message)
   ) {
     return { intent: "transfer_prepare" };
   }
 
-  if (/\b(balance|available funds|how much.*have)\b/i.test(normalized)) {
+  if (/\b(balance|available funds|how much.*have)\b/i.test(normalized) || /(יתרה|כמה.*יש לי)/.test(message)) {
     return { intent: "balance_inquiry" };
   }
 
-  if (/\b(transaction|transactions|activity|history|recent|spent|received)\b/i.test(normalized)) {
+  if (/\b(how many|count)\b.*\b(transaction|transfer|payment)s?\b/i.test(normalized)) {
+    return { intent: "transaction_count" };
+  }
+
+  if (/\b(summary|summarize|recap)\b.*\b(transaction|transfer|payment|activity)s?\b/i.test(normalized)) {
+    return { intent: "transaction_summary" };
+  }
+
+  if (/\b(transaction|transactions|activity|history|recent|spent|received)\b/i.test(normalized) || /(עסקאות|העברות|פעילות|היסטוריה|קיבלתי|שלחתי)/.test(message)) {
     return { intent: "recent_transactions" };
   }
 
@@ -143,8 +177,13 @@ export function getReadOnlyToolsForIntent(
 ): AssistantToolName[] {
   switch (intent) {
     case "balance_inquiry":
+    case "account_summary":
       return ["getUserAccounts", "getAccountBalance"];
     case "recent_transactions":
+    case "transaction_search":
+    case "transaction_summary":
+    case "transaction_count":
+    case "transaction_detail":
       return ["getRecentTransactions"];
     case "last_sent_counterparty":
       return ["getLastSentCounterparty"];

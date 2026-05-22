@@ -186,13 +186,45 @@ function createFakeTransferPreparationService(
       status: "ready",
       confirmation: {
         id: "pending-transfer-1",
+        version: 1,
         type: "transfer",
+        status: "pending",
         recipientEmail,
         recipientFirstName: "Alex",
         recipientLastName: "Example",
         amount: input.draft.amount,
+        currency: "ILS",
+        recipient: {
+          email: recipientEmail,
+          firstName: "Alex",
+          lastName: "Example",
+          displayName: "Alex Example",
+          verified: true
+        },
+        amountDetails: {
+          value: input.draft.amount,
+          currency: "ILS",
+          formatted: `₪${input.draft.amount}`
+        },
         reason: input.draft.reason ?? null,
-        expiresAt: new Date(Date.now() + 600000).toISOString()
+        warnings: [],
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        confirmAction: {
+          method: "POST",
+          path: "/api/ai/confirmations/pending-transfer-1",
+          body: {
+            action: "confirm",
+            version: 1
+          }
+        },
+        denyAction: {
+          method: "POST",
+          path: "/api/ai/confirmations/pending-transfer-1",
+          body: {
+            action: "deny",
+            version: 1
+          }
+        }
       }
     };
   };
@@ -500,7 +532,7 @@ test("ambiguous counterparty reference asks for clarification and runs no tool",
   assert.deepEqual(result.toolCalls, []);
   assert.equal(
     result.message,
-    "I need to know which recipient you mean before I can answer that. Please choose a specific recipient from your recent conversation."
+    "Which recipient should I use for that question?"
   );
   assert.deepEqual(executed, []);
 });
@@ -587,7 +619,7 @@ test("send money request prepares a transfer confirmation and executes no tool",
     {
       userId: "507f1f77bcf86cd799439011",
       conversationId: "test-send",
-      message: "Send $50 to Alex"
+      message: "Send 50 shekels to Alex"
     },
     {
       tools: createFakeTools(executed),
@@ -602,7 +634,123 @@ test("send money request prepares a transfer confirmation and executes no tool",
   assert.deepEqual(executed, []);
   assert.equal(result.confirmation?.recipientEmail, "alex@example.com");
   assert.equal(result.confirmation?.recipientFirstName, "Alex");
+  assert.equal(result.confirmation?.version, 1);
+  assert.equal(result.confirmation?.status, "pending");
+  assert.equal(result.confirmation?.currency, "ILS");
+  assert.deepEqual(result.confirmation?.confirmAction.body, {
+    action: "confirm",
+    version: 1
+  });
   assert.equal(transferPreparations[0].draft.amount, 50);
+});
+
+test("unsupported transfer currency asks clarification before preparation", async () => {
+  const transferPreparations: Array<Parameters<TransferPreparationService>[0]> = [];
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "transfer_prepare" };
+    },
+    async extractTransferDraft() {
+      return {
+        recipientEmail: "alex@example.com",
+        amount: 50,
+        amountText: "$50",
+        currency: "USD",
+        currencyMentioned: true,
+        currencySupported: false
+      };
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-transfer-usd",
+      message: "Send Alex $50"
+    },
+    {
+      tools: createFakeTools([]),
+      llmProvider,
+      transferPreparationService:
+        createFakeTransferPreparationService(transferPreparations)
+    }
+  );
+
+  assert.equal(result.intent, "transfer_prepare");
+  assert.equal(result.confirmation, undefined);
+  assert.equal(transferPreparations.length, 0);
+  assert.match(result.message, /only in ILS/);
+});
+
+test("confirmation context is persisted in structured conversation memory", async () => {
+  const conversationStore = createFakeConversationStore();
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "transfer_prepare" };
+    },
+    async extractTransferDraft() {
+      return {
+        recipientEmail: "alex@example.com",
+        amount: 50
+      };
+    }
+  });
+
+  await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-transfer-memory",
+      message: "Send Alex 50 shekels"
+    },
+    {
+      tools: createFakeTools([]),
+      conversationStore,
+      llmProvider,
+      transferPreparationService: createFakeTransferPreparationService()
+    }
+  );
+
+  const savedMemory = conversationStore.saved.at(-1)?.memory;
+  assert.equal(savedMemory?.mode, "transfer_confirmation_pending");
+  assert.equal(savedMemory?.pendingConfirmation?.confirmationId, "pending-transfer-1");
+  assert.equal(savedMemory?.pendingConfirmation?.version, 1);
+  assert.equal(savedMemory?.answerFrames?.at(-1)?.intent, "transfer_prepare");
+});
+
+test("chat confirmation wording never executes money movement", async () => {
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-chat-confirm",
+      message: "yes confirm it"
+    },
+    {
+      tools: createFakeTools([]),
+      conversationStore: createFakeConversationStore({
+        messages: [],
+        memory: {
+          ...createEmptyCounterpartyMemory(),
+          pendingConfirmation: {
+            confirmationId: "pending-transfer-1",
+            type: "transfer",
+            status: "pending",
+            createdAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 600000).toISOString(),
+            recipientEmail: "alex@example.com",
+            amount: 50,
+            currency: "ILS",
+            turnCreated: 1,
+            version: 1
+          },
+          mode: "transfer_confirmation_pending"
+        }
+      })
+    }
+  );
+
+  assert.equal(result.intent, "pending_confirmation_status");
+  assert.deepEqual(result.toolCalls, []);
+  assert.match(result.message, /cannot confirm a transfer from chat text/i);
 });
 
 test("transfer request can resolve recipient from last counterparty", async () => {
@@ -646,6 +794,98 @@ test("transfer request can resolve recipient from last counterparty", async () =
   assert.deepEqual(result.toolCalls, []);
   assert.equal(result.confirmation?.recipientEmail, "alex@example.com");
   assert.equal(transferPreparations[0].resolvedCounterparty?.email, "alex@example.com");
+});
+
+test("hebrew transfer request resolves לו from last counterparty and returns confirmation", async () => {
+  const transferPreparations: Array<Parameters<TransferPreparationService>[0]> = [];
+  const conversationStore = createFakeConversationStore({
+    messages: [
+      {
+        role: "assistant",
+        content: "האדם האחרון שהעברת אליו היה a***@example.com."
+      }
+    ],
+    memory: createMemoryWithCounterparties(["alex@example.com"])
+  });
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "transfer_prepare" };
+    },
+    async extractTransferDraft() {
+      return {
+        recipientReference: "לו",
+        amount: 50,
+        currency: "ILS",
+        currencyMentioned: true,
+        currencySupported: true
+      };
+    },
+    async resolveCounterpartyReference() {
+      return { kind: "none", confidence: "low" };
+    },
+    async composeResponse() {
+      return "hallucinated response should not replace confirmation fallback";
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-hebrew-transfer-reference",
+      message: "בוא נעביר לו 50 שקל"
+    },
+    {
+      tools: createFakeTools([]),
+      conversationStore,
+      llmProvider,
+      transferPreparationService:
+        createFakeTransferPreparationService(transferPreparations)
+    }
+  );
+
+  assert.equal(result.intent, "transfer_prepare");
+  assert.equal(result.confirmation?.recipientEmail, "alex@example.com");
+  assert.equal(transferPreparations[0].resolvedCounterparty?.email, "alex@example.com");
+  assert.equal(
+    result.message,
+    "Please review the transfer details and use the confirmation buttons before I send anything."
+  );
+});
+
+test("llm responder cannot reword missing transfer details as ready to transfer", async () => {
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "transfer_prepare" };
+    },
+    async extractTransferDraft() {
+      return {
+        amount: 50,
+        currency: "ILS",
+        currencyMentioned: true,
+        currencySupported: true
+      };
+    },
+    async composeResponse() {
+      return "Everything is ready, confirm and I will continue.";
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-no-fake-ready-transfer",
+      message: "בוא נעביר 50 שקל"
+    },
+    {
+      tools: createFakeTools([]),
+      llmProvider,
+      transferPreparationService: createFakeTransferPreparationService()
+    }
+  );
+
+  assert.equal(result.intent, "transfer_prepare");
+  assert.equal(result.confirmation, undefined);
+  assert.equal(result.message, "Who should I send ₪50 to?");
 });
 
 test("transfer request with missing amount asks clarification and creates no confirmation", async () => {

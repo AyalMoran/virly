@@ -119,13 +119,48 @@ export type AiChatRequest = {
 
 export type AiTransferConfirmation = {
   id: string;
+  version: number;
   type: "transfer";
+  status: "pending";
   recipientEmail: string;
   recipientFirstName: string | null;
   recipientLastName: string | null;
   amount: number;
+  currency: "ILS";
+  recipient?: {
+    email: string;
+    firstName: string | null;
+    lastName: string | null;
+    displayName: string;
+    verified: boolean;
+  };
+  amountDetails?: {
+    value: number;
+    currency: "ILS";
+    formatted: string;
+  };
   reason: string | null;
+  warnings?: Array<{
+    code: string;
+    message: string;
+  }>;
   expiresAt: string;
+  confirmAction?: {
+    method: "POST";
+    path: string;
+    body: {
+      action: "confirm";
+      version: number;
+    };
+  };
+  denyAction?: {
+    method: "POST";
+    path: string;
+    body: {
+      action: "deny";
+      version: number;
+    };
+  };
 };
 
 export type AiChatResponse = {
