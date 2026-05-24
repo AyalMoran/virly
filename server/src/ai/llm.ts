@@ -8,6 +8,7 @@ import type {
   AssistantLlmProvider,
   ClassifyAssistantIntentInput,
   ComposeAssistantResponseInput,
+  CounterpartyReferenceResolution,
   ExtractTransferDraftInput,
   ResolveCounterpartyReferenceInput,
   ToolResultMetadata
@@ -47,42 +48,69 @@ const responseSchema = z.object({
 });
 
 const transferDraftSchema = z.object({
-  recipientReference: z.string().max(120).nullable().optional(),
-  recipientEmail: z.string().email().nullable().optional(),
-  amount: z.number().positive().nullable().optional(),
-  amountText: z.string().max(80).nullable().optional(),
-  amountReferenceText: z.string().max(120).nullable().optional(),
-  currency: z.enum(["ILS", "USD", "EUR", "UNKNOWN"]).nullable().optional(),
-  currencyMentioned: z.boolean().optional(),
-  currencySupported: z.boolean().optional(),
-  reason: z.string().max(200).nullable().optional()
+  recipientReference: z.string().max(120).nullable(),
+  recipientEmail: z.string().email().nullable(),
+  amount: z.number().positive().nullable(),
+  amountText: z.string().max(80).nullable(),
+  amountReferenceText: z.string().max(120).nullable(),
+  currency: z.enum(["ILS", "USD", "EUR", "UNKNOWN"]).nullable(),
+  currencyMentioned: z.boolean().nullable(),
+  currencySupported: z.boolean().nullable(),
+  reason: z.string().max(200).nullable()
 });
 
-const referenceResolutionSchema = z.discriminatedUnion("kind", [
-  z.object({
-    kind: z.literal("none"),
-    confidence: z.enum(["low", "medium", "high"])
-  }),
-  z.object({
-    kind: z.literal("last_counterparty"),
-    confidence: z.enum(["low", "medium", "high"])
-  }),
-  z.object({
-    kind: z.literal("ordinal_counterparty"),
-    ordinal: z.number().int().min(1).max(5),
-    confidence: z.enum(["low", "medium", "high"])
-  }),
-  z.object({
-    kind: z.literal("named_counterparty"),
-    query: z.string().min(1).max(120),
-    confidence: z.enum(["low", "medium", "high"])
-  })
-]);
+const referenceResolutionSchema = z.object({
+  kind: z.enum([
+    "none",
+    "last_counterparty",
+    "ordinal_counterparty",
+    "named_counterparty"
+  ]),
+  confidence: z.enum(["low", "medium", "high"]),
+  ordinal: z.number().int().min(1).max(5).nullable(),
+  query: z.string().min(1).max(120).nullable()
+});
 
 type ClassificationOutput = z.infer<typeof classificationSchema>;
 type ResponseOutput = z.infer<typeof responseSchema>;
 type TransferDraftOutput = z.infer<typeof transferDraftSchema>;
 type ReferenceResolutionOutput = z.infer<typeof referenceResolutionSchema>;
+
+function normalizeReferenceResolution(
+  result: ReferenceResolutionOutput
+): CounterpartyReferenceResolution {
+  if (result.kind === "ordinal_counterparty") {
+    return result.ordinal
+      ? {
+          kind: "ordinal_counterparty",
+          ordinal: result.ordinal,
+          confidence: result.confidence
+        }
+      : { kind: "none", confidence: "low" };
+  }
+
+  if (result.kind === "named_counterparty") {
+    return result.query
+      ? {
+          kind: "named_counterparty",
+          query: result.query,
+          confidence: result.confidence
+        }
+      : { kind: "none", confidence: "low" };
+  }
+
+  if (result.kind === "last_counterparty") {
+    return {
+      kind: "last_counterparty",
+      confidence: result.confidence
+    };
+  }
+
+  return {
+    kind: "none",
+    confidence: result.confidence
+  };
+}
 
 function createChatModel(temperature: number) {
   return new ChatOpenAI({
@@ -321,6 +349,7 @@ function buildTransferDraftPrompt(input: ExtractTransferDraftInput) {
     "- currencyMentioned: true when the user explicitly wrote a currency word or symbol.",
     "- currencySupported: true only for ILS or when no currency was mentioned. USD/EUR are currently unsupported for transfer preparation.",
     "- reason: short transfer reason if explicitly stated; otherwise null.",
+    "Every schema field is required. Use null when a field is unknown or absent.",
     "",
     "Amount rules:",
     "For Hebrew שקל, שח, ש״ח, or NIS, extract only the numeric amount.",
@@ -408,6 +437,7 @@ function buildReferenceResolverPrompt(input: ResolveCounterpartyReferenceInput) 
     "Hebrew examples for ordinal_counterparty include: הראשון שדיברנו עליו, הנמען השני, האדם השלישי.",
     "Return named_counterparty only when the user refers to a visible masked label or explicit label in the known list.",
     "Return none with low confidence when the reference is absent, ambiguous, or unsafe to resolve.",
+    "Always include ordinal and query. Set ordinal to null unless kind is ordinal_counterparty. Set query to null unless kind is named_counterparty.",
     "",
     `Intent: ${input.intent}`,
     `Transfer draft: ${JSON.stringify(input.transferDraft ?? null)}`,
@@ -455,16 +485,30 @@ export function createConfiguredAssistantLlmProvider():
       };
     },
     async extractTransferDraft(input: ExtractTransferDraftInput) {
-      return await transferDraftExtractor.invoke([
+      const result = await transferDraftExtractor.invoke([
         ["system", buildTransferDraftPrompt(input)],
         ["human", input.userMessage]
       ]);
+
+      return {
+        recipientReference: result.recipientReference,
+        recipientEmail: result.recipientEmail,
+        amount: result.amount,
+        amountText: result.amountText,
+        amountReferenceText: result.amountReferenceText,
+        currency: result.currency,
+        currencyMentioned: result.currencyMentioned ?? undefined,
+        currencySupported: result.currencySupported ?? undefined,
+        reason: result.reason
+      };
     },
     async resolveCounterpartyReference(input: ResolveCounterpartyReferenceInput) {
-      return await referenceResolver.invoke([
+      const result = await referenceResolver.invoke([
         ["system", buildReferenceResolverPrompt(input)],
         ["human", input.userMessage]
       ]);
+
+      return normalizeReferenceResolution(result);
     },
     async composeResponse(input: ComposeAssistantResponseInput) {
       const result = await responder.invoke([
