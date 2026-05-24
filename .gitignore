@@ -13,8 +13,8 @@
 !*.hpp
 !*.md
 !*.sh
-!*.ts
-!*.js
+!*.ts*
+!*.js*
 !*.json
 !*.yaml
 !*.png
