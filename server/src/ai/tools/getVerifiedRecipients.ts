@@ -1,22 +1,12 @@
 import { Transaction } from "../../models/Transaction.js";
 import { User } from "../../models/User.js";
-import {
-  AssistantToolResult,
-  ToolContext
-} from "../state.js";
-
-function maskEmail(email: string) {
-  const [localPart, domain] = email.split("@");
-  if (!localPart || !domain) {
-    return "masked recipient";
-  }
-
-  return `${localPart.slice(0, 1)}***@${domain}`;
-}
+import { createToolResult } from "../toolResults.js";
+import type { RuntimeToolResult, ToolContext } from "../state.js";
+import { getCounterpartyDisplays, getDisplayOrFallback } from "./counterpartyHelpers.js";
 
 export async function getVerifiedRecipients(
   context: ToolContext
-): Promise<AssistantToolResult> {
+): Promise<RuntimeToolResult> {
   const transactions = await Transaction.find({ ownerId: context.userId })
     .sort({ createdAt: -1 })
     .limit(50)
@@ -24,29 +14,38 @@ export async function getVerifiedRecipients(
   const emails = [...new Set(transactions.map((transaction) => transaction.counterpartyEmail))];
 
   if (emails.length === 0) {
-    return {
+    return createToolResult({
       toolName: "getVerifiedRecipients",
+      status: "empty",
+      data: [],
       summary: "No verified recipients were found from your recent transaction history.",
       metadata: {
         recordCount: 0
       }
-    };
+    });
   }
 
   const verifiedUsers = await User.find({
     email: { $in: emails },
     isVerified: true
   }).select("email");
-  const maskedRecipients = verifiedUsers.map((user) => maskEmail(user.email));
+  const displays = await getCounterpartyDisplays(verifiedUsers.map((user) => user.email));
+  const recipients = verifiedUsers.map((user) => getDisplayOrFallback(displays, user.email));
 
-  return {
+  return createToolResult({
     toolName: "getVerifiedRecipients",
+    status: recipients.length > 0 ? "ok" : "empty",
+    data: recipients.map((recipient) => recipient.userLabel),
     summary:
-      maskedRecipients.length > 0
-        ? `Verified recipients from your history: ${maskedRecipients.join(", ")}.`
+      recipients.length > 0
+        ? `Verified recipients from your history: ${recipients.map((recipient) => recipient.llmLabel).join(", ")}.`
+        : "No verified recipients were found from your recent transaction history.",
+    userSummary:
+      recipients.length > 0
+        ? `Verified recipients from your history: ${recipients.map((recipient) => recipient.userLabel).join(", ")}.`
         : "No verified recipients were found from your recent transaction history.",
     metadata: {
-      recordCount: maskedRecipients.length
+      recordCount: recipients.length
     }
-  };
+  });
 }

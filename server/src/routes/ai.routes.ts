@@ -56,7 +56,12 @@ router.post("/chat", requireAuth, async (req, res, next) => {
       assistantId: result.assistantId,
       intent: result.intent,
       toolCalls: result.toolCalls,
-      ...(result.confirmation ? { confirmation: result.confirmation } : {})
+      ...(result.toolResults ? { toolResults: result.toolResults } : {}),
+      ...(result.clarification ? { clarification: result.clarification } : {}),
+      ...(result.confirmation ? { confirmation: result.confirmation } : {}),
+      ...(result.supersededConfirmationId
+        ? { supersededConfirmationId: result.supersededConfirmationId }
+        : {})
     });
   } catch (error) {
     next(error);
@@ -83,7 +88,13 @@ router.post("/confirmations/:id", requireAuth, async (req, res, next) => {
     return res.json(result);
   } catch (error) {
     if (error instanceof Error && "status" in error) {
-      return res.status(Number(error.status)).json({ message: error.message });
+      return res.status(Number(error.status)).json({
+        message: error.message,
+        ...("error" in error ? { error: error.error } : {}),
+        ...("supersededById" in error
+          ? { supersededById: error.supersededById }
+          : {})
+      });
     }
 
     next(error);

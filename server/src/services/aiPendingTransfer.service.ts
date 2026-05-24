@@ -3,8 +3,11 @@ import { AiPendingTransfer } from "../models/AiPendingTransfer.js";
 import { PersonalDetails } from "../models/PersonalDetails.js";
 import { User } from "../models/User.js";
 import type {
+  ModifyPendingTransferConfirmationInput,
+  ModifyPendingTransferConfirmationResult,
   PrepareTransferConfirmationInput,
   PrepareTransferConfirmationResult,
+  TransferDraft,
   TransferConfirmation
 } from "../ai/state.js";
 import {
@@ -29,6 +32,14 @@ export type AiConfirmationResult =
       status: "denied";
       message: string;
     };
+
+type ValidatedAiTransferDraft = {
+  recipientEmail: string;
+  recipientFirstName: string | null;
+  recipientLastName: string | null;
+  amount: number;
+  reason: string | null;
+};
 
 function toConfirmation(
   pendingTransfer: PendingTransferDocument
@@ -67,6 +78,9 @@ function toConfirmation(
       }).format(pendingTransfer.amount)
     },
     reason: pendingTransfer.reason ?? null,
+    supersedesId: pendingTransfer.supersedesId
+      ? pendingTransfer.supersedesId.toString()
+      : null,
     warnings:
       recipientFirstName || recipientLastName
         ? []
@@ -100,6 +114,19 @@ function getStatusError() {
   return Object.assign(
     new Error("This transfer confirmation is no longer available."),
     { status: 409 }
+  );
+}
+
+function getSupersededError(supersededById?: unknown) {
+  return Object.assign(
+    new Error(
+      "This transfer confirmation was replaced by a newer one. Please review and confirm the latest transfer card."
+    ),
+    {
+      status: 409,
+      error: "confirmation_superseded",
+      supersededById: supersededById ? String(supersededById) : undefined
+    }
   );
 }
 
@@ -165,12 +192,21 @@ async function resolveRecipientEmailFromName(reference?: string | null) {
   return recipient?.email;
 }
 
-export async function prepareAiPendingTransfer(
-  input: PrepareTransferConfirmationInput
-): Promise<PrepareTransferConfirmationResult> {
+async function validateAiTransferDraft(input: {
+  userId: string;
+  draft: TransferDraft;
+}): Promise<
+  | {
+      status: "ready";
+      draft: ValidatedAiTransferDraft;
+    }
+  | {
+      status: "needs_clarification";
+      message: string;
+    }
+> {
   const recipientEmail = (
     input.draft.recipientEmail ??
-    input.resolvedCounterparty?.email ??
     (await resolveRecipientEmailFromName(input.draft.recipientReference)) ??
     ""
   )
@@ -240,28 +276,172 @@ export async function prepareAiPendingTransfer(
     userId: recipient._id
   });
   const hasProvidedDetails = personalDetails?.status === "provided";
-  const pendingTransfer = await AiPendingTransfer.create({
+
+  return {
+    status: "ready",
+    draft: {
+      recipientEmail: recipient.email,
+      recipientFirstName: hasProvidedDetails
+        ? personalDetails.firstName ?? null
+        : null,
+      recipientLastName: hasProvidedDetails
+        ? personalDetails.lastName ?? null
+        : null,
+      amount,
+      reason: input.draft.reason?.trim() || null
+    }
+  };
+}
+
+async function createPendingTransfer(input: {
+  userId: string;
+  conversationId: string;
+  assistantId: string;
+  draft: ValidatedAiTransferDraft;
+  supersedesId?: string;
+  session?: mongoose.ClientSession;
+}) {
+  const [pendingTransfer] = await AiPendingTransfer.create(
+    [
+      {
+        userId: input.userId,
+        conversationId: input.conversationId,
+        assistantId: input.assistantId,
+        recipientEmail: input.draft.recipientEmail,
+        recipientFirstName: input.draft.recipientFirstName,
+        recipientLastName: input.draft.recipientLastName,
+        amount: input.draft.amount,
+        currency: "ILS",
+        reason: input.draft.reason,
+        status: "pending",
+        supersedesId: input.supersedesId ?? null,
+        expiresAt: new Date(Date.now() + PENDING_TRANSFER_TTL_MS)
+      }
+    ],
+    {
+      ordered: true,
+      ...(input.session ? { session: input.session } : {})
+    }
+  );
+
+  if (!pendingTransfer) {
+    throw new Error("Could not create pending transfer.");
+  }
+
+  return pendingTransfer;
+}
+
+export async function prepareAiPendingTransfer(
+  input: PrepareTransferConfirmationInput
+): Promise<PrepareTransferConfirmationResult> {
+  const validation = await validateAiTransferDraft({
+    userId: input.userId,
+    draft: {
+      ...input.draft,
+      recipientEmail: input.draft.recipientEmail ?? input.resolvedCounterparty?.email
+    }
+  });
+
+  if (validation.status === "needs_clarification") {
+    return validation;
+  }
+
+  const pendingTransfer = await createPendingTransfer({
     userId: input.userId,
     conversationId: input.conversationId,
     assistantId: input.assistantId,
-    recipientEmail: recipient.email,
-    recipientFirstName: hasProvidedDetails
-      ? personalDetails.firstName ?? null
-      : null,
-    recipientLastName: hasProvidedDetails
-      ? personalDetails.lastName ?? null
-      : null,
-    amount,
-    currency: "ILS",
-    reason: input.draft.reason?.trim() || null,
-    status: "pending",
-    expiresAt: new Date(Date.now() + PENDING_TRANSFER_TTL_MS)
+    draft: validation.draft
   });
 
   return {
     status: "ready",
     confirmation: toConfirmation(pendingTransfer)
   };
+}
+
+export async function modifyAiPendingTransfer(
+  input: ModifyPendingTransferConfirmationInput
+): Promise<ModifyPendingTransferConfirmationResult> {
+  const oldPending = await AiPendingTransfer.findOne({
+    _id: input.activePendingTransferId,
+    userId: input.userId,
+    conversationId: input.conversationId,
+    status: "pending",
+    expiresAt: { $gt: new Date() }
+  });
+
+  if (!oldPending) {
+    return {
+      status: "needs_clarification",
+      message:
+        "I do not see an active pending transfer to update. Please prepare a new transfer."
+    };
+  }
+
+  const validation = await validateAiTransferDraft({
+    userId: input.userId,
+    draft: {
+      recipientEmail:
+        input.modificationDraft.recipientEmail ??
+        input.resolvedCounterparty?.email ??
+        oldPending.recipientEmail,
+      recipientReference: input.modificationDraft.recipientReference,
+      amount: input.modificationDraft.amount ?? oldPending.amount,
+      reason:
+        input.modificationDraft.reason !== undefined
+          ? input.modificationDraft.reason
+          : oldPending.reason
+    }
+  });
+
+  if (validation.status === "needs_clarification") {
+    return validation;
+  }
+
+  const session = await mongoose.startSession();
+
+  try {
+    let newPendingTransfer: PendingTransferDocument | undefined;
+
+    await session.withTransaction(async () => {
+      const lockedOldPending = await AiPendingTransfer.findOne({
+        _id: input.activePendingTransferId,
+        userId: input.userId,
+        conversationId: input.conversationId,
+        status: "pending",
+        expiresAt: { $gt: new Date() }
+      }).session(session);
+
+      if (!lockedOldPending) {
+        throw getStatusError();
+      }
+
+      newPendingTransfer = await createPendingTransfer({
+        userId: input.userId,
+        conversationId: input.conversationId,
+        assistantId: input.assistantId,
+        draft: validation.draft,
+        supersedesId: lockedOldPending.id,
+        session
+      });
+
+      lockedOldPending.status = "superseded";
+      lockedOldPending.supersededById = newPendingTransfer._id;
+      await lockedOldPending.save({ session });
+    });
+
+    if (!newPendingTransfer) {
+      throw new Error("Could not update pending transfer.");
+    }
+
+    return {
+      status: "ready",
+      confirmation: toConfirmation(newPendingTransfer),
+      supersededConfirmationId: input.activePendingTransferId
+    };
+  } finally {
+    await session.endSession();
+  }
 }
 
 export async function respondToAiPendingTransfer(
@@ -278,6 +458,16 @@ export async function respondToAiPendingTransfer(
     : undefined;
 
   if (input.action === "deny") {
+    const current = await AiPendingTransfer.findOne({
+      _id: input.pendingTransferId,
+      userId: input.userId
+    })
+      .select("status supersededById")
+      .lean();
+    if (current?.status === "superseded") {
+      throw getSupersededError(current.supersededById);
+    }
+
     if (input.idempotencyKey) {
       const existing = await AiPendingTransfer.findOne({
         _id: input.pendingTransferId,
@@ -333,6 +523,16 @@ export async function respondToAiPendingTransfer(
     let result: AiConfirmationResult | undefined;
 
     await session.withTransaction(async () => {
+      const current = await AiPendingTransfer.findOne({
+        _id: input.pendingTransferId,
+        userId: input.userId
+      })
+        .select("status supersededById")
+        .session(session);
+      if (current?.status === "superseded") {
+        throw getSupersededError(current.supersededById);
+      }
+
       if (input.idempotencyKey) {
         const existing = await AiPendingTransfer.findOne({
           _id: input.pendingTransferId,

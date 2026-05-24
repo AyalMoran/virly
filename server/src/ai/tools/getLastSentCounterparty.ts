@@ -1,13 +1,14 @@
 import { Transaction } from "../../models/Transaction.js";
-import { maskEmail } from "../counterpartyMemory.js";
-import type {
-  AssistantToolResult,
-  ToolContext
-} from "../state.js";
+import { createToolResult } from "../toolResults.js";
+import type { RuntimeToolResult, ToolContext } from "../state.js";
+import {
+  getCounterpartyDisplays,
+  getDisplayOrFallback
+} from "./counterpartyHelpers.js";
 
 export async function getLastSentCounterparty(
   context: ToolContext
-): Promise<AssistantToolResult> {
+): Promise<RuntimeToolResult> {
   const transaction = await Transaction.findOne({
     ownerId: context.userId,
     type: "debit"
@@ -16,24 +17,50 @@ export async function getLastSentCounterparty(
     .select("counterpartyEmail");
 
   if (!transaction) {
-    return {
+    return createToolResult({
       toolName: "getLastSentCounterparty",
+      status: "empty",
+      data: null,
       summary: "No sent transactions were found for your account.",
       metadata: {
         recordCount: 0
       }
-    };
+    });
   }
 
-  const maskedLabel = maskEmail(transaction.counterpartyEmail);
+  const displays = await getCounterpartyDisplays([transaction.counterpartyEmail]);
+  const display = getDisplayOrFallback(displays, transaction.counterpartyEmail);
 
-  return {
+  return createToolResult({
     toolName: "getLastSentCounterparty",
-    summary: `The last person you sent money to was ${maskedLabel}.`,
+    status: "ok",
+    data: {
+      email: transaction.counterpartyEmail,
+      maskedLabel: display.emailMasked,
+      userLabel: display.userLabel,
+      displayName: display.displayName
+    },
+    summary: `The last person you sent money to was ${display.llmLabel}.`,
+    userSummary: `The last person you sent money to was ${display.userLabel}.`,
     metadata: {
       recordCount: 1,
       counterpartyEmail: transaction.counterpartyEmail,
-      maskedLabel
+      maskedLabel: display.emailMasked,
+      displayName: display.displayName
+    },
+    memoryUpdates: {
+      counterparties: [
+        {
+          counterpartyId: transaction.counterpartyEmail.toLowerCase(),
+          emailFullForBackendOnly: transaction.counterpartyEmail.toLowerCase(),
+          emailMasked: display.emailMasked,
+          displayName: display.displayName,
+          firstName: display.firstName,
+          lastName: display.lastName,
+          relation: "sent_to",
+          source: "transaction"
+        }
+      ]
     }
-  };
+  });
 }

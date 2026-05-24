@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import http from "node:http";
 import { app } from "../../app.js";
+import { config } from "../../config.js";
 import { createToken } from "../../utils/auth.js";
 import { hashCsrfToken } from "../../utils/session.js";
 import { AssistantId } from "../assistants.js";
@@ -12,6 +13,12 @@ import {
 } from "../counterpartyMemory.js";
 import { runAssistantGraph } from "../graph.js";
 import {
+  getReadOnlyToolsForIntent,
+  intentToReadOnlyTools,
+  isReadOnlyToolName
+} from "../router.js";
+import { createToolResult } from "../toolResults.js";
+import {
   AssistantLlmProvider,
   AssistantToolExecutors,
   AuditLogInput,
@@ -21,96 +28,727 @@ import {
   ConversationStore,
   CounterpartyMemory,
   RunAssistantResult,
+  ToolContext,
+  TransferModificationService,
   TransferPreparationService
 } from "../state.js";
+import {
+  buildTransactionFilter,
+  getReasonQueryFromMessage
+} from "../tools/transactionHelpers.js";
+import {
+  getLimitReasons,
+  getMaxSendableNow
+} from "../tools/transferPreflightHelpers.js";
+import { getPendingTransferScope } from "../tools/pendingTransferHelpers.js";
+import { resolvePendingTransferReference } from "../tools/resolvePendingTransferReference.js";
+import { sanitizeMessagesForLlm } from "../llm.js";
+
+function fakeResult(input: {
+  toolName: Parameters<typeof createToolResult>[0]["toolName"];
+  summary: string;
+  userSummary?: string;
+  metadata?: Parameters<typeof createToolResult>[0]["metadata"];
+  status?: "ok" | "empty" | "error";
+  data?: unknown;
+  memoryUpdates?: Parameters<typeof createToolResult>[0]["memoryUpdates"];
+}) {
+  return createToolResult({
+    toolName: input.toolName,
+    status: input.status ?? "ok",
+    data: input.data ?? null,
+    summary: input.summary,
+    userSummary: input.userSummary,
+    metadata: input.metadata,
+    memoryUpdates: input.memoryUpdates
+  });
+}
 
 function createFakeTools(
   executed: string[],
   counterpartyEmail = "alex@example.com"
 ): AssistantToolExecutors {
   const maskedLabel = "a***@example.com";
+  const userLabel = "alex@example.com";
 
   return {
     async getUserAccounts() {
       executed.push("getUserAccounts");
-      return {
+      return fakeResult({
         toolName: "getUserAccounts",
         summary: "Virly account",
         metadata: { recordCount: 1, accountLabel: "Virly account" }
-      };
+      });
     },
     async getAccountBalance() {
       executed.push("getAccountBalance");
-      return {
+      return fakeResult({
         toolName: "getAccountBalance",
         summary: "Your Virly account available balance is 125.00.",
         metadata: { recordCount: 1, accountLabel: "Virly account" }
-      };
+      });
     },
     async getRecentTransactions() {
       executed.push("getRecentTransactions");
-      return {
+      return fakeResult({
         toolName: "getRecentTransactions",
         summary: "Recent transactions: sent 10.00 with a***@example.com.",
+        userSummary: "Recent transactions: sent 10.00 with alex@example.com.",
         metadata: { recordCount: 1 }
-      };
+      });
     },
     async getLastSentCounterparty() {
       executed.push("getLastSentCounterparty");
-      return {
+      return fakeResult({
         toolName: "getLastSentCounterparty",
         summary: `The last person you sent money to was ${maskedLabel}.`,
+        userSummary: `The last person you sent money to was ${userLabel}.`,
+        data: {
+          email: counterpartyEmail,
+          maskedLabel,
+          userLabel
+        },
         metadata: {
           recordCount: 1,
           counterpartyEmail,
           maskedLabel
+        },
+        memoryUpdates: {
+          counterparties: [
+            {
+              counterpartyId: counterpartyEmail,
+              emailFullForBackendOnly: counterpartyEmail,
+              emailMasked: maskedLabel,
+              displayName: "Alex Example",
+              relation: "sent_to",
+              source: "transaction"
+            }
+          ]
         }
-      };
+      });
     },
-    async getTransactionsWithCounterparty(context) {
+    async getTransactionsWithCounterparty(context: ToolContext) {
       executed.push(
         `getTransactionsWithCounterparty:${context.resolvedCounterparty?.email ?? "none"}`
       );
-      return {
+      return fakeResult({
         toolName: "getTransactionsWithCounterparty",
         summary: `Recent transactions with ${context.resolvedCounterparty?.maskedLabel ?? maskedLabel}: sent 10.00.`,
+        userSummary: `Recent transactions with ${context.resolvedCounterparty?.userLabel ?? userLabel}: sent 10.00.`,
         metadata: {
           recordCount: 1,
           counterpartyEmail: context.resolvedCounterparty?.email,
           maskedLabel: context.resolvedCounterparty?.maskedLabel
         }
-      };
+      });
     },
-    async getTotalSentToCounterparty(context) {
+    async getTotalSentToCounterparty(context: ToolContext) {
       executed.push(
         `getTotalSentToCounterparty:${context.resolvedCounterparty?.email ?? "none"}`
       );
-      return {
+      return fakeResult({
         toolName: "getTotalSentToCounterparty",
         summary: `You have sent 42.00 in total to ${context.resolvedCounterparty?.maskedLabel ?? maskedLabel}.`,
+        userSummary: `You have sent 42.00 in total to ${context.resolvedCounterparty?.userLabel ?? userLabel}.`,
         metadata: {
           recordCount: 2,
           amount: 42,
           counterpartyEmail: context.resolvedCounterparty?.email,
           maskedLabel: context.resolvedCounterparty?.maskedLabel
         }
-      };
+      });
     },
     async getVerifiedRecipients() {
       executed.push("getVerifiedRecipients");
-      return {
+      return fakeResult({
         toolName: "getVerifiedRecipients",
         summary: "Verified recipients from your history: a***@example.com.",
+        userSummary: "Verified recipients from your history: alex@example.com.",
         metadata: { recordCount: 1 }
-      };
+      });
     },
     async getTransferLimits() {
       executed.push("getTransferLimits");
-      return {
+      return fakeResult({
         toolName: "getTransferLimits",
         summary: "Current development transfer limits are 500.00 per transfer.",
         metadata: { recordCount: 1 }
-      };
+      });
+    }
+  };
+}
+
+function createFakePhaseTwoCounterpartyTools(
+  executed: string[]
+): AssistantToolExecutors {
+  return {
+    ...createFakeTools(executed),
+    async getRecentSentCounterparties() {
+      executed.push("getRecentSentCounterparties");
+      return fakeResult({
+        toolName: "getRecentSentCounterparties",
+        memoryUpdates: {
+          counterparties: [
+            {
+              counterpartyId: "daniel@example.com",
+              emailFullForBackendOnly: "daniel@example.com",
+              emailMasked: "d***@example.com",
+              displayName: "Daniel Example",
+              relation: "sent_to",
+              source: "transaction"
+            },
+            {
+              counterpartyId: "maya@example.com",
+              emailFullForBackendOnly: "maya@example.com",
+              emailMasked: "m***@example.com",
+              displayName: "Maya Example",
+              relation: "sent_to",
+              source: "transaction"
+            }
+          ]
+        },
+        data: [
+          {
+            counterpartyId: "daniel@example.com",
+            emailFull: "daniel@example.com",
+            emailMasked: "d***@example.com",
+            llmLabel: "Daniel Example (d***@example.com)",
+            userLabel: "Daniel Example (daniel@example.com)",
+            displayName: "Daniel Example",
+            amount: 50
+          },
+          {
+            counterpartyId: "maya@example.com",
+            emailFull: "maya@example.com",
+            emailMasked: "m***@example.com",
+            llmLabel: "Maya Example (m***@example.com)",
+            userLabel: "Maya Example (maya@example.com)",
+            displayName: "Maya Example",
+            amount: 25
+          }
+        ],
+        summary:
+          "Recent people you sent money to: Daniel Example (d***@example.com); Maya Example (m***@example.com).",
+        userSummary:
+          "Recent people you sent money to: Daniel Example (daniel@example.com); Maya Example (maya@example.com).",
+        metadata: {
+          recordCount: 2,
+          counterparties: [
+            {
+              counterpartyEmail: "daniel@example.com",
+              maskedLabel: "d***@example.com",
+              displayName: "Daniel Example"
+            },
+            {
+              counterpartyEmail: "maya@example.com",
+              maskedLabel: "m***@example.com",
+              displayName: "Maya Example"
+            }
+          ]
+        }
+      });
+    },
+    async getRecentReceivedCounterparties() {
+      executed.push("getRecentReceivedCounterparties");
+      return fakeResult({
+        toolName: "getRecentReceivedCounterparties",
+        data: [
+          {
+            counterpartyId: "sarah@example.com",
+            emailFull: "sarah@example.com",
+            emailMasked: "s***@example.com",
+            llmLabel: "Sarah Example (s***@example.com)",
+            userLabel: "Sarah Example (sarah@example.com)",
+            displayName: "Sarah Example",
+            amount: 40
+          }
+        ],
+        summary:
+          "Recent people who sent you money: Sarah Example (s***@example.com).",
+        userSummary:
+          "Recent people who sent you money: Sarah Example (sarah@example.com).",
+        metadata: {
+          recordCount: 1,
+          counterparties: [
+            {
+              counterpartyEmail: "sarah@example.com",
+              maskedLabel: "s***@example.com",
+              displayName: "Sarah Example"
+            }
+          ]
+        }
+      });
+    },
+    async resolveCounterpartyCandidates(context: ToolContext) {
+      executed.push("resolveCounterpartyCandidates");
+
+      if (/ambiguous|two daniels/i.test(context.message)) {
+        return fakeResult({
+          toolName: "resolveCounterpartyCandidates",
+          data: {
+            kind: "counterparty",
+            status: "ambiguous",
+            candidates: [
+              {
+                id: "daniel.a@example.com",
+                label: "Daniel A (daniel.a@example.com)",
+                value: "daniel.a@example.com"
+              },
+              {
+                id: "daniel.b@example.net",
+                label: "Daniel B (daniel.b@example.net)",
+                value: "daniel.b@example.net"
+              }
+            ]
+          },
+          summary:
+            "I found multiple possible counterparties: Daniel A (d***@example.com); Daniel B (d***@example.net).",
+          userSummary:
+            "I found multiple possible counterparties: Daniel A (daniel.a@example.com); Daniel B (daniel.b@example.net).",
+          metadata: {
+            recordCount: 2,
+            resolutionStatus: "ambiguous",
+            counterpartyCandidates: [
+              {
+                counterpartyEmail: "daniel.a@example.com",
+                maskedLabel: "d***@example.com",
+                displayName: "Daniel A",
+                confidence: "high"
+              },
+              {
+                counterpartyEmail: "daniel.b@example.net",
+                maskedLabel: "d***@example.net",
+                displayName: "Daniel B",
+                confidence: "high"
+              }
+            ]
+          }
+        });
+      }
+
+      return fakeResult({
+        toolName: "resolveCounterpartyCandidates",
+        data: {
+          kind: "counterparty",
+          status: "resolved",
+          counterparty: {
+            email: "daniel@example.com",
+            maskedLabel: "d***@example.com",
+            userLabel: "Daniel Example (daniel@example.com)",
+            displayName: "Daniel Example"
+          },
+          candidates: [
+            {
+              id: "daniel@example.com",
+              label: "Daniel Example (daniel@example.com)",
+              value: "daniel@example.com"
+            }
+          ]
+        },
+        summary: "Resolved counterparty: Daniel Example (d***@example.com).",
+        userSummary: "Resolved counterparty: Daniel Example (daniel@example.com).",
+        metadata: {
+          recordCount: 1,
+          resolutionStatus: "resolved",
+          counterpartyEmail: "daniel@example.com",
+          maskedLabel: "d***@example.com",
+          displayName: "Daniel Example",
+          counterpartyCandidates: [
+            {
+              counterpartyEmail: "daniel@example.com",
+              maskedLabel: "d***@example.com",
+              displayName: "Daniel Example",
+              confidence: "high"
+            }
+          ]
+        }
+      });
+    },
+    async getCounterpartySummary(context: ToolContext) {
+      executed.push(
+        `getCounterpartySummary:${context.resolvedCounterparty?.email ?? "none"}`
+      );
+      return fakeResult({
+        toolName: "getCounterpartySummary",
+        summary:
+          "History with Daniel Example (d***@example.com): sent 70.00 ILS, received 20.00 ILS, net -50.00 ILS.",
+        userSummary:
+          "History with Daniel Example (daniel@example.com): sent 70.00 ILS, received 20.00 ILS, net -50.00 ILS.",
+        metadata: {
+          recordCount: 3,
+          amount: -50,
+          counterpartyEmail: context.resolvedCounterparty?.email,
+          maskedLabel: context.resolvedCounterparty?.maskedLabel,
+          displayName: "Daniel Example"
+        }
+      });
+    },
+    async getCounterpartyActivityTimeline(context: ToolContext) {
+      executed.push(
+        `getCounterpartyActivityTimeline:${context.resolvedCounterparty?.email ?? "none"}`
+      );
+      return fakeResult({
+        toolName: "getCounterpartyActivityTimeline",
+        summary:
+          "Recent activity with Daniel Example (d***@example.com): sent 50.00 ILS; received 20.00 ILS.",
+        userSummary:
+          "Recent activity with Daniel Example (daniel@example.com): sent 50.00 ILS; received 20.00 ILS.",
+        metadata: {
+          recordCount: 2,
+          counterpartyEmail: context.resolvedCounterparty?.email,
+          maskedLabel: context.resolvedCounterparty?.maskedLabel,
+          displayName: "Daniel Example"
+        }
+      });
+    }
+  };
+}
+
+function createFakePhaseThreeTransactionTools(
+  executed: string[]
+): AssistantToolExecutors {
+  return {
+    ...createFakePhaseTwoCounterpartyTools(executed),
+    async searchTransactions() {
+      executed.push("searchTransactions");
+      return fakeResult({
+        toolName: "searchTransactions",
+        memoryUpdates: {
+          transactions: [
+            {
+              transactionId: "tx-1",
+              label: "1. sent 120.00 ILS with Daniel Example (daniel@example.com)",
+              amount: 120,
+              currency: "ILS",
+              direction: "sent",
+              occurredAt: "2026-05-18T10:00:00.000Z",
+              counterpartyLabel: "Daniel Example (daniel@example.com)"
+            },
+            {
+              transactionId: "tx-2",
+              label: "2. received 200.00 ILS with Sarah Example (sarah@example.com)",
+              amount: 200,
+              currency: "ILS",
+              direction: "received",
+              occurredAt: "2026-05-19T10:00:00.000Z",
+              counterpartyLabel: "Sarah Example (sarah@example.com)"
+            }
+          ]
+        },
+        summary:
+          "Transactions matching sent, over 100.00 ILS, last week: 1. sent 120.00 ILS with Daniel Example (d***@example.com); 2. received 200.00 ILS with Sarah Example (s***@example.com).",
+        userSummary:
+          "Transactions matching sent, over 100.00 ILS, last week: 1. sent 120.00 ILS with Daniel Example (daniel@example.com); 2. received 200.00 ILS with Sarah Example (sarah@example.com).",
+        metadata: {
+          recordCount: 2,
+          transactions: [
+            {
+              transactionId: "tx-1",
+              label: "1. sent 120.00 ILS with Daniel Example (d***@example.com)",
+              amount: 120,
+              currency: "ILS",
+              direction: "sent",
+              occurredAt: "2026-05-18T10:00:00.000Z",
+              counterpartyLabel: "Daniel Example (d***@example.com)"
+            },
+            {
+              transactionId: "tx-2",
+              label: "2. received 200.00 ILS with Sarah Example (s***@example.com)",
+              amount: 200,
+              currency: "ILS",
+              direction: "received",
+              occurredAt: "2026-05-19T10:00:00.000Z",
+              counterpartyLabel: "Sarah Example (s***@example.com)"
+            }
+          ]
+        }
+      });
+    },
+    async getTransactionStats() {
+      executed.push("getTransactionStats");
+      return fakeResult({
+        toolName: "getTransactionStats",
+        data: {
+          count: 4,
+          sentTotal: 150,
+          receivedTotal: 300,
+          net: 150
+        },
+        summary:
+          "Transaction stats for this month: 4 total, sent 150.00 ILS across 2, received 300.00 ILS across 2, net 150.00 ILS.",
+        metadata: {
+          recordCount: 4,
+          amount: 150
+        }
+      });
+    },
+    async resolveTransactionReference(context: ToolContext) {
+      executed.push("resolveTransactionReference");
+
+      if (/ambiguous|which/i.test(context.message)) {
+        return fakeResult({
+          toolName: "resolveTransactionReference",
+          data: {
+            kind: "transaction",
+            status: "ambiguous",
+            candidates: [
+              {
+                id: "tx-1",
+                label: "1. sent 120.00 ILS with Daniel Example (daniel@example.com)",
+                value: "tx-1"
+              },
+              {
+                id: "tx-2",
+                label: "2. received 200.00 ILS with Sarah Example (sarah@example.com)",
+                value: "tx-2"
+              }
+            ]
+          },
+          summary: "Multiple recent transactions matched that reference.",
+          metadata: {
+            recordCount: 2,
+            transactionResolutionStatus: "ambiguous",
+            transactionCandidates: [
+              {
+                transactionId: "tx-1",
+                label: "1. sent 120.00 ILS with Daniel Example (d***@example.com)",
+                amount: 120,
+                currency: "ILS",
+                direction: "sent",
+                occurredAt: "2026-05-18T10:00:00.000Z"
+              },
+              {
+                transactionId: "tx-2",
+                label: "2. received 200.00 ILS with Sarah Example (s***@example.com)",
+                amount: 200,
+                currency: "ILS",
+                direction: "received",
+                occurredAt: "2026-05-19T10:00:00.000Z"
+              }
+            ]
+          }
+        });
+      }
+
+      const transactionId = /second|2nd|שני|שנייה/.test(context.message)
+        ? "tx-2"
+        : "tx-1";
+      return fakeResult({
+        toolName: "resolveTransactionReference",
+        data: {
+          kind: "transaction",
+          status: "resolved",
+          transactionId,
+          candidates: [
+            {
+              id: transactionId,
+              label:
+                transactionId === "tx-2"
+                  ? "2. received 200.00 ILS with Sarah Example (sarah@example.com)"
+                  : "1. sent 120.00 ILS with Daniel Example (daniel@example.com)",
+              value: transactionId
+            }
+          ]
+        },
+        summary: `Resolved transaction reference to ${transactionId}.`,
+        metadata: {
+          recordCount: 1,
+          transactionId,
+          transactionResolutionStatus: "resolved",
+          transactionCandidates: [
+            {
+              transactionId,
+              label:
+                transactionId === "tx-2"
+                  ? "2. received 200.00 ILS with Sarah Example (s***@example.com)"
+                  : "1. sent 120.00 ILS with Daniel Example (d***@example.com)",
+              amount: transactionId === "tx-2" ? 200 : 120,
+              currency: "ILS",
+              direction: transactionId === "tx-2" ? "received" : "sent",
+              occurredAt: "2026-05-19T10:00:00.000Z"
+            }
+          ]
+        }
+      });
+    },
+    async getTransactionReceipt(context: ToolContext) {
+      executed.push(`getTransactionReceipt:${context.resolvedTransactionId ?? "none"}`);
+      return fakeResult({
+        toolName: "getTransactionReceipt",
+        summary: `Transaction details for ${context.resolvedTransactionId}: received 200.00 ILS with Sarah Example (s***@example.com).`,
+        userSummary: `Transaction details for ${context.resolvedTransactionId}: received 200.00 ILS with Sarah Example (sarah@example.com).`,
+        metadata: {
+          recordCount: 1,
+          transactionId: context.resolvedTransactionId,
+          transactions: [
+            {
+              transactionId: context.resolvedTransactionId ?? "missing",
+              label:
+                "2. received 200.00 ILS with Sarah Example (s***@example.com)",
+              amount: 200,
+              currency: "ILS",
+              direction: "received",
+              occurredAt: "2026-05-19T10:00:00.000Z",
+              counterpartyLabel: "Sarah Example (s***@example.com)"
+            }
+          ]
+        }
+      });
+    }
+  };
+}
+
+function createFakePhaseFourTransferTools(
+  executed: string[]
+): AssistantToolExecutors {
+  return {
+    ...createFakePhaseThreeTransactionTools(executed),
+    async getTransferEligibility(context: ToolContext) {
+      executed.push("getTransferEligibility");
+      return fakeResult({
+        toolName: "getTransferEligibility",
+        data: {
+          eligible: true,
+          maxSendableNow: 500
+        },
+        summary: context.requestSlots?.amount?.value
+          ? "Yes, that amount is eligible. This does not create or send a transfer."
+          : "You can send up to 500.00 ILS right now.",
+        metadata: {
+          recordCount: 1,
+          amount: 500
+        }
+      });
+    },
+    async getTransferQuote(context: ToolContext) {
+      executed.push(
+        `getTransferQuote:${context.resolvedCounterparty?.email ?? context.requestSlots?.counterparty?.explicitEmail ?? "none"}`
+      );
+      const maskedRecipient =
+        context.resolvedCounterparty?.maskedLabel ??
+        "a***@example.com";
+      const userRecipient =
+        context.resolvedCounterparty?.userLabel ??
+        context.requestSlots?.counterparty?.explicitEmail ??
+        "alex@example.com";
+      return fakeResult({
+        toolName: "getTransferQuote",
+        data: {
+          eligible: true,
+          remainingBalanceAfterTransfer: 75,
+          recipientLabel: maskedRecipient
+        },
+        summary:
+          `Transfer quote for 50.00 ILS to ${maskedRecipient}: eligible. This quote does not create or send a transfer.`,
+        userSummary:
+          `Transfer quote for 50.00 ILS to ${userRecipient}: eligible. This quote does not create or send a transfer.`,
+        metadata: {
+          recordCount: 1,
+          amount: 75
+        }
+      });
+    },
+    async getDailyTransferUsage() {
+      executed.push("getDailyTransferUsage");
+      return fakeResult({
+        toolName: "getDailyTransferUsage",
+        data: {
+          dailyLimit: 1000,
+          usedToday: 120,
+          remainingToday: 880,
+          transferCountToday: 2,
+          resetAt: new Date("2026-05-25T00:00:00.000Z")
+        },
+        summary:
+          "Daily transfer usage: used 120.00 ILS of 1000.00 ILS today, with 880.00 ILS remaining.",
+        metadata: {
+          recordCount: 2,
+          amount: 880
+        }
+      });
+    },
+    async getPendingAiTransfers(context: ToolContext) {
+      executed.push(
+        /all|כל/.test(context.message)
+          ? "getPendingAiTransfers:all_user"
+          : "getPendingAiTransfers:current_conversation"
+      );
+      return fakeResult({
+        toolName: "getPendingAiTransfers",
+        data: [
+          {
+            pendingTransferId: "pending-transfer-1",
+            label: "1. 50.00 ILS to Alex Example (alex@example.com)",
+            recipientLabel: "Alex Example (alex@example.com)",
+            amount: 50,
+            currency: "ILS",
+            expiresAt: "2026-05-24T12:00:00.000Z"
+          }
+        ],
+        memoryUpdates: {
+          pendingTransfers: [
+            {
+              pendingTransferId: "pending-transfer-1",
+              label: "1. 50.00 ILS to Alex Example (alex@example.com)",
+              recipientLabel: "Alex Example (alex@example.com)",
+              amount: 50,
+              currency: "ILS",
+              expiresAt: "2026-05-24T12:00:00.000Z"
+            }
+          ]
+        },
+        summary:
+          "Pending transfer confirmations in this conversation: 1. 50.00 ILS to Alex Example (a***@example.com).",
+        userSummary:
+          "Pending transfer confirmations in this conversation: 1. 50.00 ILS to Alex Example (alex@example.com).",
+        metadata: {
+          recordCount: 1,
+          pendingTransfers: [
+            {
+              pendingTransferId: "pending-transfer-1",
+              label: "1. 50.00 ILS to Alex Example (a***@example.com)",
+              recipientLabel: "Alex Example (a***@example.com)",
+              amount: 50,
+              currency: "ILS",
+              expiresAt: "2026-05-24T12:00:00.000Z"
+            }
+          ]
+        }
+      });
+    },
+    async resolvePendingTransferReference() {
+      executed.push("resolvePendingTransferReference");
+      return fakeResult({
+        toolName: "resolvePendingTransferReference",
+        data: {
+          kind: "pending_transfer",
+          status: "resolved",
+          pendingTransferId: "pending-transfer-1",
+          candidates: [
+            {
+              id: "pending-transfer-1",
+              label: "1. 50.00 ILS to Alex Example (alex@example.com)",
+              value: "pending-transfer-1"
+            }
+          ]
+        },
+        summary: "Resolved pending transfer reference.",
+        userSummary: "Resolved pending transfer reference.",
+        metadata: {
+          recordCount: 1,
+          pendingTransferResolutionStatus: "resolved",
+          pendingTransferCandidates: [
+            {
+              pendingTransferId: "pending-transfer-1",
+              label: "1. 50.00 ILS to Alex Example (a***@example.com)",
+              recipientLabel: "Alex Example (a***@example.com)",
+              amount: 50,
+              currency: "ILS",
+              expiresAt: "2026-05-24T12:00:00.000Z"
+            }
+          ]
+        }
+      });
     }
   };
 }
@@ -230,6 +868,76 @@ function createFakeTransferPreparationService(
   };
 }
 
+function createFakeTransferModificationService(
+  modifications: Array<Parameters<TransferModificationService>[0]> = [],
+  options: { failMessage?: string } = {}
+): TransferModificationService {
+  return async (input) => {
+    modifications.push(input);
+
+    if (options.failMessage) {
+      return {
+        status: "needs_clarification",
+        message: options.failMessage
+      };
+    }
+
+    const recipientEmail =
+      input.modificationDraft.recipientEmail ??
+      input.resolvedCounterparty?.email ??
+      "alex@example.com";
+    const amount = input.modificationDraft.amount ?? 50;
+
+    return {
+      status: "ready",
+      supersededConfirmationId: input.activePendingTransferId,
+      confirmation: {
+        id: "pending-transfer-2",
+        version: 1,
+        type: "transfer",
+        status: "pending",
+        recipientEmail,
+        recipientFirstName: "Alex",
+        recipientLastName: "Example",
+        amount,
+        currency: "ILS",
+        recipient: {
+          email: recipientEmail,
+          firstName: "Alex",
+          lastName: "Example",
+          displayName: "Alex Example",
+          verified: true
+        },
+        amountDetails: {
+          value: amount,
+          currency: "ILS",
+          formatted: `₪${amount}`
+        },
+        reason: input.modificationDraft.reason ?? null,
+        warnings: [],
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        supersedesId: input.activePendingTransferId,
+        confirmAction: {
+          method: "POST",
+          path: "/api/ai/confirmations/pending-transfer-2",
+          body: {
+            action: "confirm",
+            version: 1
+          }
+        },
+        denyAction: {
+          method: "POST",
+          path: "/api/ai/confirmations/pending-transfer-2",
+          body: {
+            action: "deny",
+            version: 1
+          }
+        }
+      }
+    };
+  };
+}
+
 function createMemoryWithCounterparties(
   emails: string[]
 ): CounterpartyMemory {
@@ -239,6 +947,8 @@ function createMemoryWithCounterparties(
       {
         email,
         maskedLabel: `${email.slice(0, 1)}***@example.com`,
+        userLabel: email,
+        aliases: [email, email.split("@")[0] ?? email],
         firstMentionedAtTurn: index + 1,
         lastReferencedAtTurn: index + 1
       },
@@ -261,6 +971,713 @@ function createAuthHeaders() {
     "X-CSRF-Token": csrfToken
   };
 }
+
+test("read-only route map preserves existing implemented tool routing", () => {
+  assert.deepEqual(getReadOnlyToolsForIntent("balance_inquiry"), [
+    "getUserAccounts",
+    "getAccountBalance"
+  ]);
+  assert.deepEqual(getReadOnlyToolsForIntent("recent_transactions"), [
+    "getRecentTransactions"
+  ]);
+  assert.deepEqual(getReadOnlyToolsForIntent("last_sent_counterparty"), [
+    "getLastSentCounterparty"
+  ]);
+  assert.deepEqual(getReadOnlyToolsForIntent("transfer_prepare"), []);
+  assert.deepEqual(getReadOnlyToolsForIntent("transfer_modify_pending"), []);
+  assert.deepEqual(getReadOnlyToolsForIntent("unsafe_request"), []);
+});
+
+test("read-only route map includes planned phase one tool routes", () => {
+  assert.deepEqual(getReadOnlyToolsForIntent("recent_sent_counterparties"), [
+    "getRecentSentCounterparties"
+  ]);
+  assert.deepEqual(getReadOnlyToolsForIntent("counterparty_summary"), [
+    "resolveCounterpartyCandidates",
+    "getCounterpartySummary"
+  ]);
+  assert.deepEqual(getReadOnlyToolsForIntent("transaction_detail"), [
+    "resolveTransactionReference",
+    "getTransactionReceipt"
+  ]);
+  assert.deepEqual(getReadOnlyToolsForIntent("transfer_eligibility"), [
+    "getTransferEligibility"
+  ]);
+  assert.deepEqual(getReadOnlyToolsForIntent("pending_ai_transfers"), [
+    "getPendingAiTransfers"
+  ]);
+});
+
+test("every configured read-only route uses an allowlisted tool name", () => {
+  for (const toolNames of Object.values(intentToReadOnlyTools)) {
+    for (const toolName of toolNames) {
+      assert.equal(isReadOnlyToolName(toolName), true);
+    }
+  }
+});
+
+test("planned but unimplemented tools fail closed in graph execution", async () => {
+  const executed: string[] = [];
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "recent_sent_counterparties" };
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-planned-tool-fail-closed",
+      message: "Who are the last 3 people I sent money to?"
+    },
+    { tools: createFakeTools(executed), llmProvider }
+  );
+
+  assert.equal(result.intent, "recent_sent_counterparties");
+  assert.deepEqual(result.toolCalls, []);
+  assert.deepEqual(executed, []);
+  assert.match(result.message, /not available yet/i);
+});
+
+test("recent sent counterparties request calls phase two sent counterparty tool", async () => {
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore();
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-recent-sent-counterparties",
+      message: "Who are the last 3 people I sent money to?"
+    },
+    {
+      tools: createFakePhaseTwoCounterpartyTools(executed),
+      conversationStore
+    }
+  );
+
+  assert.equal(result.intent, "recent_sent_counterparties");
+  assert.deepEqual(result.toolCalls, ["getRecentSentCounterparties"]);
+  assert.deepEqual(executed, ["getRecentSentCounterparties"]);
+  assert.match(result.message, /Daniel Example/);
+  assert.match(result.message, /daniel@example\.com/);
+  assert.doesNotMatch(result.message, /d\*\*\*@example\.com/);
+  assert.equal(
+    conversationStore.saved.at(-1)?.memory.lastCounterparty?.email,
+    "maya@example.com"
+  );
+});
+
+test("recent received counterparties request calls phase two received counterparty tool", async () => {
+  const executed: string[] = [];
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-recent-received-counterparties",
+      message: "Who sent me money recently?"
+    },
+    { tools: createFakePhaseTwoCounterpartyTools(executed) }
+  );
+
+  assert.equal(result.intent, "recent_received_counterparties");
+  assert.deepEqual(result.toolCalls, ["getRecentReceivedCounterparties"]);
+  assert.deepEqual(executed, ["getRecentReceivedCounterparties"]);
+  assert.match(result.message, /Sarah Example/);
+  assert.match(result.message, /sarah@example\.com/);
+});
+
+test("counterparty summary resolves candidate before running summary tool", async () => {
+  const executed: string[] = [];
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-counterparty-summary",
+      message: "What's my history with Daniel?"
+    },
+    { tools: createFakePhaseTwoCounterpartyTools(executed) }
+  );
+
+  assert.equal(result.intent, "counterparty_summary");
+  assert.deepEqual(result.toolCalls, [
+    "resolveCounterpartyCandidates",
+    "getCounterpartySummary"
+  ]);
+  assert.deepEqual(executed, [
+    "resolveCounterpartyCandidates",
+    "getCounterpartySummary:daniel@example.com"
+  ]);
+  assert.match(result.message, /sent 70\.00 ILS/);
+});
+
+test("ambiguous counterparty summary stops before downstream summary tool", async () => {
+  const executed: string[] = [];
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-ambiguous-counterparty-summary",
+      message: "What's my history with ambiguous Daniel?"
+    },
+    { tools: createFakePhaseTwoCounterpartyTools(executed) }
+  );
+
+  assert.equal(result.intent, "counterparty_summary");
+  assert.deepEqual(result.toolCalls, ["resolveCounterpartyCandidates"]);
+  assert.deepEqual(executed, ["resolveCounterpartyCandidates"]);
+  assert.match(result.message, /multiple matching counterparties/i);
+  assert.deepEqual(result.clarification?.options?.map((option) => option.label), [
+    "Daniel A (daniel.a@example.com)",
+    "Daniel B (daniel.b@example.net)"
+  ]);
+});
+
+test("counterparty activity timeline resolves candidate before running timeline tool", async () => {
+  const executed: string[] = [];
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-counterparty-activity",
+      message: "Show activity with Daniel"
+    },
+    { tools: createFakePhaseTwoCounterpartyTools(executed) }
+  );
+
+  assert.equal(result.intent, "counterparty_activity_timeline");
+  assert.deepEqual(result.toolCalls, [
+    "resolveCounterpartyCandidates",
+    "getCounterpartyActivityTimeline"
+  ]);
+  assert.deepEqual(executed, [
+    "resolveCounterpartyCandidates",
+    "getCounterpartyActivityTimeline:daniel@example.com"
+  ]);
+  assert.match(result.message, /Recent activity with Daniel Example/);
+});
+
+test("hebrew recent counterparty requests route to phase two tools", async () => {
+  const sentExecuted: string[] = [];
+  const sentResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-hebrew-recent-sent-counterparties",
+      message: "למי שלחתי כסף לאחרונה?"
+    },
+    { tools: createFakePhaseTwoCounterpartyTools(sentExecuted) }
+  );
+  const receivedExecuted: string[] = [];
+  const receivedResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-hebrew-recent-received-counterparties",
+      message: "מי שלח לי כסף לאחרונה?"
+    },
+    { tools: createFakePhaseTwoCounterpartyTools(receivedExecuted) }
+  );
+
+  assert.equal(sentResult.intent, "recent_sent_counterparties");
+  assert.deepEqual(sentExecuted, ["getRecentSentCounterparties"]);
+  assert.equal(receivedResult.intent, "recent_received_counterparties");
+  assert.deepEqual(receivedExecuted, ["getRecentReceivedCounterparties"]);
+});
+
+test("mixed hebrew english counterparty summary still resolves and executes", async () => {
+  const executed: string[] = [];
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-mixed-counterparty-summary",
+      message: "תראה לי history with Daniel"
+    },
+    { tools: createFakePhaseTwoCounterpartyTools(executed) }
+  );
+
+  assert.equal(result.intent, "counterparty_summary");
+  assert.deepEqual(result.toolCalls, [
+    "resolveCounterpartyCandidates",
+    "getCounterpartySummary"
+  ]);
+  assert.deepEqual(executed, [
+    "resolveCounterpartyCandidates",
+    "getCounterpartySummary:daniel@example.com"
+  ]);
+});
+
+test("transaction search routes to filtered transaction search tool", async () => {
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore();
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-transaction-search",
+      message: "Show transfers over 100 from last week"
+    },
+    {
+      tools: createFakePhaseThreeTransactionTools(executed),
+      conversationStore
+    }
+  );
+
+  assert.equal(result.intent, "transaction_search");
+  assert.deepEqual(result.toolCalls, ["searchTransactions"]);
+  assert.deepEqual(executed, ["searchTransactions"]);
+  assert.match(result.message, /over 100\.00 ILS/);
+  assert.deepEqual(
+    conversationStore.saved
+      .at(-1)
+      ?.memory.entities?.filter((entity) => entity.type === "transaction")
+      .map((entity) => entity.transactionId),
+    ["tx-1", "tx-2"]
+  );
+});
+
+test("transaction count routes to transaction stats tool", async () => {
+  const executed: string[] = [];
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-transaction-count",
+      message: "How many transactions this month?"
+    },
+    { tools: createFakePhaseThreeTransactionTools(executed) }
+  );
+
+  assert.equal(result.intent, "transaction_count");
+  assert.deepEqual(result.toolCalls, ["getTransactionStats"]);
+  assert.deepEqual(executed, ["getTransactionStats"]);
+  assert.match(result.message, /4 total/);
+});
+
+test("transaction detail resolves ordinal from prior transaction memory before receipt lookup", async () => {
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore();
+
+  await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-transaction-detail-follow-up",
+      message: "Show transfers over 100 from last week"
+    },
+    {
+      tools: createFakePhaseThreeTransactionTools(executed),
+      conversationStore
+    }
+  );
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-transaction-detail-follow-up",
+      message: "Tell me more about the second one"
+    },
+    {
+      tools: createFakePhaseThreeTransactionTools(executed),
+      conversationStore
+    }
+  );
+
+  assert.equal(result.intent, "transaction_detail");
+  assert.deepEqual(result.toolCalls, [
+    "resolveTransactionReference",
+    "getTransactionReceipt"
+  ]);
+  assert.ok(executed.includes("getTransactionReceipt:tx-2"));
+  assert.match(result.message, /Transaction details for tx-2/);
+});
+
+test("ambiguous transaction detail stops before receipt lookup", async () => {
+  const executed: string[] = [];
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-ambiguous-transaction-detail",
+      message: "Tell me more about which transaction"
+    },
+    { tools: createFakePhaseThreeTransactionTools(executed) }
+  );
+
+  assert.equal(result.intent, "transaction_detail");
+  assert.deepEqual(result.toolCalls, ["resolveTransactionReference"]);
+  assert.deepEqual(executed, ["resolveTransactionReference"]);
+  assert.match(result.message, /multiple matching transactions/i);
+});
+
+test("transaction detail follow-up resolves from clarification options before broader memory", async () => {
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore();
+
+  const ambiguousResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-transaction-clarification-follow-up",
+      message: "Tell me more about which transaction"
+    },
+    {
+      tools: createFakePhaseThreeTransactionTools(executed),
+      conversationStore
+    }
+  );
+
+  assert.equal(ambiguousResult.intent, "transaction_detail");
+  assert.equal(ambiguousResult.clarification?.expectedReplyType, "transaction");
+  assert.deepEqual(ambiguousResult.toolCalls, ["resolveTransactionReference"]);
+
+  const followUpResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-transaction-clarification-follow-up",
+      message: "the second one"
+    },
+    {
+      tools: createFakePhaseThreeTransactionTools(executed),
+      conversationStore
+    }
+  );
+
+  assert.equal(followUpResult.intent, "transaction_detail");
+  assert.deepEqual(followUpResult.toolCalls, [
+    "resolveTransactionReference",
+    "getTransactionReceipt"
+  ]);
+  assert.ok(executed.includes("getTransactionReceipt:tx-2"));
+});
+
+test("hebrew transaction search and detail requests route to phase three tools", async () => {
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore();
+
+  const searchResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-hebrew-transaction-tools",
+      message: "תראה לי העברות מעל 100 משבוע שעבר"
+    },
+    {
+      tools: createFakePhaseThreeTransactionTools(executed),
+      conversationStore
+    }
+  );
+  const detailResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-hebrew-transaction-tools",
+      message: "תראה לי את ההעברה השנייה"
+    },
+    {
+      tools: createFakePhaseThreeTransactionTools(executed),
+      conversationStore
+    }
+  );
+
+  assert.equal(searchResult.intent, "transaction_search");
+  assert.equal(detailResult.intent, "transaction_detail");
+  assert.ok(executed.includes("searchTransactions"));
+  assert.ok(executed.includes("getTransactionReceipt:tx-2"));
+});
+
+test("transaction date phrase does not infer received direction from bare from", () => {
+  const filter = buildTransactionFilter({
+    userId: "507f1f77bcf86cd799439011",
+    conversationId: "test-transaction-filter",
+    message: "Show transactions from last week"
+  });
+
+  assert.equal(filter.type, undefined);
+  assert.ok(filter.createdAt);
+});
+
+test("transaction reason filter stops before common date phrase", () => {
+  assert.equal(
+    getReasonQueryFromMessage("Show payments for rent this month"),
+    "rent"
+  );
+});
+
+test("transfer eligibility request routes to phase four eligibility tool", async () => {
+  const executed: string[] = [];
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-transfer-eligibility",
+      message: "Can I send 500?"
+    },
+    { tools: createFakePhaseFourTransferTools(executed) }
+  );
+
+  assert.equal(result.intent, "transfer_eligibility");
+  assert.deepEqual(result.toolCalls, ["getTransferEligibility"]);
+  assert.deepEqual(executed, ["getTransferEligibility"]);
+  assert.match(result.message, /does not create or send/);
+});
+
+test("hebrew transfer eligibility and daily usage requests route to phase four tools", async () => {
+  const eligibilityExecuted: string[] = [];
+  const eligibilityResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-hebrew-transfer-eligibility",
+      message: "אפשר להעביר 500?"
+    },
+    { tools: createFakePhaseFourTransferTools(eligibilityExecuted) }
+  );
+  const usageExecuted: string[] = [];
+  const usageResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-hebrew-daily-transfer-usage",
+      message: "כמה נשאר לי לשלוח היום?"
+    },
+    { tools: createFakePhaseFourTransferTools(usageExecuted) }
+  );
+
+  assert.equal(eligibilityResult.intent, "transfer_eligibility");
+  assert.deepEqual(eligibilityExecuted, ["getTransferEligibility"]);
+  assert.equal(usageResult.intent, "daily_transfer_usage");
+  assert.deepEqual(usageExecuted, ["getDailyTransferUsage"]);
+});
+
+test("mixed hebrew english transfer quote keeps explicit preflight behavior", async () => {
+  const executed: string[] = [];
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-mixed-transfer-quote",
+      message: "מה יקרה if I send 50 to Daniel?"
+    },
+    {
+      tools: createFakePhaseFourTransferTools(executed),
+      llmProvider: createFakeLlmProvider({
+        async classifyIntent() {
+          return { intent: "transfer_quote" };
+        }
+      })
+    }
+  );
+
+  assert.equal(result.intent, "transfer_quote");
+  assert.deepEqual(result.toolCalls, [
+    "resolveCounterpartyCandidates",
+    "getTransferQuote"
+  ]);
+  assert.deepEqual(executed, [
+    "resolveCounterpartyCandidates",
+    "getTransferQuote:daniel@example.com"
+  ]);
+});
+
+test("transfer quote with explicit email skips counterparty resolver", async () => {
+  const executed: string[] = [];
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-transfer-quote-explicit-email",
+      message: "Preview transfer to alex@example.com for 50 shekels"
+    },
+    { tools: createFakePhaseFourTransferTools(executed) }
+  );
+
+  assert.equal(result.intent, "transfer_quote");
+  assert.deepEqual(result.toolCalls, ["getTransferQuote"]);
+  assert.deepEqual(executed, ["getTransferQuote:alex@example.com"]);
+  assert.match(result.message, /does not create or send/);
+  assert.match(result.message, /alex@example\.com/);
+});
+
+test("transfer quote with named recipient resolves counterparty before quote", async () => {
+  const executed: string[] = [];
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-transfer-quote-resolved-recipient",
+      message: "What would happen if I send 50 to Daniel?"
+    },
+    { tools: createFakePhaseFourTransferTools(executed) }
+  );
+
+  assert.equal(result.intent, "transfer_quote");
+  assert.deepEqual(result.toolCalls, [
+    "resolveCounterpartyCandidates",
+    "getTransferQuote"
+  ]);
+  assert.deepEqual(executed, [
+    "resolveCounterpartyCandidates",
+    "getTransferQuote:daniel@example.com"
+  ]);
+  assert.match(result.message, /daniel@example\.com/);
+});
+
+test("daily transfer usage request routes to daily usage tool", async () => {
+  const executed: string[] = [];
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-daily-transfer-usage",
+      message: "How much can I still send today?"
+    },
+    { tools: createFakePhaseFourTransferTools(executed) }
+  );
+
+  assert.equal(result.intent, "daily_transfer_usage");
+  assert.deepEqual(result.toolCalls, ["getDailyTransferUsage"]);
+  assert.deepEqual(executed, ["getDailyTransferUsage"]);
+  assert.match(result.message, /880\.00 ILS remaining/);
+});
+
+test("pending ai transfers default to current conversation scope", async () => {
+  const executed: string[] = [];
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-pending-ai-transfers-current",
+      message: "Do I have pending confirmations?"
+    },
+    { tools: createFakePhaseFourTransferTools(executed) }
+  );
+
+  assert.equal(result.intent, "pending_ai_transfers");
+  assert.deepEqual(result.toolCalls, ["getPendingAiTransfers"]);
+  assert.deepEqual(executed, ["getPendingAiTransfers:current_conversation"]);
+  assert.match(result.message, /Pending transfer confirmations/);
+  assert.match(result.message, /alex@example\.com/);
+  assert.doesNotMatch(result.message, /a\*\*\*@example\.com/);
+});
+
+test("all pending confirmations request uses broad pending scope", async () => {
+  const executed: string[] = [];
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-pending-ai-transfers-all",
+      message: "Show all my pending confirmations"
+    },
+    { tools: createFakePhaseFourTransferTools(executed) }
+  );
+
+  assert.equal(result.intent, "pending_ai_transfers");
+  assert.deepEqual(executed, ["getPendingAiTransfers:all_user"]);
+});
+
+test("pending confirmation status remains non-mutating and executes no tools", async () => {
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory: {
+      ...createEmptyCounterpartyMemory(),
+      pendingConfirmation: {
+        confirmationId: "pending-transfer-1",
+        type: "transfer",
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        recipientEmail: "alex@example.com",
+        amount: 50,
+        currency: "ILS",
+        turnCreated: 1,
+        version: 1
+      },
+      mode: "transfer_confirmation_pending"
+    }
+  });
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-pending-status-no-tools-phase-four",
+      message: "Yes, confirm it"
+    },
+    {
+      tools: createFakePhaseFourTransferTools(executed),
+      conversationStore
+    }
+  );
+
+  assert.equal(result.intent, "pending_confirmation_status");
+  assert.deepEqual(result.toolCalls, []);
+  assert.deepEqual(executed, []);
+  assert.match(result.message, /use its Confirm or Deny button/i);
+});
+
+test("pending transfer reference resolves ordinal from clarification options", async () => {
+  const result = await resolvePendingTransferReference({
+    userId: "507f1f77bcf86cd799439011",
+    conversationId: "test-pending-clarification-follow-up",
+    message: "the second one",
+    currentTurn: 2,
+    clarification: {
+      reason: "ambiguous_pending_transfer",
+      message: "Which pending transfer do you mean?",
+      expectedReplyType: "pending_transfer",
+      options: [
+        {
+          id: "pending-transfer-1",
+          label: "1. 50.00 ILS to Alex Example (alex@example.com)",
+          value: "pending-transfer-1"
+        },
+        {
+          id: "pending-transfer-2",
+          label: "2. 70.00 ILS to Maya Example (maya@example.com)",
+          value: "pending-transfer-2"
+        }
+      ]
+    }
+  });
+
+  assert.equal(result.status, "ok");
+  assert.deepEqual(result.data, {
+    kind: "pending_transfer",
+    status: "resolved",
+    pendingTransferId: "pending-transfer-2",
+    candidates: [
+      {
+        id: "pending-transfer-2",
+        label: "2. 70.00 ILS to Maya Example (maya@example.com)",
+        value: "pending-transfer-2"
+      }
+    ]
+  });
+});
+
+test("transfer preflight helper caps max sendable by balance and limits", () => {
+  assert.equal(
+    getMaxSendableNow({
+      balance: 400,
+      dailyRemaining: 900
+    }),
+    400
+  );
+  assert.equal(
+    getMaxSendableNow({
+      balance: 900,
+      dailyRemaining: 300
+    }),
+    300
+  );
+});
+
+test("transfer preflight helper returns blocking limit reasons", () => {
+  const reasons = getLimitReasons({
+    amount: config.ai.perTransferLimit + 100,
+    balance: 100,
+    dailyRemaining: 1,
+    currencySupported: false
+  });
+
+  assert.deepEqual(
+    reasons.map((reason) => reason.code),
+    [
+      "UNSUPPORTED_CURRENCY",
+      "INSUFFICIENT_BALANCE",
+      "EXCEEDS_PER_TRANSFER_LIMIT",
+      "EXCEEDS_DAILY_LIMIT"
+    ]
+  );
+});
+
+test("pending transfer scope defaults current conversation and broadens only explicitly", () => {
+  assert.equal(
+    getPendingTransferScope("Do I have pending confirmations?"),
+    "current_conversation"
+  );
+  assert.equal(
+    getPendingTransferScope("Show all my pending confirmations"),
+    "all_user"
+  );
+});
 
 test("balance query calls only read balance tools", async () => {
   const executed: string[] = [];
@@ -382,6 +1799,8 @@ test("last sent counterparty is stored and later resolved as this person", async
 
   assert.equal(firstResult.intent, "last_sent_counterparty");
   assert.deepEqual(firstResult.toolCalls, ["getLastSentCounterparty"]);
+  assert.match(firstResult.message, /alex@example\.com/);
+  assert.doesNotMatch(firstResult.message, /a\*\*\*@example\.com/);
   assert.equal(
     conversationStore.saved.at(-1)?.memory.lastCounterparty?.email,
     "alex@example.com"
@@ -478,7 +1897,7 @@ test("hebrew total-sent follow-up is read-only and calls total counterparty tool
     messages: [
       {
         role: "assistant",
-        content: "האחרון שאליו העברת כסף היה a***@example.com."
+        content: "האחרון שאליו העברת כסף היה alex@example.com."
       }
     ],
     memory: createMemoryWithCounterparties(["alex@example.com"])
@@ -514,6 +1933,129 @@ test("hebrew total-sent follow-up is read-only and calls total counterparty tool
   assert.ok(executed.includes("getTotalSentToCounterparty:alex@example.com"));
 });
 
+test("full email follow-up resolves from remembered counterparty context", async () => {
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory: createMemoryWithCounterparties(["alex@example.com"])
+  });
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "counterparty_transactions" };
+    },
+    async resolveCounterpartyReference() {
+      return {
+        kind: "named_counterparty",
+        confidence: "high",
+        query: "alex@example.com"
+      };
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-full-email-follow-up",
+      message: "Show me my transactions with alex@example.com"
+    },
+    {
+      tools: createFakeTools(executed),
+      conversationStore,
+      llmProvider
+    }
+  );
+
+  assert.equal(result.intent, "counterparty_transactions");
+  assert.deepEqual(result.toolCalls, ["getTransactionsWithCounterparty"]);
+  assert.ok(executed.includes("getTransactionsWithCounterparty:alex@example.com"));
+});
+
+test("local-part follow-up resolves from remembered counterparty aliases when unambiguous", async () => {
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory: createMemoryWithCounterparties(["alex@example.com"])
+  });
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "counterparty_transactions" };
+    },
+    async resolveCounterpartyReference() {
+      return {
+        kind: "named_counterparty",
+        confidence: "high",
+        query: "alex"
+      };
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-local-part-follow-up",
+      message: "Show me my transactions with alex"
+    },
+    {
+      tools: createFakeTools(executed),
+      conversationStore,
+      llmProvider
+    }
+  );
+
+  assert.equal(result.intent, "counterparty_transactions");
+  assert.deepEqual(result.toolCalls, ["getTransactionsWithCounterparty"]);
+  assert.ok(executed.includes("getTransactionsWithCounterparty:alex@example.com"));
+});
+
+test("llm sees masked assistant context and masked tool summaries while the user sees full emails", async () => {
+  const executed: string[] = [];
+  let llmToolSummary = "";
+  const sanitizedMessages = sanitizeMessagesForLlm([
+    {
+      role: "assistant",
+      content: "The last person you sent money to was alex@example.com."
+    }
+  ]);
+  const conversationStore = createFakeConversationStore({
+    messages: [
+      {
+        role: "assistant",
+        content: "The last person you sent money to was alex@example.com."
+      }
+    ],
+    memory: createMemoryWithCounterparties(["alex@example.com"])
+  });
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "recent_sent_counterparties" };
+    },
+    async composeResponse(input) {
+      llmToolSummary = input.toolResults[0]?.summary ?? "";
+      return `LLM response: ${llmToolSummary}`;
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-llm-mask-and-hydrate",
+      message: "Who are the last 3 people I sent money to?"
+    },
+    {
+      tools: createFakePhaseTwoCounterpartyTools(executed),
+      conversationStore,
+      llmProvider
+    }
+  );
+
+  assert.match(sanitizedMessages[0]?.content ?? "", /a\*\*\*@example\.com/);
+  assert.doesNotMatch(sanitizedMessages[0]?.content ?? "", /alex@example\.com/);
+  assert.match(llmToolSummary, /d\*\*\*@example\.com/);
+  assert.doesNotMatch(llmToolSummary, /daniel@example\.com/);
+  assert.match(result.message, /daniel@example\.com/);
+  assert.doesNotMatch(result.message, /d\*\*\*@example\.com/);
+});
+
 test("ambiguous counterparty reference asks for clarification and runs no tool", async () => {
   const executed: string[] = [];
   const result = await runAssistantGraph(
@@ -534,10 +2076,43 @@ test("ambiguous counterparty reference asks for clarification and runs no tool",
     result.message,
     "Which recipient should I use for that question?"
   );
+  assert.deepEqual(result.clarification, {
+    reason: "ambiguous_reference",
+    message: "Which recipient should I use for that question?",
+    expectedReplyType: "recipient"
+  });
+  assert.deepEqual(result.toolResults, []);
   assert.deepEqual(executed, []);
 });
 
-test("counterparty memory keeps five entries and evicts least recently referenced", async () => {
+test("read-only graph result exposes only minimal public tool result statuses", async () => {
+  const executed: string[] = [];
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-public-tool-results",
+      message: "Who are the last 3 people I sent money to?"
+    },
+    {
+      tools: createFakePhaseTwoCounterpartyTools(executed),
+      conversationStore: createFakeConversationStore()
+    }
+  );
+
+  assert.equal(result.intent, "recent_sent_counterparties");
+  assert.deepEqual(result.toolResults, [
+    {
+      toolName: "getRecentSentCounterparties",
+      status: "ok"
+    }
+  ]);
+  assert.equal(
+    JSON.stringify(result.toolResults).includes("daniel@example.com"),
+    false
+  );
+});
+
+test("counterparty memory keeps eight entries and evicts least recently referenced", async () => {
   const memory = createMemoryWithCounterparties([
     "alex@example.com",
     "maya@example.com",
@@ -566,12 +2141,12 @@ test("counterparty memory keeps five entries and evicts least recently reference
     7
   );
 
-  assert.equal(withSixth.mentionedCounterparties.length, 5);
+  assert.equal(withSixth.mentionedCounterparties.length, 6);
   assert.equal(
     withSixth.mentionedCounterparties.some(
       (counterparty) => counterparty.email === "maya@example.com"
     ),
-    false
+    true
   );
   assert.equal(withSixth.lastCounterparty?.email, "ron@example.com");
 });
@@ -753,6 +2328,146 @@ test("chat confirmation wording never executes money movement", async () => {
   assert.match(result.message, /cannot confirm a transfer from chat text/i);
 });
 
+test("pending transfer amount modification creates new confirmation and supersedes old", async () => {
+  const modifications: Array<Parameters<TransferModificationService>[0]> = [];
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory: {
+      ...createEmptyCounterpartyMemory(),
+      pendingConfirmation: {
+        confirmationId: "pending-transfer-1",
+        type: "transfer",
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        recipientEmail: "alex@example.com",
+        amount: 50,
+        currency: "ILS",
+        turnCreated: 1,
+        version: 1
+      },
+      mode: "transfer_confirmation_pending"
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-modify-pending",
+      message: "Actually make it 70"
+    },
+    {
+      tools: createFakeTools([]),
+      conversationStore,
+      transferModificationService:
+        createFakeTransferModificationService(modifications)
+    }
+  );
+
+  assert.equal(result.intent, "transfer_modify_pending");
+  assert.equal(result.supersededConfirmationId, "pending-transfer-1");
+  assert.equal(result.confirmation?.id, "pending-transfer-2");
+  assert.equal(result.confirmation?.amount, 70);
+  assert.equal(result.confirmation?.recipientEmail, "alex@example.com");
+  assert.equal(modifications[0].activePendingTransferId, "pending-transfer-1");
+  assert.equal(modifications[0].modificationDraft.amount, 70);
+  assert.deepEqual(result.toolCalls, []);
+  assert.equal(
+    result.message,
+    "I updated the pending transfer. Please review the new confirmation card before anything is sent."
+  );
+});
+
+test("hebrew pending transfer amount modification returns hebrew new-card wording", async () => {
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory: {
+      ...createEmptyCounterpartyMemory(),
+      pendingConfirmation: {
+        confirmationId: "pending-transfer-1",
+        type: "transfer",
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        recipientEmail: "alex@example.com",
+        amount: 50,
+        currency: "ILS",
+        turnCreated: 1,
+        version: 1
+      },
+      mode: "transfer_confirmation_pending"
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-modify-pending-hebrew",
+      message: "בעצם תעביר 70"
+    },
+    {
+      tools: createFakeTools([]),
+      conversationStore,
+      transferModificationService: createFakeTransferModificationService()
+    }
+  );
+
+  assert.equal(result.intent, "transfer_modify_pending");
+  assert.equal(result.confirmation?.amount, 70);
+  assert.equal(
+    result.message,
+    "עדכנתי את ההעברה הממתינה. צריך לבדוק ולאשר את כרטיס האישור החדש לפני שמשהו נשלח."
+  );
+});
+
+test("failed pending transfer modification does not create replacement confirmation", async () => {
+  const modifications: Array<Parameters<TransferModificationService>[0]> = [];
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory: {
+      ...createEmptyCounterpartyMemory(),
+      pendingConfirmation: {
+        confirmationId: "pending-transfer-1",
+        type: "transfer",
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        recipientEmail: "alex@example.com",
+        amount: 50,
+        currency: "ILS",
+        turnCreated: 1,
+        version: 1
+      },
+      mode: "transfer_confirmation_pending"
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-modify-pending-fail",
+      message: "Actually make it 999999"
+    },
+    {
+      tools: createFakeTools([]),
+      conversationStore,
+      transferModificationService: createFakeTransferModificationService(
+        modifications,
+        { failMessage: "Your current balance is not enough for that transfer." }
+      )
+    }
+  );
+
+  assert.equal(result.intent, "transfer_modify_pending");
+  assert.equal(result.confirmation, undefined);
+  assert.equal(result.supersededConfirmationId, undefined);
+  assert.equal(modifications.length, 1);
+  assert.equal(
+    result.message,
+    "Your current balance is not enough for that transfer."
+  );
+});
+
 test("transfer request can resolve recipient from last counterparty", async () => {
   const transferPreparations: Array<Parameters<TransferPreparationService>[0]> = [];
   const conversationStore = createFakeConversationStore({
@@ -802,7 +2517,7 @@ test("hebrew transfer request resolves לו from last counterparty and returns c
     messages: [
       {
         role: "assistant",
-        content: "האדם האחרון שהעברת אליו היה a***@example.com."
+        content: "האדם האחרון שהעברת אליו היה alex@example.com."
       }
     ],
     memory: createMemoryWithCounterparties(["alex@example.com"])
