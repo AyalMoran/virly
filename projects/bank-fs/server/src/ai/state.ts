@@ -1,37 +1,131 @@
 import type { AssistantId } from "./assistants.js";
 
-export type AssistantIntent =
-  | "balance_inquiry"
-  | "account_summary"
-  | "recent_transactions"
-  | "transaction_search"
-  | "transaction_summary"
-  | "transaction_count"
-  | "transaction_detail"
-  | "counterparty_lookup"
-  | "last_sent_counterparty"
-  | "counterparty_transactions"
-  | "counterparty_total_sent"
-  | "transfer_prepare"
-  | "transfer_modify_pending"
-  | "transfer_cancel_pending"
-  | "pending_confirmation_status"
-  | "verified_recipients"
-  | "transfer_limits"
-  | "transfer_status"
-  | "general_help"
-  | "unsafe_request"
-  | "unsupported";
+export const assistantIntentValues = [
+  "balance_inquiry",
+  "account_summary",
+  "recent_transactions",
+  "transaction_search",
+  "transaction_summary",
+  "transaction_count",
+  "transaction_detail",
+  "transaction_stats",
+  "cashflow_summary",
+  "counterparty_lookup",
+  "recent_sent_counterparties",
+  "recent_received_counterparties",
+  "counterparty_summary",
+  "counterparty_activity_timeline",
+  "last_sent_counterparty",
+  "counterparty_transactions",
+  "counterparty_total_sent",
+  "verified_recipients",
+  "recipient_profile",
+  "transfer_prepare",
+  "transfer_modify_pending",
+  "transfer_cancel_pending",
+  "transfer_limits",
+  "transfer_eligibility",
+  "transfer_quote",
+  "daily_transfer_usage",
+  "transfer_status",
+  "pending_ai_transfers",
+  "pending_confirmation_status",
+  "general_help",
+  "unsafe_request",
+  "unsupported"
+] as const;
 
-export type AssistantToolName =
-  | "getUserAccounts"
-  | "getAccountBalance"
-  | "getRecentTransactions"
-  | "getLastSentCounterparty"
-  | "getTransactionsWithCounterparty"
-  | "getTotalSentToCounterparty"
-  | "getVerifiedRecipients"
-  | "getTransferLimits";
+export type AssistantIntent = (typeof assistantIntentValues)[number];
+
+export const assistantToolNames = [
+  "getUserAccounts",
+  "getAccountBalance",
+  "getRecentTransactions",
+  "getLastSentCounterparty",
+  "getTransactionsWithCounterparty",
+  "getTotalSentToCounterparty",
+  "getVerifiedRecipients",
+  "getTransferLimits",
+  "getRecentSentCounterparties",
+  "getRecentReceivedCounterparties",
+  "getCounterpartySummary",
+  "getCounterpartyActivityTimeline",
+  "resolveCounterpartyCandidates",
+  "searchTransactions",
+  "getTransactionStats",
+  "resolveTransactionReference",
+  "getTransactionReceipt",
+  "getTransferEligibility",
+  "getTransferQuote",
+  "getDailyTransferUsage",
+  "getPendingAiTransfers",
+  "resolvePendingTransferReference",
+  "getCashflowSummary",
+  "getMyProfile",
+  "getAvailableActions"
+] as const;
+
+export type AssistantToolName = (typeof assistantToolNames)[number];
+export type ReadOnlyToolName = AssistantToolName;
+
+export type AiToolContext = {
+  authenticatedUserId: string;
+  conversationId: string;
+  requestId: string;
+  now: Date;
+  timezone: string;
+};
+
+export type AiToolStatus = "ok" | "empty" | "error";
+
+export type AiToolMemoryUpdate = {
+  counterparties?: Array<{
+    counterpartyId: string;
+    emailFullForBackendOnly: string;
+    emailMasked: string;
+    displayName: string;
+    firstName?: string | null;
+    lastName?: string | null;
+    relation: "sent_to" | "received_from" | "both";
+    source: "transaction" | "verified_recipient" | "profile";
+    lastInteractionAt?: string | null;
+  }>;
+  transactions?: Array<{
+    transactionId: string;
+    label: string;
+    counterpartyId?: string | null;
+    counterpartyLabel?: string | null;
+    amount: number;
+    currency: string;
+    direction: "sent" | "received";
+    occurredAt: string;
+  }>;
+  pendingTransfers?: Array<{
+    pendingTransferId: string;
+    label: string;
+    recipientLabel: string;
+    amount: number;
+    currency: string;
+    expiresAt: string;
+  }>;
+  dateRanges?: Array<{
+    label: string;
+    from: string;
+    to: string;
+  }>;
+};
+
+export type AiToolResult<TData> = {
+  toolName: ReadOnlyToolName;
+  status: AiToolStatus;
+  data: TData | null;
+  displayData?: unknown;
+  memoryUpdates?: AiToolMemoryUpdate;
+  error?: {
+    code: string;
+    message: string;
+  };
+};
 
 export type ChatRole = "user" | "assistant";
 
@@ -47,13 +141,73 @@ export type ToolResultMetadata = {
   transactionId?: string;
   counterpartyEmail?: string;
   maskedLabel?: string;
+  displayName?: string;
+  counterparties?: Array<{
+    counterpartyEmail: string;
+    maskedLabel: string;
+    displayName?: string;
+  }>;
+  resolutionStatus?: "resolved" | "ambiguous" | "unresolved";
+  counterpartyCandidates?: Array<{
+    counterpartyEmail: string;
+    maskedLabel: string;
+    displayName?: string;
+    confidence?: "low" | "medium" | "high";
+  }>;
+  transactions?: Array<{
+    transactionId: string;
+    label: string;
+    amount: number;
+    currency: string;
+    direction: "sent" | "received";
+    occurredAt: string;
+    counterpartyLabel?: string;
+  }>;
+  transactionResolutionStatus?: "resolved" | "ambiguous" | "unresolved";
+  transactionCandidates?: Array<{
+    transactionId: string;
+    label: string;
+    amount: number;
+    currency: string;
+    direction: "sent" | "received";
+    occurredAt: string;
+    counterpartyLabel?: string;
+  }>;
+  pendingTransfers?: Array<{
+    pendingTransferId: string;
+    label: string;
+    recipientLabel: string;
+    amount: number;
+    currency: string;
+    expiresAt: string;
+  }>;
+  pendingTransferResolutionStatus?: "resolved" | "ambiguous" | "unresolved";
+  pendingTransferCandidates?: Array<{
+    pendingTransferId: string;
+    label: string;
+    recipientLabel: string;
+    amount: number;
+    currency: string;
+    expiresAt: string;
+  }>;
   amount?: number;
+};
+
+export type ToolDisplayData = {
+  summary: string;
+  userSummary?: string;
+  metadata: ToolResultMetadata;
 };
 
 export type AssistantToolResult = {
   toolName: AssistantToolName;
   summary: string;
   metadata: ToolResultMetadata;
+};
+
+export type PublicAiToolCallResult = {
+  toolName: AssistantToolName;
+  status: AiToolStatus;
 };
 
 export type IntentClassification = {
@@ -126,6 +280,9 @@ export type ClassifyAssistantIntentInput = {
 export type CounterpartyRef = {
   email: string;
   maskedLabel: string;
+  userLabel?: string;
+  displayName?: string;
+  aliases?: string[];
   firstMentionedAtTurn: number;
   lastReferencedAtTurn: number;
 };
@@ -134,6 +291,7 @@ export type ConversationEntityType =
   | "counterparty"
   | "account"
   | "transaction"
+  | "pending_transfer"
   | "transfer_draft"
   | "date_range"
   | "amount"
@@ -150,8 +308,10 @@ export type ConversationEntity = {
   email?: string;
   userId?: string;
   transactionId?: string;
+  pendingTransferId?: string;
   amount?: number;
   currency?: string;
+  expiresAt?: string;
   dateRange?: {
     from: string;
     to: string;
@@ -189,7 +349,7 @@ export type ConversationAnswerFrame = {
 export type PendingConfirmationMemory = {
   confirmationId: string;
   type: "transfer";
-  status: "pending";
+  status: "pending" | "confirmed" | "denied" | "expired" | "superseded";
   createdAt: string;
   expiresAt: string;
   recipientEmail: string;
@@ -210,7 +370,10 @@ export type ClarificationRequest = {
     | "ambiguous_amount"
     | "unsupported_currency"
     | "missing_date_range"
-    | "ambiguous_reference";
+    | "ambiguous_reference"
+    | "ambiguous_transaction"
+    | "ambiguous_pending_transfer"
+    | "unresolved_reference";
   message: string;
   options?: Array<{
     id: string;
@@ -221,6 +384,9 @@ export type ClarificationRequest = {
     | "recipient"
     | "amount"
     | "currency"
+    | "date_range"
+    | "transaction"
+    | "pending_transfer"
     | "yes_no"
     | "option_selection"
     | "free_text";
@@ -313,6 +479,7 @@ export type TransferConfirmation = {
     message: string;
   }>;
   expiresAt: string;
+  supersedesId?: string | null;
   confirmAction: {
     method: "POST";
     path: string;
@@ -387,9 +554,10 @@ export type AssistantGraphState = {
   resolvedCounterparty?: CounterpartyRef;
   transferDraft?: TransferDraft;
   confirmation?: TransferConfirmation;
+  supersededConfirmationId?: string;
   requestedToolNames: AssistantToolName[];
   executedToolNames: AssistantToolName[];
-  toolResults: AssistantToolResult[];
+  toolResults: RuntimeToolResult[];
   clarificationRequest?: ClarificationRequest;
   clarificationMessage?: string;
   refusalReason?: string;
@@ -401,13 +569,27 @@ export type ToolContext = {
   conversationId: string;
   message: string;
   resolvedCounterparty?: CounterpartyRef;
+  resolvedTransactionId?: string;
+  counterpartyMemory?: CounterpartyMemory;
+  clarification?: ClarificationRequest | null;
+  requestSlots?: RequestSlots;
+  currentTurn?: number;
+  resolvedDateRange?: {
+    from: Date;
+    to: Date;
+    label: string;
+  };
 };
 
-export type ToolExecutor = (
-  context: ToolContext
-) => Promise<AssistantToolResult>;
+export type RuntimeToolResult<TData = unknown> = AiToolResult<TData> & {
+  displayData?: ToolDisplayData;
+};
 
-export type AssistantToolExecutors = Record<AssistantToolName, ToolExecutor>;
+export type ToolExecutor<TInput = ToolContext, TData = unknown> = (
+  input: TInput
+) => Promise<RuntimeToolResult<TData>>;
+
+export type AssistantToolExecutors = Partial<Record<AssistantToolName, ToolExecutor>>;
 
 export type AuditLogInput = {
   userId: string;
@@ -436,7 +618,10 @@ export type RunAssistantResult = {
   assistantId: AssistantId;
   intent: AssistantIntent;
   toolCalls: AssistantToolName[];
+  toolResults?: PublicAiToolCallResult[];
+  clarification?: ClarificationRequest;
   confirmation?: TransferConfirmation;
+  supersededConfirmationId?: string;
   refusalReason?: string;
 };
 
@@ -461,3 +646,27 @@ export type PrepareTransferConfirmationResult =
 export type TransferPreparationService = (
   input: PrepareTransferConfirmationInput
 ) => Promise<PrepareTransferConfirmationResult>;
+
+export type ModifyPendingTransferConfirmationInput = {
+  userId: string;
+  conversationId: string;
+  assistantId: AssistantId;
+  activePendingTransferId: string;
+  modificationDraft: TransferDraft;
+  resolvedCounterparty?: CounterpartyRef;
+};
+
+export type ModifyPendingTransferConfirmationResult =
+  | {
+      status: "ready";
+      confirmation: TransferConfirmation;
+      supersededConfirmationId: string;
+    }
+  | {
+      status: "needs_clarification";
+      message: string;
+    };
+
+export type TransferModificationService = (
+  input: ModifyPendingTransferConfirmationInput
+) => Promise<ModifyPendingTransferConfirmationResult>;

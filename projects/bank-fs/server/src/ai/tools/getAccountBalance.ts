@@ -1,12 +1,10 @@
 import { User } from "../../models/User.js";
-import {
-  AssistantToolResult,
-  ToolContext
-} from "../state.js";
+import { createToolResult } from "../toolResults.js";
+import type { RuntimeToolResult, ToolContext } from "../state.js";
 
 export async function getAccountBalance(
   context: ToolContext
-): Promise<AssistantToolResult> {
+): Promise<RuntimeToolResult> {
   const user = await User.findById(context.userId).select("balance");
 
   if (!user) {
@@ -15,12 +13,16 @@ export async function getAccountBalance(
     });
   }
 
-  return {
+  return createToolResult({
     toolName: "getAccountBalance",
+    status: "ok",
+    data: {
+      balance: user.balance
+    },
     summary: `Your Virly account available balance is ${user.balance.toFixed(2)}.`,
     metadata: {
       recordCount: 1,
       accountLabel: "Virly account"
     }
-  };
+  });
 }

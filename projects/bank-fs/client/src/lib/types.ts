@@ -111,6 +111,108 @@ export type TransferResponse = {
 
 export type AssistantId = "oshri" | "chaya" | "yehuda" | "yohai_daniel";
 
+export type AssistantIntent =
+  | "balance_inquiry"
+  | "account_summary"
+  | "recent_transactions"
+  | "transaction_search"
+  | "transaction_summary"
+  | "transaction_count"
+  | "transaction_detail"
+  | "transaction_stats"
+  | "cashflow_summary"
+  | "counterparty_lookup"
+  | "recent_sent_counterparties"
+  | "recent_received_counterparties"
+  | "counterparty_summary"
+  | "counterparty_activity_timeline"
+  | "last_sent_counterparty"
+  | "counterparty_transactions"
+  | "counterparty_total_sent"
+  | "verified_recipients"
+  | "recipient_profile"
+  | "transfer_prepare"
+  | "transfer_modify_pending"
+  | "transfer_cancel_pending"
+  | "transfer_limits"
+  | "transfer_eligibility"
+  | "transfer_quote"
+  | "daily_transfer_usage"
+  | "transfer_status"
+  | "pending_ai_transfers"
+  | "pending_confirmation_status"
+  | "general_help"
+  | "unsafe_request"
+  | "unsupported";
+
+export type AiToolName =
+  | "getUserAccounts"
+  | "getAccountBalance"
+  | "getRecentTransactions"
+  | "getLastSentCounterparty"
+  | "getTransactionsWithCounterparty"
+  | "getTotalSentToCounterparty"
+  | "getVerifiedRecipients"
+  | "getTransferLimits"
+  | "getRecentSentCounterparties"
+  | "getRecentReceivedCounterparties"
+  | "getCounterpartySummary"
+  | "getCounterpartyActivityTimeline"
+  | "resolveCounterpartyCandidates"
+  | "searchTransactions"
+  | "getTransactionStats"
+  | "resolveTransactionReference"
+  | "getTransactionReceipt"
+  | "getTransferEligibility"
+  | "getTransferQuote"
+  | "getDailyTransferUsage"
+  | "getPendingAiTransfers"
+  | "resolvePendingTransferReference"
+  | "getCashflowSummary"
+  | "getMyProfile"
+  | "getAvailableActions";
+
+export type AiToolStatus = "ok" | "empty" | "error";
+
+export type AiClarificationReason =
+  | "ambiguous_recipient"
+  | "missing_recipient"
+  | "missing_amount"
+  | "ambiguous_amount"
+  | "unsupported_currency"
+  | "missing_date_range"
+  | "ambiguous_reference"
+  | "ambiguous_transaction"
+  | "ambiguous_pending_transfer"
+  | "unresolved_reference";
+
+export type AiClarificationExpectedReplyType =
+  | "recipient"
+  | "amount"
+  | "currency"
+  | "date_range"
+  | "transaction"
+  | "pending_transfer"
+  | "yes_no"
+  | "option_selection"
+  | "free_text";
+
+export type AiClarificationRequest = {
+  reason: AiClarificationReason;
+  message: string;
+  expectedReplyType: AiClarificationExpectedReplyType;
+  options?: Array<{
+    id: string;
+    label: string;
+    value: string;
+  }>;
+};
+
+export type AiToolCallResult = {
+  toolName: AiToolName;
+  status: AiToolStatus;
+};
+
 export type AiChatRequest = {
   message: string;
   conversationId?: string;
@@ -161,15 +263,19 @@ export type AiTransferConfirmation = {
       version: number;
     };
   };
+  supersedesId?: string | null;
 };
 
 export type AiChatResponse = {
   message: string;
   conversationId: string;
   assistantId: AssistantId;
-  intent: string;
-  toolCalls: string[];
+  intent: AssistantIntent;
+  toolCalls: AiToolName[];
+  toolResults?: AiToolCallResult[];
+  clarification?: AiClarificationRequest;
   confirmation?: AiTransferConfirmation;
+  supersededConfirmationId?: string;
 };
 
 export type AiConfirmationResponse =

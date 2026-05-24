@@ -3,36 +3,61 @@ import {
   AssistantLlmProvider,
   AssistantToolName,
   ClassifyAssistantIntentInput,
-  IntentClassification
+  IntentClassification,
+  assistantIntentValues,
+  assistantToolNames
 } from "./state.js";
 import { getUnsafeRequestReason } from "./policy.js";
 
-const validIntents: AssistantIntent[] = [
-  "balance_inquiry",
-  "account_summary",
-  "recent_transactions",
-  "transaction_search",
-  "transaction_summary",
-  "transaction_count",
-  "transaction_detail",
-  "counterparty_lookup",
-  "last_sent_counterparty",
-  "counterparty_transactions",
-  "counterparty_total_sent",
-  "transfer_prepare",
-  "transfer_modify_pending",
-  "transfer_cancel_pending",
-  "pending_confirmation_status",
-  "verified_recipients",
-  "transfer_limits",
-  "transfer_status",
-  "general_help",
-  "unsafe_request",
-  "unsupported"
-];
+const validIntents = [...assistantIntentValues];
+
+export const intentToReadOnlyTools: Record<
+  AssistantIntent,
+  AssistantToolName[]
+> = {
+  balance_inquiry: ["getUserAccounts", "getAccountBalance"],
+  account_summary: ["getUserAccounts", "getAccountBalance"],
+  recent_transactions: ["getRecentTransactions"],
+  transaction_search: ["searchTransactions"],
+  transaction_summary: ["getTransactionStats"],
+  transaction_count: ["getTransactionStats"],
+  transaction_detail: ["resolveTransactionReference", "getTransactionReceipt"],
+  transaction_stats: ["getTransactionStats"],
+  cashflow_summary: ["getCashflowSummary"],
+  counterparty_lookup: ["resolveCounterpartyCandidates"],
+  recent_sent_counterparties: ["getRecentSentCounterparties"],
+  recent_received_counterparties: ["getRecentReceivedCounterparties"],
+  counterparty_summary: [
+    "resolveCounterpartyCandidates",
+    "getCounterpartySummary"
+  ],
+  counterparty_activity_timeline: [
+    "resolveCounterpartyCandidates",
+    "getCounterpartyActivityTimeline"
+  ],
+  last_sent_counterparty: ["getLastSentCounterparty"],
+  counterparty_transactions: ["getTransactionsWithCounterparty"],
+  counterparty_total_sent: ["getTotalSentToCounterparty"],
+  verified_recipients: ["getVerifiedRecipients"],
+  recipient_profile: ["resolveCounterpartyCandidates"],
+  transfer_prepare: [],
+  transfer_modify_pending: [],
+  transfer_cancel_pending: [],
+  transfer_limits: ["getTransferLimits"],
+  transfer_eligibility: ["getTransferEligibility"],
+  transfer_quote: ["resolveCounterpartyCandidates", "getTransferQuote"],
+  daily_transfer_usage: ["getDailyTransferUsage"],
+  transfer_status: ["getRecentTransactions"],
+  pending_ai_transfers: ["getPendingAiTransfers"],
+  pending_confirmation_status: [],
+  general_help: [],
+  unsafe_request: [],
+  unsupported: []
+};
 
 export function classifyAssistantIntentDeterministic(
-  message: string
+  message: string,
+  context?: Pick<ClassifyAssistantIntentInput, "counterpartyMemory">
 ): IntentClassification {
   const refusalReason = getUnsafeRequestReason(message);
   if (refusalReason) {
@@ -40,8 +65,13 @@ export function classifyAssistantIntentDeterministic(
   }
 
   const normalized = message.toLowerCase();
+  const hasActivePending =
+    context?.counterpartyMemory.pendingConfirmation?.status === "pending";
 
-  if (/(^|\b)(yes|confirm|approve|send it|go ahead|do it)(\b|$)/i.test(normalized) || /(כן|תאשר|יאללה|שלח|בצע)/.test(message)) {
+  if (
+    /(^|\b)(yes|confirm|approve|send it|go ahead|do it)(\b|$)/i.test(normalized) ||
+    /(?:^|\s)(כן|תאשר|יאללה|בצע)(?:\s|$|[.!?])/.test(message)
+  ) {
     return { intent: "pending_confirmation_status" };
   }
 
@@ -49,8 +79,44 @@ export function classifyAssistantIntentDeterministic(
     return { intent: "transfer_cancel_pending" };
   }
 
-  if (/\b(change|modify|update|make it)\b.*\b(transfer|payment|amount|recipient|reason|it)\b/i.test(normalized) || /(תשנה|שנה|עדכן|במקום)/.test(message)) {
+  if (
+    hasActivePending &&
+    (/\b(actually|instead|no,|change|modify|update|make it|make that|set it|add reason)\b/i.test(normalized) ||
+      /\b(send it|send that)\b.*\b(to|for)\b/i.test(normalized) ||
+      /(בעצם|תשנה|שנה|עדכן|במקום|לא,|סיבה)/.test(message))
+  ) {
     return { intent: "transfer_modify_pending" };
+  }
+
+  if (
+    /\b(who|which people|which recipients)\b.*\b(sent|paid|transferred)\b.*\b(me|to me)\b/i.test(normalized) ||
+    /\b(recent|latest|last)\b.*\b(people|recipients|counterparties)\b.*\b(sent|paid|transferred)\b.*\b(me|to me)\b/i.test(normalized) ||
+    /(מי).*?(שלח|העביר).*?(לי|אליי|אלי).*?(לאחרונה|השבוע|החודש)?/.test(message)
+  ) {
+    return { intent: "recent_received_counterparties" };
+  }
+
+  if (
+    /\b(last|recent|latest|most recent)\s+\d*\s*(people|recipients|counterparties|payees)\b.*\b(i\s+)?(sent|paid|transferred)\b/i.test(normalized) ||
+    /\b(who|which people|which recipients)\b.*\b(i\s+)?(sent|paid|transferred)\b.*\b(recently|latest|last)\b/i.test(normalized) ||
+    /(למי).*?(שלחתי|העברתי).*?(לאחרונה|אחרונים|אחרונות|האחרונים|האחרונות)/.test(message)
+  ) {
+    return { intent: "recent_sent_counterparties" };
+  }
+
+  if (
+    /\b(history|summary|relationship|overview)\b.*\b(with|for|to|from)\b/i.test(normalized) ||
+    /(היסטוריה|סיכום).*?(עם|ל|אל|מ)/.test(message) ||
+    /(כמה).*?(שלחתי|העברתי).*?(וקיבלתי|קיבלתי).*?(מ|עם|ל|אל)/.test(message)
+  ) {
+    return { intent: "counterparty_summary" };
+  }
+
+  if (
+    /\b(activity|timeline)\b.*\b(with|for|to|from)\b/i.test(normalized) ||
+    /(פעילות|ציר זמן|העברות).*?(עם|מול)/.test(message)
+  ) {
+    return { intent: "counterparty_activity_timeline" };
   }
 
   if (
@@ -75,6 +141,69 @@ export function classifyAssistantIntentDeterministic(
     /(עסקאות|העברות).*?(עם|ל|אל).*?(לו|לה|אליו|אליה|הנמען|האדם)/.test(message)
   ) {
     return { intent: "counterparty_transactions" };
+  }
+
+  if (
+    /\b(tell me more|more details|details|receipt|show|open)\b.*\b(the\s+)?(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th|one|transaction|transfer|payment)\b/i.test(normalized) ||
+    /\b(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th)\s+(one|transaction|transfer|payment)\b/i.test(normalized) ||
+    /(תראה|פרטים|קבלה|ספר).*?(הראשון|הראשונה|השני|השנייה|השלישי|השלישית|הרביעי|הרביעית|החמישי|החמישית|העסקה|ההעברה)/.test(message)
+  ) {
+    return { intent: "transaction_detail" };
+  }
+
+  if (
+    /\b(how many|count)\b.*\b(transaction|transfer|payment)s?\b/i.test(normalized) ||
+    /(כמה).*?(עסקאות|העברות|תשלומים)/.test(message)
+  ) {
+    return { intent: "transaction_count" };
+  }
+
+  if (
+    /\b(stats|statistics|totals|summary|summarize|recap)\b.*\b(transaction|transfer|payment|activity)s?\b/i.test(normalized) ||
+    /(סטטיסטיקה|סיכום|סה"כ|סך הכל).*?(עסקאות|העברות|תשלומים)/.test(message)
+  ) {
+    return { intent: "transaction_stats" };
+  }
+
+  if (
+    /\b(show|find|search|list)\b.*\b(transaction|transactions|transfer|transfers|payment|payments)\b.*\b(over|above|under|below|less than|more than|last week|this week|last month|this month|today|yesterday|for|reason)\b/i.test(normalized) ||
+    /\b(transaction|transactions|transfer|transfers|payment|payments)\b.*\b(over|above|under|below|less than|more than|last week|this week|last month|this month|today|yesterday)\b/i.test(normalized) ||
+    /(תראה|מצא|חפש|הצג).*?(עסקאות|העברות|תשלומים).*?(מעל|מתחת|פחות|יותר|שבוע שעבר|השבוע|חודש שעבר|החודש|היום|אתמול|סיבה)/.test(message)
+  ) {
+    return { intent: "transaction_search" };
+  }
+
+  if (
+    /\b(pending confirmations?|pending transfers?|transfers? waiting for confirmation|waiting confirmations?)\b/i.test(normalized) ||
+    /(העברות ממתינות|אישורים ממתינים|העברות שמחכות לאישור|כרטיסי אישור)/.test(message)
+  ) {
+    return { intent: "pending_ai_transfers" };
+  }
+
+  if (
+    /\b(how much|what amount)\b.*\b(daily limit|left|remaining)\b.*\b(send|transfer)\b/i.test(normalized) ||
+    /\bhow much can i\b.*\b(still\s+)?(send|transfer)\b.*\btoday\b/i.test(normalized) ||
+    /\b(daily limit|daily transfer usage|used today|remaining today)\b/i.test(normalized) ||
+    /(כמה).*?(נשאר|נותר|השתמשתי).*?(לשלוח|להעביר|היום|יומי)/.test(message)
+  ) {
+    return { intent: "daily_transfer_usage" };
+  }
+
+  if (
+    /\b(quote|preview|what would happen|what happens)\b.*\b(send|transfer|pay)\b/i.test(normalized) ||
+    /\b(send|transfer|pay)\b.*\b(quote|preview)\b/i.test(normalized) ||
+    /(תן.*?(ציטוט|תצוגה מקדימה)|מה יקרה אם).*?(אשלח|אעביר|נעביר)/.test(message)
+  ) {
+    return { intent: "transfer_quote" };
+  }
+
+  if (
+    /\b(can i|am i able to|eligible to)\b.*\b(send|transfer|pay)\b/i.test(normalized) ||
+    /\b(how much can i|what can i)\b.*\b(send|transfer)\b/i.test(normalized) ||
+    /(אפשר|יכול|יכולה).*?(לשלוח|להעביר).*?\d/.test(message) ||
+    /(כמה).*?(אפשר|יכול|יכולה).*?(לשלוח|להעביר)/.test(message)
+  ) {
+    return { intent: "transfer_eligibility" };
   }
 
   if (
@@ -147,8 +276,20 @@ export async function classifyAssistantIntent(
     return { intent: "unsafe_request", refusalReason };
   }
 
+  const deterministicClassification = classifyAssistantIntentDeterministic(
+    message,
+    context
+  );
+  if (
+    deterministicClassification.intent === "transfer_modify_pending" ||
+    deterministicClassification.intent === "transfer_cancel_pending" ||
+    deterministicClassification.intent === "pending_confirmation_status"
+  ) {
+    return deterministicClassification;
+  }
+
   if (!llmProvider) {
-    return classifyAssistantIntentDeterministic(message);
+    return deterministicClassification;
   }
 
   try {
@@ -168,47 +309,16 @@ export async function classifyAssistantIntent(
       "AI intent classifier failed; using deterministic fallback.",
       error instanceof Error ? error.message : error
     );
-    return classifyAssistantIntentDeterministic(message);
+    return deterministicClassification;
   }
 }
 
 export function getReadOnlyToolsForIntent(
   intent: AssistantIntent
 ): AssistantToolName[] {
-  switch (intent) {
-    case "balance_inquiry":
-    case "account_summary":
-      return ["getUserAccounts", "getAccountBalance"];
-    case "recent_transactions":
-    case "transaction_search":
-    case "transaction_summary":
-    case "transaction_count":
-    case "transaction_detail":
-      return ["getRecentTransactions"];
-    case "last_sent_counterparty":
-      return ["getLastSentCounterparty"];
-    case "counterparty_transactions":
-      return ["getTransactionsWithCounterparty"];
-    case "counterparty_total_sent":
-      return ["getTotalSentToCounterparty"];
-    case "verified_recipients":
-      return ["getVerifiedRecipients"];
-    case "transfer_limits":
-      return ["getTransferLimits"];
-    default:
-      return [];
-  }
+  return intentToReadOnlyTools[intent] ?? [];
 }
 
 export function isReadOnlyToolName(toolName: string): toolName is AssistantToolName {
-  return [
-    "getUserAccounts",
-    "getAccountBalance",
-    "getRecentTransactions",
-    "getLastSentCounterparty",
-    "getTransactionsWithCounterparty",
-    "getTotalSentToCounterparty",
-    "getVerifiedRecipients",
-    "getTransferLimits"
-  ].includes(toolName);
+  return assistantToolNames.includes(toolName as AssistantToolName);
 }

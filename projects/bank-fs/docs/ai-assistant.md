@@ -40,6 +40,7 @@ START
   -> extractTransferDraft
   -> resolveCounterpartyReference
   -> prepareTransferConfirmation
+  -> modifyPendingTransferConfirmation
   -> routeReadOnlyTools
   -> composeResponse
   -> saveConversation
@@ -120,12 +121,13 @@ Supported intents:
 Important intent distinction:
 
 - New money movement is `transfer_prepare`.
+- Changes to an active pending confirmation are `transfer_modify_pending`.
 - Historical questions about past transfers are read-only intents.
 - Requests to bypass confirmation, impersonate users, access another user data, reveal prompts/secrets, or tamper with records are `unsafe_request`.
 
 ### `extractTransferDraft`
 
-- Runs only for `transfer_prepare`.
+- Runs only for `transfer_prepare` and `transfer_modify_pending`.
 - Uses LLM structured output when configured.
 - Falls back to a simple deterministic extractor.
 - Produces a draft, not a trusted transfer:
@@ -140,6 +142,7 @@ Important intent distinction:
   - `reason`
 - The LLM may parse what the user wrote, but it does not resolve authority, verify recipients, check balances, or create transactions.
 - The backend rejects unsupported transfer currencies before pending-transfer preparation. The app currently prepares transfers only in ILS; USD/EUR mentions require clarification instead of silent conversion.
+- For `transfer_modify_pending`, missing fields mean "keep the existing pending confirmation value"; they do not authorize a transfer.
 
 ### `resolveCounterpartyReference`
 
@@ -147,6 +150,7 @@ Important intent distinction:
   - `counterparty_transactions`
   - `counterparty_total_sent`
   - `transfer_prepare` when no explicit `recipientEmail` exists
+  - `transfer_modify_pending` only when the modification includes a new recipient reference
 - Uses LLM structured output as a parser/ranker over already-known counterparties.
 - The backend validates resolver output against bounded conversation memory.
 - Deterministic fallback handles simple English references such as "this person" and ordinals.
@@ -173,11 +177,23 @@ Important intent distinction:
 - Returns a `TransferConfirmation` payload for the chat UI.
 - The confirmation payload includes `version`, `status`, nested recipient details, nested amount details, warnings, and explicit confirm/deny action bodies. The card payload is the source of truth for review; assistant wording is secondary.
 
+### `modifyPendingTransferConfirmation`
+
+- Runs only for `transfer_modify_pending`.
+- Requires an active pending confirmation in the current conversation memory.
+- Loads the pending transfer by authenticated `userId`, `conversationId`, id, status `pending`, and expiry.
+- Builds a new transfer draft by copying the old pending transfer and applying only the modified fields from the user message.
+- Revalidates the complete new draft through the backend transfer-preparation service, including sender scope, recipient, amount, balance, and limits.
+- If validation fails, the old pending transfer remains pending and no replacement confirmation is created.
+- If validation succeeds, one database transaction creates the new `AiPendingTransfer` and marks the old one `superseded` with `supersededById`.
+- Returns a new confirmation card and `supersededConfirmationId` so the client can visibly invalidate the old card.
+- Chat wording must say that a new card needs review and confirmation. Chat text must never execute the transfer.
+
 ### `routeReadOnlyTools`
 
 - Uses `getReadOnlyToolsForIntent()` as the only source of tool selection.
 - The LLM never selects tools.
-- `transfer_prepare`, `unsafe_request`, and `unsupported` map to no tools.
+- `transfer_prepare`, `transfer_modify_pending`, `unsafe_request`, and `unsupported` map to no tools.
 - Each tool name is checked by `isReadOnlyToolName()` before execution.
 - Tool results may update counterparty memory from backend metadata.
 
@@ -333,7 +349,8 @@ This is conversational context, not an authorization record.
 
 ### `AiPendingTransfer`
 
-Created only by `prepareTransferConfirmation`.
+Created by `prepareTransferConfirmation` and by
+`modifyPendingTransferConfirmation` when replacing an existing pending card.
 
 Fields:
 
@@ -347,7 +364,9 @@ Fields:
 - `recipientLastName`
 - `amount`
 - `reason`
-- `status`: `pending`, `confirmed`, `denied`, or `expired`
+- `status`: `pending`, `confirmed`, `denied`, `expired`, or `superseded`
+- `supersedesId`, when this confirmation replaces an older pending card
+- `supersededById`, when this confirmation was replaced by a newer card
 - `expiresAt`, TTL index
 
 Rules:
@@ -355,6 +374,7 @@ Rules:
 - Pending transfers expire after 10 minutes.
 - Confirmation ids are scoped by authenticated `userId`.
 - Confirm and deny are one-time transitions.
+- Superseded confirmations cannot be confirmed or denied.
 - Confirm rechecks pending status and expiry inside the backend operation.
 
 ## API
@@ -440,6 +460,34 @@ Transfer-preparation response:
 }
 ```
 
+Transfer-modification response:
+
+```json
+{
+  "message": "I updated the pending transfer. Please review the new confirmation card before anything is sent.",
+  "conversationId": "conversation-id",
+  "assistantId": "oshri",
+  "intent": "transfer_modify_pending",
+  "toolCalls": [],
+  "supersededConfirmationId": "old-pending-transfer-id",
+  "confirmation": {
+    "id": "new-pending-transfer-id",
+    "version": 1,
+    "type": "transfer",
+    "status": "pending",
+    "recipientEmail": "moran@example.com",
+    "recipientFirstName": "Moran",
+    "recipientLastName": "Ayal",
+    "amount": 70,
+    "currency": "ILS",
+    "reason": "Dinner",
+    "warnings": [],
+    "expiresAt": "2026-05-22T12:05:00.000Z",
+    "supersedesId": "old-pending-transfer-id"
+  }
+}
+```
+
 ### Confirmation
 
 `POST /api/ai/confirmations/:id`
@@ -490,6 +538,16 @@ Deny response:
 }
 ```
 
+Superseded confirmation response:
+
+```json
+{
+  "message": "This transfer confirmation was replaced by a newer one. Please review and confirm the latest transfer card.",
+  "error": "confirmation_superseded",
+  "supersededById": "new-pending-transfer-id"
+}
+```
+
 Both endpoints require auth cookies and `X-CSRF-Token` for unsafe methods.
 Confirmation requests must include the current card `version`. Idempotency keys are accepted to make client retries return the same stored result when available.
 
@@ -526,6 +584,17 @@ Example: "What is my balance?" -> `balance_inquiry` ->
 7. Chat UI renders the confirmation card.
 8. No transfer is executed yet.
 
+### Pending Transfer Modification
+
+1. User has an active pending confirmation and asks to change its amount, recipient, reason, or another draft field.
+2. Classifier returns `transfer_modify_pending` only when the message clearly refers to the active pending transfer.
+3. Draft extractor parses only the requested changes.
+4. Resolver handles a new recipient reference when needed.
+5. Transfer modification service loads the old pending transfer by authenticated user scope and revalidates the full replacement draft.
+6. If valid, the backend creates a new pending confirmation and marks the old confirmation `superseded` in one database transaction.
+7. Chat UI renders the new confirmation card and invalidates the old card.
+8. No transfer is executed yet.
+
 ### Transfer Confirmation
 
 1. User clicks Confirm on the chat card.
@@ -542,6 +611,12 @@ Example: "What is my balance?" -> `balance_inquiry` ->
 3. Backend marks the pending transfer `denied`.
 4. No transfer executes.
 5. Later confirm attempts fail because the confirmation is no longer pending.
+
+### Superseded Confirmation
+
+1. User tries to confirm an older card that was replaced by a newer card.
+2. Backend returns 409 with `error = confirmation_superseded` and `supersededById`.
+3. No transfer executes.
 
 ### Refusal
 
@@ -561,9 +636,11 @@ Example: "What is my balance?" -> `balance_inquiry` ->
 
 - The backend is authoritative for auth, user scope, tool routing, recipient validation, balances, and transfer execution.
 - The LLM cannot select tools.
-- The LLM cannot execute, approve, deny, or modify transfers.
+- The LLM cannot execute, approve, deny, or directly mutate transfers.
 - Chat text is never authorization for money movement.
 - A transfer can execute only through `POST /api/ai/confirmations/:id` with `action = confirm`.
+- Only pending confirmations can execute. Confirmed, denied, expired, and superseded confirmations are rejected.
+- Pending-transfer modifications create a new confirmation and supersede the old one; they never mutate the visible card in place.
 - Confirmation cards must show full recipient email plus first and last name when available. If names are missing, the UI must show that the name is not provided.
 - Transfer recipients must resolve to existing Virly users.
 - The sender cannot transfer to themself.
@@ -617,4 +694,4 @@ Current environment variables:
 
 - Phase 1: read-only assistant, implemented.
 - Phase 2: transfer preparation with explicit chat confirmation, implemented.
-- Phase 3: richer fraud/risk review, step-up auth, pending-transfer modification, and support handoff.
+- Phase 3: richer fraud/risk review, step-up auth, and support handoff.

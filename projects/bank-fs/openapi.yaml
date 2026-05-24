@@ -485,6 +485,8 @@ paths:
       description: |
         Executes or cancels a pending transfer prepared by the AI assistant.
         Confirmation ids are scoped to the authenticated user and expire.
+        Only confirmations with status `pending` can execute. Confirmations
+        that were replaced by a newer card are rejected with 409.
       security:
         - cookieAuth: []
       parameters:
@@ -540,11 +542,13 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
         '409':
-          description: Confirmation expired or already used
+          description: Confirmation expired, already used, or superseded
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                oneOf:
+                  - $ref: '#/components/schemas/ErrorResponse'
+                  - $ref: '#/components/schemas/AiSupersededConfirmationError'
         '403':
           description: Missing or invalid CSRF token
           content:
@@ -1008,48 +1012,161 @@ components:
             - yohai_daniel
           example: oshri
         intent:
-          type: string
-          enum:
-            - balance_inquiry
-            - account_summary
-            - recent_transactions
-            - transaction_search
-            - transaction_summary
-            - transaction_count
-            - transaction_detail
-            - counterparty_lookup
-            - last_sent_counterparty
-            - counterparty_transactions
-            - counterparty_total_sent
-            - transfer_prepare
-            - transfer_modify_pending
-            - transfer_cancel_pending
-            - pending_confirmation_status
-            - verified_recipients
-            - transfer_limits
-            - transfer_status
-            - general_help
-            - unsafe_request
-            - unsupported
+          $ref: '#/components/schemas/AssistantIntent'
           example: balance_inquiry
         toolCalls:
           type: array
           items:
-            type: string
-            enum:
-              - getUserAccounts
-              - getAccountBalance
-              - getRecentTransactions
-              - getLastSentCounterparty
-              - getTransactionsWithCounterparty
-              - getTotalSentToCounterparty
-              - getVerifiedRecipients
-              - getTransferLimits
+            $ref: '#/components/schemas/AiToolName'
           example:
             - getUserAccounts
             - getAccountBalance
+        toolResults:
+          type: array
+          items:
+            $ref: '#/components/schemas/AiToolCallResult'
+        clarification:
+          $ref: '#/components/schemas/AiClarificationRequest'
         confirmation:
           $ref: '#/components/schemas/AiTransferConfirmation'
+        supersededConfirmationId:
+          type: string
+          description: Previous pending confirmation id that the returned confirmation replaces.
+          example: 6650cc68782e55fbbf857111
+
+    AssistantIntent:
+      type: string
+      enum:
+        - balance_inquiry
+        - account_summary
+        - recent_transactions
+        - transaction_search
+        - transaction_summary
+        - transaction_count
+        - transaction_detail
+        - transaction_stats
+        - cashflow_summary
+        - counterparty_lookup
+        - recent_sent_counterparties
+        - recent_received_counterparties
+        - counterparty_summary
+        - counterparty_activity_timeline
+        - last_sent_counterparty
+        - counterparty_transactions
+        - counterparty_total_sent
+        - verified_recipients
+        - recipient_profile
+        - transfer_prepare
+        - transfer_modify_pending
+        - transfer_cancel_pending
+        - transfer_limits
+        - transfer_eligibility
+        - transfer_quote
+        - daily_transfer_usage
+        - transfer_status
+        - pending_ai_transfers
+        - pending_confirmation_status
+        - general_help
+        - unsafe_request
+        - unsupported
+
+    AiToolName:
+      type: string
+      enum:
+        - getUserAccounts
+        - getAccountBalance
+        - getRecentTransactions
+        - getLastSentCounterparty
+        - getTransactionsWithCounterparty
+        - getTotalSentToCounterparty
+        - getVerifiedRecipients
+        - getTransferLimits
+        - getRecentSentCounterparties
+        - getRecentReceivedCounterparties
+        - getCounterpartySummary
+        - getCounterpartyActivityTimeline
+        - resolveCounterpartyCandidates
+        - searchTransactions
+        - getTransactionStats
+        - resolveTransactionReference
+        - getTransactionReceipt
+        - getTransferEligibility
+        - getTransferQuote
+        - getDailyTransferUsage
+        - getPendingAiTransfers
+        - resolvePendingTransferReference
+        - getCashflowSummary
+        - getMyProfile
+        - getAvailableActions
+
+    AiToolStatus:
+      type: string
+      enum:
+        - ok
+        - empty
+        - error
+
+    AiToolCallResult:
+      type: object
+      required:
+        - toolName
+        - status
+      properties:
+        toolName:
+          $ref: '#/components/schemas/AiToolName'
+        status:
+          $ref: '#/components/schemas/AiToolStatus'
+
+    AiClarificationRequest:
+      type: object
+      required:
+        - reason
+        - message
+        - expectedReplyType
+      properties:
+        reason:
+          type: string
+          enum:
+            - ambiguous_recipient
+            - missing_recipient
+            - missing_amount
+            - ambiguous_amount
+            - unsupported_currency
+            - missing_date_range
+            - ambiguous_reference
+            - ambiguous_transaction
+            - ambiguous_pending_transfer
+            - unresolved_reference
+        message:
+          type: string
+          example: I found multiple matching counterparties: Daniel A, Daniel B. Which one do you mean?
+        expectedReplyType:
+          type: string
+          enum:
+            - recipient
+            - amount
+            - currency
+            - date_range
+            - transaction
+            - pending_transfer
+            - yes_no
+            - option_selection
+            - free_text
+        options:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - label
+              - value
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+              value:
+                type: string
 
     AiTransferConfirmation:
       type: object
@@ -1179,6 +1296,11 @@ components:
         expiresAt:
           type: string
           format: date-time
+        supersedesId:
+          type: string
+          nullable: true
+          description: Previous pending confirmation id replaced by this card, when created by a pending-transfer modification.
+          example: 6650cc68782e55fbbf857111
 
     AiConfirmationActionDescriptor:
       type: object
@@ -1264,6 +1386,24 @@ components:
             message:
               type: string
               example: Transfer cancelled.
+
+    AiSupersededConfirmationError:
+      type: object
+      required:
+        - message
+        - error
+      properties:
+        message:
+          type: string
+          example: This transfer confirmation was replaced by a newer one. Please review and confirm the latest transfer card.
+        error:
+          type: string
+          enum:
+            - confirmation_superseded
+        supersededById:
+          type: string
+          nullable: true
+          example: 6650cc68782e55fbbf857222
 
     Pagination:
       type: object

@@ -31,12 +31,20 @@ export const OrderConfirmationCard: React.FC<OrderConfirmationCardProps> = ({
   icon = <CheckCircle2 className="h-12 w-12 text-primary" />,
   className,
 }) => {
+  const isDebitAmount = totalAmount.trim().startsWith("-");
+  const totalAmountClassName = isDebitAmount ? "amount-debit" : "amount-credit";
+
   const details = [
     { label: "Transaction ID", value: orderId },
     { label: "Counterparty", value: paymentMethod },
     { label: "Reason", value: reason?.trim() || "No reason provided" },
     { label: "Date & Time", value: dateTime },
-    { label: "Total", value: totalAmount, isBold: true },
+    {
+      label: "Total",
+      value: totalAmount,
+      isBold: true,
+      valueClassName: totalAmountClassName,
+    },
   ];
 
   const containerVariants: Variants = {
@@ -89,7 +97,7 @@ export const OrderConfirmationCard: React.FC<OrderConfirmationCardProps> = ({
                 )}
               >
                 <span>{item.label}</span>
-                <span className={cn({ "text-lg": item.isBold })}>
+                <span className={cn({ "text-lg": item.isBold }, item.valueClassName)}>
                   {item.value}
                 </span>
               </div>

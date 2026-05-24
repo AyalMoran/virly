@@ -7,6 +7,8 @@
   --color-surface-glass: rgba(230, 238, 201, 0.46);
   --color-border: rgba(53, 133, 142, 0.2);
   --color-text: #173d42;
+  --color-debit:rgba(190, 9, 9, 0.884);
+  --color-credit: rgb(9, 145, 32);
   --color-muted: rgba(23, 61, 66, 0.66);
   --color-subtle: rgba(23, 61, 66, 0.42);
   --color-primary: #35858e;
@@ -677,11 +679,11 @@ h2 {
 }
 
 .amount-credit {
-  color: var(--color-success);
+  color: var(--color-credit);
 }
 
 .amount-debit {
-  color: var(--color-text);
+  color: var(--color-debit);
 }
 
 .transaction-confirmation-overlay {

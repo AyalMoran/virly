@@ -55,10 +55,20 @@ const aiPendingTransferSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "confirmed", "denied", "expired"],
+      enum: ["pending", "confirmed", "denied", "expired", "superseded"],
       required: true,
       default: "pending",
       index: true
+    },
+    supersededById: {
+      type: Schema.Types.ObjectId,
+      ref: "AiPendingTransfer",
+      default: null
+    },
+    supersedesId: {
+      type: Schema.Types.ObjectId,
+      ref: "AiPendingTransfer",
+      default: null
     },
     idempotencyResults: {
       type: Map,

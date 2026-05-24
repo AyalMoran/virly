@@ -1,12 +1,10 @@
 import { User } from "../../models/User.js";
-import {
-  AssistantToolResult,
-  ToolContext
-} from "../state.js";
+import { createToolResult } from "../toolResults.js";
+import type { RuntimeToolResult, ToolContext } from "../state.js";
 
 export async function getUserAccounts(
   context: ToolContext
-): Promise<AssistantToolResult> {
+): Promise<RuntimeToolResult> {
   const user = await User.findById(context.userId).select("email isVerified");
 
   if (!user) {
@@ -15,12 +13,16 @@ export async function getUserAccounts(
     });
   }
 
-  return {
+  return createToolResult({
     toolName: "getUserAccounts",
+    status: "ok",
+    data: {
+      accountLabel: "Virly account"
+    },
     summary: "Virly account",
     metadata: {
       recordCount: 1,
       accountLabel: "Virly account"
     }
-  };
+  });
 }

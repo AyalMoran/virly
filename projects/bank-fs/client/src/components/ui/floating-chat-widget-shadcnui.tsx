@@ -42,6 +42,7 @@ import { api, ApiError } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
 import type {
   AiConfirmationAction,
+  AiClarificationRequest,
   AiTransferConfirmation,
   AssistantId
 } from "@/lib/types";
@@ -73,8 +74,9 @@ type ChatMessage = {
   role: "user" | "assistant";
   content: string;
   assistantId?: AssistantId;
+  clarification?: AiClarificationRequest;
   confirmation?: AiTransferConfirmation;
-  confirmationStatus?: "pending" | "confirming" | "denying" | "confirmed" | "denied" | "failed";
+  confirmationStatus?: "pending" | "confirming" | "denying" | "confirmed" | "denied" | "superseded" | "failed";
 };
 
 const AI_AGENTS: Agent[] = [
@@ -176,6 +178,8 @@ function getConfirmationStatusLabel(
       return "Confirmed";
     case "denied":
       return "Denied";
+    case "superseded":
+      return "Replaced";
     case "failed":
       return "Needs retry";
     default:
@@ -252,9 +256,17 @@ function PendingTransferCard({
   const disabled = status !== "pending" || expired;
   const statusLabel = getConfirmationStatusLabel(status, confirmation);
   const warnings = confirmation.warnings ?? [];
+  const isSuperseded = status === "superseded";
 
   return (
-    <div className="mt-2.5 overflow-hidden rounded-lg border border-emerald-500/25 bg-background/90 shadow-md shadow-emerald-950/5 ring-1 ring-white/30">
+    <div
+      className={cn(
+        "mt-2.5 overflow-hidden rounded-lg border bg-background/90 shadow-md ring-1 ring-white/30",
+        isSuperseded
+          ? "border-slate-300/50 opacity-70 shadow-slate-950/5"
+          : "border-emerald-500/25 shadow-emerald-950/5"
+      )}
+    >
       <div className="flex items-center justify-between gap-2 border-b border-border/30 bg-emerald-500/10 px-2.5 py-2">
         <div className="flex min-w-0 items-center gap-2">
           <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white shadow-sm">
@@ -265,7 +277,9 @@ function PendingTransferCard({
               Pending transfer
             </p>
             <p className="truncate text-[10px] leading-4 text-muted-foreground">
-              Review details before money moves
+              {isSuperseded
+                ? "Replaced by a newer card"
+                : "Review details before money moves"}
             </p>
           </div>
         </div>
@@ -275,6 +289,11 @@ function PendingTransferCard({
       </div>
 
       <div className="grid gap-2 p-2.5">
+        {isSuperseded ? (
+          <p className="rounded-md border border-slate-300/50 bg-slate-500/10 px-2 py-1 text-[10px] leading-4 text-muted-foreground">
+            This card is no longer valid. Use the latest confirmation card.
+          </p>
+        ) : null}
         <dl className="grid gap-1.5 text-[11px]">
           <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-start gap-2 rounded-md border border-border/30 bg-background/60 px-2 py-1.5">
             <dt className="flex items-center gap-1 text-muted-foreground">
@@ -361,6 +380,41 @@ function PendingTransferCard({
     </div>
   );
 }
+
+type ClarificationOptionsProps = {
+  clarification: AiClarificationRequest;
+  disabled: boolean;
+  onSelect: (value: string) => void;
+};
+
+function ClarificationOptions({
+  clarification,
+  disabled,
+  onSelect,
+}: ClarificationOptionsProps) {
+  const options = clarification.options ?? [];
+  if (options.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="mt-2.5 grid gap-1.5">
+      {options.map((option) => (
+        <Button
+          key={option.id}
+          type="button"
+          variant="outline"
+          size="sm"
+          className="h-auto justify-start whitespace-normal rounded-lg border-border/40 bg-background/80 px-3 py-2 text-left text-xs font-medium"
+          disabled={disabled}
+          onClick={() => onSelect(option.value)}
+        >
+          {option.label}
+        </Button>
+      ))}
+    </div>
+  );
+}
 export function FloatingChatWidget() {
   const auth = useAuth();
   const [isOpen, setIsOpen] = useState(false);
@@ -413,10 +467,7 @@ export function FloatingChatWidget() {
     }
   }
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const trimmedMessage = message.trim();
+  async function sendChatMessage(trimmedMessage: string) {
     if (!trimmedMessage || isSending) {
       return;
     }
@@ -442,12 +493,18 @@ export function FloatingChatWidget() {
 
       setConversationId(response.conversationId);
       setChatMessages((messages) => [
-        ...messages,
+        ...messages.map((chatMessage) =>
+          response.supersededConfirmationId &&
+          chatMessage.confirmation?.id === response.supersededConfirmationId
+            ? { ...chatMessage, confirmationStatus: "superseded" as const }
+            : chatMessage,
+        ),
         {
           id: crypto.randomUUID(),
           role: "assistant",
           content: response.message,
           assistantId: response.assistantId,
+          clarification: response.clarification,
           confirmation: response.confirmation,
           confirmationStatus: response.confirmation ? "pending" : undefined,
         },
@@ -470,6 +527,11 @@ export function FloatingChatWidget() {
     } finally {
       setIsSending(false);
     }
+  }
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    await sendChatMessage(message.trim());
   }
 
   async function handleConfirmationAction(
@@ -700,6 +762,15 @@ export function FloatingChatWidget() {
                       </span>
                       <div className="rounded-2xl rounded-tl-none border border-border/20 bg-muted/50 px-4 py-2.5 text-sm shadow-sm backdrop-blur-sm">
                         <p>{chatMessage.content}</p>
+                        {chatMessage.clarification ? (
+                          <ClarificationOptions
+                            clarification={chatMessage.clarification}
+                            disabled={isSending}
+                            onSelect={(value) => {
+                              void sendChatMessage(value);
+                            }}
+                          />
+                        ) : null}
                         {chatMessage.confirmation ? (
                           <PendingTransferCard
                             confirmation={chatMessage.confirmation}

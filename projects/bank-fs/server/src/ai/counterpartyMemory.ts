@@ -9,8 +9,8 @@ import type {
 } from "./state.js";
 
 export const MAX_CONVERSATION_MESSAGES = 20;
-export const MAX_COUNTERPARTIES = 5;
-const MAX_CONTEXT_ENTITIES = 12;
+export const MAX_COUNTERPARTIES = 8;
+const MAX_CONTEXT_ENTITIES = 20;
 const MAX_ANSWER_FRAMES = 8;
 
 export function maskEmail(email: string) {
@@ -20,6 +20,54 @@ export function maskEmail(email: string) {
   }
 
   return `${localPart.slice(0, 1)}***@${domain}`;
+}
+
+export function buildCounterpartyUserLabel(input: {
+  email: string;
+  displayName?: string | null;
+  maskedLabel?: string | null;
+}) {
+  const email = input.email.trim().toLowerCase();
+  const displayName = input.displayName?.trim();
+  const maskedLabel = input.maskedLabel?.trim();
+
+  if (!displayName || displayName === email || displayName === maskedLabel) {
+    return email;
+  }
+
+  return `${displayName} (${email})`;
+}
+
+export function counterpartyAliases(input: {
+  email: string;
+  maskedLabel: string;
+  displayName?: string | null;
+  userLabel?: string | null;
+}) {
+  const email = input.email.trim().toLowerCase();
+  const localPart = email.split("@")[0] ?? email;
+  const displayName = input.displayName?.trim();
+  const userLabel =
+    input.userLabel?.trim() ??
+    buildCounterpartyUserLabel({
+      email,
+      displayName,
+      maskedLabel: input.maskedLabel
+    });
+
+  return [...new Set([
+    email,
+    localPart,
+    input.maskedLabel.trim().toLowerCase(),
+    userLabel.toLowerCase(),
+    ...(displayName ? [displayName.toLowerCase()] : []),
+    ...(displayName
+      ? displayName
+          .toLowerCase()
+          .split(/\s+/)
+          .filter(Boolean)
+      : [])
+  ])];
 }
 
 export function createEmptyCounterpartyMemory(): CounterpartyMemory {
@@ -81,9 +129,53 @@ export function counterpartyRefFromMetadata(
   return {
     email: metadata.counterpartyEmail.toLowerCase(),
     maskedLabel: metadata.maskedLabel ?? maskEmail(metadata.counterpartyEmail),
+    userLabel: buildCounterpartyUserLabel({
+      email: metadata.counterpartyEmail,
+      displayName: metadata.displayName,
+      maskedLabel: metadata.maskedLabel
+    }),
+    displayName: metadata.displayName ?? undefined,
+    aliases: counterpartyAliases({
+      email: metadata.counterpartyEmail,
+      maskedLabel: metadata.maskedLabel ?? maskEmail(metadata.counterpartyEmail),
+      displayName: metadata.displayName
+    }),
     firstMentionedAtTurn: turn,
     lastReferencedAtTurn: turn
   };
+}
+
+function counterpartyRefsFromMetadata(
+  metadata: ToolResultMetadata,
+  turn: number
+): CounterpartyRef[] {
+  const refs: CounterpartyRef[] = [];
+  const direct = counterpartyRefFromMetadata(metadata, turn);
+  if (direct) {
+    refs.push(direct);
+  }
+
+  for (const counterparty of metadata.counterparties ?? []) {
+    refs.push({
+      email: counterparty.counterpartyEmail.toLowerCase(),
+      maskedLabel: counterparty.maskedLabel,
+      userLabel: buildCounterpartyUserLabel({
+        email: counterparty.counterpartyEmail,
+        displayName: counterparty.displayName,
+        maskedLabel: counterparty.maskedLabel
+      }),
+      displayName: counterparty.displayName,
+      aliases: counterpartyAliases({
+        email: counterparty.counterpartyEmail,
+        maskedLabel: counterparty.maskedLabel,
+        displayName: counterparty.displayName
+      }),
+      firstMentionedAtTurn: turn,
+      lastReferencedAtTurn: turn
+    });
+  }
+
+  return refs;
 }
 
 export function rememberCounterparty(
@@ -98,6 +190,25 @@ export function rememberCounterparty(
   const updatedCounterparty: CounterpartyRef = {
     email,
     maskedLabel: counterparty.maskedLabel,
+    userLabel:
+      counterparty.userLabel ??
+      existing?.userLabel ??
+      buildCounterpartyUserLabel({
+        email,
+        displayName: counterparty.displayName,
+        maskedLabel: counterparty.maskedLabel
+      }),
+    displayName: counterparty.displayName ?? existing?.displayName,
+    aliases: [...new Set([
+      ...(existing?.aliases ?? []),
+      ...counterpartyAliases({
+        email,
+        maskedLabel: counterparty.maskedLabel,
+        displayName: counterparty.displayName ?? existing?.displayName,
+        userLabel: counterparty.userLabel ?? existing?.userLabel
+      }),
+      ...(counterparty.aliases ?? [])
+    ])],
     firstMentionedAtTurn: existing?.firstMentionedAtTurn ?? turn,
     lastReferencedAtTurn: turn
   };
@@ -133,11 +244,35 @@ export function rememberCounterpartiesFromMetadata(
   turn: number
 ) {
   return metadatas.reduce((nextMemory, metadata) => {
-    const counterparty = counterpartyRefFromMetadata(metadata, turn);
-    return counterparty
-      ? rememberCounterparty(nextMemory, counterparty, turn)
-      : nextMemory;
+    return counterpartyRefsFromMetadata(metadata, turn).reduce(
+      (updatedMemory, counterparty) =>
+        rememberCounterparty(updatedMemory, counterparty, turn),
+      nextMemory
+    );
   }, memory);
+}
+
+export function transactionEntitiesFromMetadata(
+  metadata: ToolResultMetadata,
+  turn: number
+): ConversationEntity[] {
+  return (metadata.transactions ?? []).map((transaction, index) => ({
+    id: `transaction:${transaction.transactionId}`,
+    type: "transaction",
+    turnIntroduced: turn,
+    turnLastReferenced: turn,
+    source: "tool_result",
+    confidence: "high",
+    displayName: transaction.label,
+    transactionId: transaction.transactionId,
+    amount: transaction.amount,
+    currency: transaction.currency,
+    aliases: [
+      transaction.label,
+      `${index + 1}`,
+      `${transaction.direction} ${Math.abs(transaction.amount).toFixed(2)}`
+    ]
+  }));
 }
 
 function getOrdinalFromMessage(message: string) {
@@ -175,7 +310,10 @@ function resolveByName(memory: CounterpartyMemory, query: string) {
     (entry) =>
       entry.email.toLowerCase() === normalized ||
       entry.maskedLabel.toLowerCase() === normalized ||
-      entry.email.toLowerCase().startsWith(normalized)
+      entry.email.toLowerCase().startsWith(normalized) ||
+      entry.userLabel?.toLowerCase() === normalized ||
+      entry.displayName?.toLowerCase() === normalized ||
+      entry.aliases?.includes(normalized)
   );
 }
 
