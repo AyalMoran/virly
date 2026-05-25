@@ -1,0 +1,1185 @@
+import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
+import { DEFAULT_ASSISTANT_ID } from "./assistants.js";
+import {
+  createEmptyCounterpartyMemory,
+  rememberCounterparty,
+  normalizeCounterpartyMemory,
+  resolveCounterpartyReferenceDeterministic,
+  resolveReferenceAgainstMemory,
+  trimConversationMessages
+} from "./counterpartyMemory.js";
+import {
+  extractRequestSlots,
+  normalizeUserMessage
+} from "./messageNormalization.js";
+import { buildRefusalMessage } from "./policy.js";
+import {
+  classifyAssistantIntent,
+  getReadOnlyToolsForIntent,
+  isReadOnlyToolName
+} from "./router.js";
+import { buildToolInput } from "./toolInputs.js";
+import {
+  getUserVisibleSummary,
+  getResolutionResultData,
+  toAssistantToolResult
+} from "./toolResults.js";
+import { applyToolMemoryUpdates } from "./toolMemory.js";
+import type {
+  AssistantGraphState,
+  AssistantLlmProvider,
+  AssistantToolName,
+  AssistantToolExecutors,
+  AuditLogger,
+  ConversationStore,
+  CounterpartyRef,
+  CounterpartyMemory,
+  ModifyPendingTransferConfirmationResult,
+  RuntimeToolResult,
+  TransferDraft,
+  TransferModificationService,
+  TransferPreparationService,
+  RunAssistantInput,
+  RunAssistantResult
+} from "./state.js";
+import { readOnlyToolExecutors } from "./tools/index.js";
+import {
+  modifyAiPendingTransfer,
+  prepareAiPendingTransfer
+} from "../services/aiPendingTransfer.service.js";
+
+const AssistantStateAnnotation = Annotation.Root({
+  userId: Annotation<string | undefined>(),
+  conversationId: Annotation<string>(),
+  requestId: Annotation<string | undefined>(),
+  assistantId: Annotation<AssistantGraphState["assistantId"]>(),
+  messages: Annotation<AssistantGraphState["messages"]>(),
+  counterpartyMemory: Annotation<AssistantGraphState["counterpartyMemory"]>(),
+  currentTurn: Annotation<number>(),
+  detectedIntent: Annotation<AssistantGraphState["detectedIntent"]>(),
+  selectedAccountId: Annotation<string | undefined>(),
+  normalizedMessage: Annotation<AssistantGraphState["normalizedMessage"]>(),
+  requestSlots: Annotation<AssistantGraphState["requestSlots"]>(),
+  resolvedCounterparty: Annotation<AssistantGraphState["resolvedCounterparty"]>(),
+  transferDraft: Annotation<AssistantGraphState["transferDraft"]>(),
+  confirmation: Annotation<AssistantGraphState["confirmation"]>(),
+  supersededConfirmationId: Annotation<AssistantGraphState["supersededConfirmationId"]>(),
+  requestedToolNames: Annotation<AssistantGraphState["requestedToolNames"]>(),
+  executedToolNames: Annotation<AssistantGraphState["executedToolNames"]>(),
+  toolResults: Annotation<AssistantGraphState["toolResults"]>(),
+  clarificationRequest: Annotation<AssistantGraphState["clarificationRequest"]>(),
+  clarificationMessage: Annotation<string | undefined>(),
+  refusalReason: Annotation<string | undefined>(),
+  responseMessage: Annotation<string | undefined>()
+});
+
+type GraphOptions = {
+  tools: AssistantToolExecutors;
+  llmProvider?: AssistantLlmProvider;
+  conversationStore?: ConversationStore;
+  transferPreparationService: TransferPreparationService;
+  transferModificationService: TransferModificationService;
+};
+
+export type RunAssistantOptions = Partial<GraphOptions> & {
+  auditLogger?: AuditLogger;
+};
+
+function getUserMessage(state: AssistantGraphState) {
+  for (let index = state.messages.length - 1; index >= 0; index -= 1) {
+    const message = state.messages[index];
+    if (message.role === "user") {
+      return message.content;
+    }
+  }
+
+  return "";
+}
+
+function loadAuthenticatedContext(
+  state: AssistantGraphState
+): Partial<AssistantGraphState> {
+  if (!state.userId) {
+    return {
+      detectedIntent: "unsafe_request",
+      refusalReason: "authentication_required",
+      responseMessage: "Authentication is required to use the assistant."
+    };
+  }
+
+  return {};
+}
+
+function buildConversationLoader(conversationStore?: ConversationStore) {
+  return async function loadConversationContext(
+    state: AssistantGraphState
+  ): Promise<Partial<AssistantGraphState>> {
+    if (!state.userId || !conversationStore) {
+      return {};
+    }
+
+    const currentMessage = getUserMessage(state);
+    const context = await conversationStore.load(
+      state.userId,
+      state.conversationId
+    );
+    const counterpartyMemory: CounterpartyMemory = {
+      ...context.memory,
+      turn: context.memory.turn + 1
+    };
+
+    return {
+      messages: trimConversationMessages([
+        ...context.messages,
+        { role: "user", content: currentMessage, createdAt: new Date() }
+      ]),
+      counterpartyMemory,
+      currentTurn: counterpartyMemory.turn
+    };
+  };
+}
+
+function buildIntentClassifier(llmProvider?: AssistantLlmProvider) {
+  return async function classifyIntent(
+    state: AssistantGraphState
+  ): Promise<Partial<AssistantGraphState>> {
+    if (state.refusalReason) {
+      return {};
+    }
+
+    const classification = await classifyAssistantIntent(
+      getUserMessage(state),
+      llmProvider,
+      {
+        messages: state.messages,
+        counterpartyMemory: state.counterpartyMemory
+      }
+    );
+    return {
+      detectedIntent: classification.intent,
+      refusalReason: classification.refusalReason
+    };
+  };
+}
+
+function extractRequestSlotsNode(
+  state: AssistantGraphState
+): Partial<AssistantGraphState> {
+  return {
+    requestSlots: extractRequestSlots(
+      getUserMessage(state),
+      state.detectedIntent ?? "unsupported"
+    )
+  };
+}
+
+function normalizeMessageNode(
+  state: AssistantGraphState
+): Partial<AssistantGraphState> {
+  return {
+    normalizedMessage: normalizeUserMessage(getUserMessage(state))
+  };
+}
+
+function applySlotDataToDraft(
+  draft: TransferDraft,
+  state: AssistantGraphState
+): TransferDraft {
+  const slots = state.requestSlots;
+  const amount = slots?.amount;
+  const counterparty = slots?.counterparty;
+  const nextDraft: TransferDraft = {
+    ...draft,
+    recipientEmail:
+      draft.recipientEmail ?? counterparty?.explicitEmail ?? undefined,
+    recipientReference:
+      draft.recipientReference ?? counterparty?.referenceText ?? undefined,
+    amount: draft.amount ?? amount?.value ?? undefined,
+    amountText: draft.amountText ?? amount?.rawText ?? undefined,
+    currency: draft.currency ?? amount?.currency ?? undefined,
+    currencyMentioned:
+      draft.currencyMentioned ?? amount?.currencyMentioned ?? false,
+    currencySupported:
+      draft.currencySupported ?? amount?.currencySupported ?? true
+  };
+
+  const missingFields: TransferDraft["missingFields"] = [];
+  if (!nextDraft.recipientEmail && !nextDraft.recipientReference) {
+    missingFields.push("recipient");
+  }
+  if (!nextDraft.amount && !nextDraft.amountReferenceText) {
+    missingFields.push("amount");
+  }
+  if (nextDraft.currencyMentioned && !nextDraft.currencySupported) {
+    missingFields.push("currency");
+  }
+
+  return {
+    ...nextDraft,
+    missingFields
+  };
+}
+
+function extractTransferDraftDeterministic(
+  message: string,
+  intent: AssistantGraphState["detectedIntent"]
+): TransferDraft {
+  const email = message.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0];
+  const amountMatch = message.match(
+    /(?:\$|usd|nis|ils|shekels?|שקל|שח|ש״ח)?\s*(\d+(?:\.\d{1,2})?)/i
+  );
+  const amount = amountMatch ? Number(amountMatch[1]) : null;
+  const referenceMatch = message.match(
+    /\b(him|her|them|this person|that person|this recipient|that recipient)\b/i
+  );
+  const reasonMatch =
+    message.match(/\b(?:add|set|change)?\s*reason\s+(?:to\s+)?(.{1,80})$/i) ??
+    message.match(/(?:סיבה|הסיבה)\s+(.{1,80})$/);
+  const recipientNameMatch =
+    message.match(/\b(?:to|for)\s+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)(?:\s+instead)?\b/) ??
+    message.match(/(?:אל|ל)\s*([\u0590-\u05ff]{2,}(?:\s+[\u0590-\u05ff]{2,})?)/);
+
+  const lowerMessage = message.toLowerCase();
+  const unsupportedCurrency =
+    /(\$|usd|dollar|dollars|דולר|€|eur|euro|euros|אירו|יורו)/i.test(lowerMessage);
+  const ilsCurrency =
+    /(₪|ils|nis|shekel|shekels|שקל|שח|ש״ח|ש"ח)/i.test(lowerMessage);
+
+  return {
+    recipientEmail: email?.toLowerCase() ?? null,
+    recipientReference: email
+      ? null
+      : referenceMatch?.[0] ??
+        recipientNameMatch?.[1] ??
+        (intent === "transfer_prepare" ? message.trim() : null),
+    amount: Number.isFinite(amount) && amount ? amount : null,
+    amountText: amountMatch?.[0]?.trim() ?? null,
+    currency: unsupportedCurrency
+      ? /(\$|usd|dollar|dollars|דולר)/i.test(lowerMessage)
+        ? "USD"
+        : "EUR"
+      : ilsCurrency
+        ? "ILS"
+        : null,
+    currencyMentioned: unsupportedCurrency || ilsCurrency,
+    currencySupported: !unsupportedCurrency,
+    reason: reasonMatch?.[1]?.trim() ?? null
+  };
+}
+
+function buildTransferDraftExtractor(llmProvider?: AssistantLlmProvider) {
+  return async function extractTransferDraft(
+    state: AssistantGraphState
+  ): Promise<Partial<AssistantGraphState>> {
+    if (
+      state.refusalReason ||
+      (state.detectedIntent !== "transfer_prepare" &&
+        state.detectedIntent !== "transfer_modify_pending")
+    ) {
+      return {};
+    }
+
+    if (llmProvider) {
+      try {
+        const transferDraft = await llmProvider.extractTransferDraft({
+          userMessage: getUserMessage(state),
+          messages: state.messages,
+          counterpartyMemory: state.counterpartyMemory
+        });
+
+        return { transferDraft: applySlotDataToDraft(transferDraft, state) };
+      } catch (error) {
+        console.warn(
+          "AI transfer draft extractor failed; using deterministic fallback.",
+          error instanceof Error ? error.message : error
+        );
+      }
+    }
+
+    return {
+      transferDraft: applySlotDataToDraft(
+        extractTransferDraftDeterministic(
+          getUserMessage(state),
+          state.detectedIntent
+        ),
+        state
+      )
+    };
+  };
+}
+
+function buildClarificationRequest(
+  state: AssistantGraphState,
+  reason: NonNullable<AssistantGraphState["clarificationRequest"]>["reason"],
+  message: string,
+  expectedReplyType: NonNullable<AssistantGraphState["clarificationRequest"]>["expectedReplyType"]
+) {
+  return {
+    clarificationMessage: message,
+    clarificationRequest: {
+      reason,
+      message,
+      expectedReplyType
+    }
+  };
+}
+
+function needsCounterpartyResolution(state: AssistantGraphState) {
+  return (
+    state.detectedIntent === "counterparty_transactions" ||
+    state.detectedIntent === "counterparty_total_sent" ||
+    (state.detectedIntent === "transfer_prepare" &&
+      !state.transferDraft?.recipientEmail) ||
+    (state.detectedIntent === "transfer_modify_pending" &&
+      Boolean(state.transferDraft?.recipientReference) &&
+      !state.transferDraft?.recipientEmail)
+  );
+}
+
+function buildCounterpartyResolver(llmProvider?: AssistantLlmProvider) {
+  return async function resolveCounterpartyReference(
+    state: AssistantGraphState
+  ): Promise<Partial<AssistantGraphState>> {
+    if (state.refusalReason || !needsCounterpartyResolution(state)) {
+      return {};
+    }
+
+    if (llmProvider) {
+      try {
+        const resolution = await llmProvider.resolveCounterpartyReference({
+          userMessage: getUserMessage(state),
+          intent: state.detectedIntent ?? "unsupported",
+          messages: state.messages,
+          memory: state.counterpartyMemory,
+          transferDraft: state.transferDraft
+        });
+        const resolvedCounterparty = resolveReferenceAgainstMemory(
+          state.counterpartyMemory,
+          resolution
+        );
+
+        if (resolvedCounterparty) {
+          return {
+            resolvedCounterparty,
+            counterpartyMemory: rememberCounterparty(
+              state.counterpartyMemory,
+              resolvedCounterparty,
+              state.currentTurn
+            )
+          };
+        }
+      } catch (error) {
+        console.warn(
+          "AI counterparty resolver failed; using deterministic fallback.",
+          error instanceof Error ? error.message : error
+        );
+      }
+    }
+
+    const deterministicCounterparty = resolveCounterpartyReferenceDeterministic(
+      getUserMessage(state),
+      state.counterpartyMemory
+    );
+    if (deterministicCounterparty) {
+      return {
+        resolvedCounterparty: deterministicCounterparty,
+        counterpartyMemory: rememberCounterparty(
+          state.counterpartyMemory,
+          deterministicCounterparty,
+          state.currentTurn
+        )
+      };
+    }
+
+    if (
+      state.detectedIntent === "transfer_prepare" ||
+      state.detectedIntent === "transfer_modify_pending"
+    ) {
+      return {};
+    }
+
+    return buildClarificationRequest(
+      state,
+      "ambiguous_reference",
+      "Which recipient should I use for that question?",
+      "recipient"
+    );
+  };
+}
+
+function buildTransferConfirmationPreparer(
+  transferPreparationService: TransferPreparationService
+) {
+  return async function prepareTransferConfirmation(
+    state: AssistantGraphState
+  ): Promise<Partial<AssistantGraphState>> {
+    if (
+      !state.userId ||
+      state.refusalReason ||
+      state.clarificationMessage ||
+      state.detectedIntent !== "transfer_prepare"
+    ) {
+      return {};
+    }
+
+    if (state.transferDraft?.currencyMentioned && !state.transferDraft.currencySupported) {
+      const currency = state.transferDraft.currency ?? "that currency";
+      const amountText = state.transferDraft.amountText ?? "that amount";
+      return buildClarificationRequest(
+        state,
+        "unsupported_currency",
+        `I can prepare transfers only in ILS right now. Should I prepare ${amountText} as ILS instead of ${currency}?`,
+        "yes_no"
+      );
+    }
+
+    const result = await transferPreparationService({
+      userId: state.userId,
+      conversationId: state.conversationId,
+      assistantId: state.assistantId,
+      draft: state.transferDraft ?? {},
+      resolvedCounterparty: state.resolvedCounterparty
+    });
+
+    if (result.status === "needs_clarification") {
+      const amount = state.transferDraft?.amount;
+      if (!state.transferDraft?.recipientEmail && !state.resolvedCounterparty) {
+        return buildClarificationRequest(
+          state,
+          "missing_recipient",
+          amount ? `Who should I send ₪${amount} to?` : result.message,
+          "recipient"
+        );
+      }
+
+      if (!state.transferDraft?.amount) {
+        return buildClarificationRequest(
+          state,
+          "missing_amount",
+          state.resolvedCounterparty
+            ? `How much should I send to ${state.resolvedCounterparty.userLabel ?? state.resolvedCounterparty.email}?`
+            : result.message,
+          "amount"
+        );
+      }
+
+      return buildClarificationRequest(
+        state,
+        "ambiguous_reference",
+        result.message,
+        "free_text"
+      );
+    }
+
+    return { confirmation: result.confirmation };
+  };
+}
+
+function getActivePendingConfirmationId(state: AssistantGraphState) {
+  const pending = state.counterpartyMemory.pendingConfirmation;
+  return pending?.status === "pending" ? pending.confirmationId : undefined;
+}
+
+function buildPendingTransferModifier(
+  transferModificationService: TransferModificationService
+) {
+  return async function modifyPendingTransferConfirmation(
+    state: AssistantGraphState
+  ): Promise<Partial<AssistantGraphState>> {
+    if (
+      !state.userId ||
+      state.refusalReason ||
+      state.clarificationMessage ||
+      state.detectedIntent !== "transfer_modify_pending"
+    ) {
+      return {};
+    }
+
+    const activePendingTransferId = getActivePendingConfirmationId(state);
+    if (!activePendingTransferId) {
+      return buildClarificationRequest(
+        state,
+        "ambiguous_reference",
+        "I do not see an active pending transfer to update. Please prepare a new transfer.",
+        "free_text"
+      );
+    }
+
+    const result: ModifyPendingTransferConfirmationResult =
+      await transferModificationService({
+        userId: state.userId,
+        conversationId: state.conversationId,
+        assistantId: state.assistantId,
+        activePendingTransferId,
+        modificationDraft: state.transferDraft ?? {},
+        resolvedCounterparty: state.resolvedCounterparty
+      });
+
+    if (result.status === "needs_clarification") {
+      return buildClarificationRequest(
+        state,
+        "ambiguous_reference",
+        result.message,
+        "free_text"
+      );
+    }
+
+    return {
+      confirmation: result.confirmation,
+      supersededConfirmationId: result.supersededConfirmationId
+    };
+  };
+}
+
+function resolvedCounterpartyFromResolutionData(
+  data: {
+    kind: "counterparty";
+    status: "resolved";
+    counterparty: {
+      email: string;
+      maskedLabel: string;
+      userLabel?: string;
+      displayName?: string;
+    };
+  },
+  turn: number
+): CounterpartyRef | undefined {
+  return {
+    email: data.counterparty.email.toLowerCase(),
+    maskedLabel: data.counterparty.maskedLabel,
+    userLabel: data.counterparty.userLabel,
+    displayName: data.counterparty.displayName,
+    firstMentionedAtTurn: turn,
+    lastReferencedAtTurn: turn
+  };
+}
+
+function buildResolutionClarification(result: RuntimeToolResult) {
+  const resolution = getResolutionResultData(result);
+  if (!resolution || resolution.status === "resolved") {
+    return undefined;
+  }
+
+  if (resolution.status === "ambiguous") {
+    const labels = (resolution.candidates ?? [])
+      .map((candidate) => candidate.label)
+      .join(", ");
+    const message =
+      resolution.kind === "counterparty"
+        ? labels
+          ? `I found multiple matching counterparties: ${labels}. Which one do you mean?`
+          : "I found multiple matching counterparties. Which one do you mean?"
+        : resolution.kind === "transaction"
+          ? labels
+            ? `I found multiple matching transactions: ${labels}. Which one do you mean?`
+            : "I found multiple matching transactions. Which one do you mean?"
+          : labels
+            ? `I found multiple pending transfer confirmations: ${labels}. Which one do you mean?`
+            : "I found multiple pending transfer confirmations. Which one do you mean?";
+
+    return {
+      message,
+      request: {
+        reason:
+          resolution.kind === "counterparty"
+            ? ("ambiguous_recipient" as const)
+            : resolution.kind === "transaction"
+              ? ("ambiguous_transaction" as const)
+              : ("ambiguous_pending_transfer" as const),
+        expectedReplyType:
+          resolution.kind === "counterparty"
+            ? ("recipient" as const)
+            : resolution.kind === "transaction"
+              ? ("transaction" as const)
+              : ("pending_transfer" as const),
+        options: resolution.candidates?.map((candidate) => ({
+          id: candidate.id,
+          label: candidate.label,
+          value: candidate.value
+        }))
+      }
+    };
+  }
+
+  return {
+    message:
+      resolution.kind === "counterparty"
+        ? "I could not find a matching counterparty in your transaction history."
+        : resolution.kind === "transaction"
+          ? "I could not resolve which transaction you mean. Ask about a numbered item from the latest transaction list, such as the second one."
+          : "I could not resolve which pending transfer you mean.",
+    request: {
+      reason: "unresolved_reference" as const,
+      expectedReplyType:
+        resolution.kind === "counterparty"
+          ? ("recipient" as const)
+          : resolution.kind === "transaction"
+            ? ("transaction" as const)
+            : ("pending_transfer" as const),
+      options: resolution.candidates?.map((candidate) => ({
+        id: candidate.id,
+        label: candidate.label,
+        value: candidate.value
+      }))
+    }
+  };
+}
+
+function buildToolRouter(tools: AssistantToolExecutors) {
+  return async function routeReadOnlyTools(
+    state: AssistantGraphState
+  ): Promise<Partial<AssistantGraphState>> {
+    if (!state.userId || state.refusalReason || state.clarificationMessage) {
+      return {
+        requestedToolNames: [],
+        executedToolNames: [],
+        toolResults: []
+      };
+    }
+
+    const intent = state.detectedIntent ?? "unsupported";
+    const requestedToolNames = getReadOnlyToolsForIntent(intent);
+    const toolResults: AssistantGraphState["toolResults"] = [];
+    const executedToolNames: AssistantToolName[] = [];
+    let resolvedCounterparty = state.resolvedCounterparty;
+    let counterpartyMemory = state.counterpartyMemory;
+
+    for (const toolName of requestedToolNames) {
+      if (
+        toolName === "resolveCounterpartyCandidates" &&
+        intent === "transfer_quote" &&
+        state.requestSlots?.counterparty?.explicitEmail
+      ) {
+        continue;
+      }
+
+      if (!isReadOnlyToolName(toolName)) {
+        return {
+          requestedToolNames,
+          executedToolNames,
+          toolResults,
+          refusalReason: "forbidden_tool_request"
+        };
+      }
+
+      const toolExecutor = tools[toolName];
+      if (!toolExecutor) {
+        return {
+          requestedToolNames,
+          executedToolNames,
+          toolResults,
+          clarificationMessage:
+            "That account tool is not available yet. I can still help with balances, recent transactions, verified recipients, transfer limits, and preparing transfers for confirmation."
+        };
+      }
+
+      const toolResult = await toolExecutor(
+        buildToolInput(toolName, {
+          ...state,
+          resolvedCounterparty,
+          counterpartyMemory,
+          toolResults
+        })
+      );
+      toolResults.push(toolResult);
+      executedToolNames.push(toolName);
+
+      counterpartyMemory = applyToolMemoryUpdates(
+        counterpartyMemory,
+        toolResult.memoryUpdates,
+        state.currentTurn
+      );
+
+      const resolution = getResolutionResultData(toolResult);
+      if (resolution?.kind === "counterparty" && resolution.status === "resolved") {
+        const nextResolvedCounterparty = resolvedCounterpartyFromResolutionData(
+          resolution,
+          state.currentTurn
+        );
+        if (nextResolvedCounterparty) {
+          resolvedCounterparty = nextResolvedCounterparty;
+          counterpartyMemory = rememberCounterparty(
+            counterpartyMemory,
+            nextResolvedCounterparty,
+            state.currentTurn
+          );
+          continue;
+        }
+      }
+
+      const clarification = buildResolutionClarification(toolResult);
+      if (clarification) {
+        return {
+          requestedToolNames,
+          executedToolNames,
+          toolResults,
+          counterpartyMemory: {
+            ...counterpartyMemory,
+            clarification: {
+              reason: clarification.request.reason,
+              message: clarification.message,
+              expectedReplyType: clarification.request.expectedReplyType,
+              options: clarification.request.options
+            }
+          },
+          resolvedCounterparty,
+          clarificationMessage: clarification.message,
+          clarificationRequest: {
+            reason: clarification.request.reason,
+            message: clarification.message,
+            expectedReplyType: clarification.request.expectedReplyType,
+            options: clarification.request.options
+          }
+        };
+      }
+    }
+
+    return {
+      requestedToolNames,
+      executedToolNames,
+      toolResults,
+      counterpartyMemory,
+      resolvedCounterparty
+    };
+  };
+}
+
+function composeDeterministicResponse(state: AssistantGraphState) {
+  if (state.clarificationMessage) {
+    return state.clarificationMessage;
+  }
+
+  if (state.refusalReason) {
+    return state.refusalReason === "authentication_required"
+      ? "Authentication is required to use the assistant."
+      : buildRefusalMessage(state.refusalReason);
+  }
+
+  const intent = state.detectedIntent ?? "unsupported";
+  if (intent === "general_help") {
+    return "I can help with account questions such as balances, recent transactions, verified recipients, transfer limits, and preparing transfers for explicit confirmation.";
+  }
+
+  if (
+    intent === "transfer_cancel_pending" ||
+    intent === "pending_confirmation_status"
+  ) {
+    if (state.counterpartyMemory.pendingConfirmation?.status === "pending") {
+      return "I cannot confirm a transfer from chat text. Please review the current confirmation card and use its Confirm or Deny button.";
+    }
+
+    return "I do not see an active transfer confirmation in this conversation. I can prepare a new transfer for explicit confirmation.";
+  }
+
+  if (intent === "transfer_modify_pending") {
+    if (state.confirmation) {
+        return state.normalizedMessage?.containsHebrew
+          ? "עדכנתי את ההעברה הממתינה. צריך לבדוק ולאשר את כרטיס האישור החדש לפני שמשהו נשלח."
+          : "I updated the pending transfer. Please review the new confirmation card before anything is sent.";
+    }
+
+    return "I do not see an active transfer confirmation in this conversation. I can prepare a new transfer for explicit confirmation.";
+  }
+
+  if (intent === "transfer_status") {
+    return "This app stores completed transaction history, but it does not expose a separate transfer status field yet. I can help review your recent transactions.";
+  }
+
+  if (intent === "unsupported") {
+    return "I can help with account information, recent transactions, verified recipients, transfer limits, transfer preparation, and general app guidance.";
+  }
+
+  if (intent === "transfer_prepare" && state.confirmation) {
+    return "Please review the transfer details and use the confirmation buttons before I send anything.";
+  }
+
+  if (state.toolResults.length === 0) {
+    return "I could not find account information for that request. Please try again from your authenticated session.";
+  }
+
+  return state.toolResults
+    .map((result) => getUserVisibleSummary(result))
+    .join(" ");
+}
+
+function collectResponseLabelReplacements(
+  value: unknown,
+  replacements: Array<[from: string, to: string]> = []
+) {
+  if (!value || typeof value !== "object") {
+    return replacements;
+  }
+
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      collectResponseLabelReplacements(item, replacements);
+    }
+    return replacements;
+  }
+
+  const record = value as Record<string, unknown>;
+  const llmLabel = typeof record.llmLabel === "string" ? record.llmLabel : undefined;
+  const label = typeof record.label === "string" ? record.label : undefined;
+  const maskedLabel =
+    typeof record.maskedLabel === "string" ? record.maskedLabel : undefined;
+  const emailMasked =
+    typeof record.emailMasked === "string" ? record.emailMasked : undefined;
+  const userLabel =
+    typeof record.userLabel === "string" ? record.userLabel : undefined;
+  const recipientMaskedLabel =
+    typeof record.recipientMaskedLabel === "string"
+      ? record.recipientMaskedLabel
+      : undefined;
+  const recipientLabel =
+    typeof record.recipientLabel === "string" ? record.recipientLabel : undefined;
+  const counterpartyMaskedLabel =
+    typeof record.counterpartyMaskedLabel === "string"
+      ? record.counterpartyMaskedLabel
+      : undefined;
+  const counterpartyLabel =
+    typeof record.counterpartyLabel === "string"
+      ? record.counterpartyLabel
+      : undefined;
+
+  if (llmLabel && label && llmLabel !== label) {
+    replacements.push([llmLabel, label]);
+  }
+
+  if (llmLabel && userLabel && llmLabel !== userLabel) {
+    replacements.push([llmLabel, userLabel]);
+  }
+
+  if (maskedLabel && userLabel && maskedLabel !== userLabel) {
+    replacements.push([maskedLabel, userLabel]);
+  }
+
+  if (emailMasked && userLabel && emailMasked !== userLabel) {
+    replacements.push([emailMasked, userLabel]);
+  }
+
+  if (recipientMaskedLabel && recipientLabel && recipientMaskedLabel !== recipientLabel) {
+    replacements.push([recipientMaskedLabel, recipientLabel]);
+  }
+
+  if (
+    counterpartyMaskedLabel &&
+    counterpartyLabel &&
+    counterpartyMaskedLabel !== counterpartyLabel
+  ) {
+    replacements.push([counterpartyMaskedLabel, counterpartyLabel]);
+  }
+
+  for (const nested of Object.values(record)) {
+    collectResponseLabelReplacements(nested, replacements);
+  }
+
+  return replacements;
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function hydrateUserVisibleResponse(
+  message: string,
+  state: AssistantGraphState
+) {
+  const replacements: Array<[from: string, to: string]> = [];
+
+  if (
+    state.resolvedCounterparty?.maskedLabel &&
+    state.resolvedCounterparty.userLabel &&
+    state.resolvedCounterparty.maskedLabel !== state.resolvedCounterparty.userLabel
+  ) {
+    replacements.push([
+      state.resolvedCounterparty.maskedLabel,
+      state.resolvedCounterparty.userLabel
+    ]);
+  }
+
+  for (const counterparty of state.counterpartyMemory.mentionedCounterparties ?? []) {
+    if (counterparty.maskedLabel !== counterparty.userLabel && counterparty.userLabel) {
+      replacements.push([counterparty.maskedLabel, counterparty.userLabel]);
+    }
+  }
+
+  for (const result of state.toolResults) {
+    collectResponseLabelReplacements(result.data, replacements);
+  }
+
+  return [...new Map(
+    replacements
+      .filter(([from, to]) => from && to && from !== to)
+      .sort((left, right) => right[0].length - left[0].length)
+      .map((pair) => [pair.join("\u0000"), pair])
+  ).values()].reduce(
+    (text, [from, to]) => text.replace(new RegExp(escapeRegExp(from), "g"), to),
+    message
+  );
+}
+
+function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
+  return async function composeResponse(
+    state: AssistantGraphState
+  ): Promise<Partial<AssistantGraphState>> {
+    const assistantToolResults = state.toolResults.map(toAssistantToolResult);
+    const userFallbackMessage = composeDeterministicResponse(state);
+    const llmFallbackMessage = assistantToolResults.length > 0
+      ? assistantToolResults.map((result) => result.summary).join(" ")
+      : userFallbackMessage;
+
+    if (
+      !llmProvider ||
+      state.clarificationMessage ||
+      state.refusalReason ||
+      state.detectedIntent === "transfer_prepare" ||
+      state.detectedIntent === "transfer_modify_pending"
+    ) {
+      return { responseMessage: userFallbackMessage };
+    }
+
+    try {
+      const responseMessage = await llmProvider.composeResponse({
+        assistantId: state.assistantId,
+        userMessage: getUserMessage(state),
+        messages: state.messages,
+        intent: state.detectedIntent ?? "unsupported",
+        toolResults: assistantToolResults,
+        counterpartyMemory: state.counterpartyMemory,
+        resolvedCounterparty: state.resolvedCounterparty,
+        transferDraft: state.transferDraft,
+        confirmation: state.confirmation,
+        refusalReason: state.refusalReason,
+        fallbackMessage: llmFallbackMessage
+      });
+
+      return {
+        responseMessage:
+          hydrateUserVisibleResponse(
+            responseMessage.trim() || userFallbackMessage,
+            state
+          ) || userFallbackMessage
+      };
+    } catch (error) {
+      console.warn(
+        "AI response composer failed; using deterministic fallback.",
+        error instanceof Error ? error.message : error
+      );
+      return { responseMessage: userFallbackMessage };
+    }
+  };
+}
+
+function buildConversationSaver(conversationStore?: ConversationStore) {
+  return async function saveConversation(
+    state: AssistantGraphState
+  ): Promise<Partial<AssistantGraphState>> {
+    if (!state.userId || !conversationStore) {
+      return {};
+    }
+
+    const memory = normalizeCounterpartyMemory({
+      ...state.counterpartyMemory,
+      mode: state.clarificationRequest
+        ? "awaiting_clarification"
+        : state.confirmation
+          ? "transfer_confirmation_pending"
+          : state.detectedIntent === "transfer_prepare"
+            ? "transfer_draft_in_progress"
+            : state.toolResults.length > 0
+              ? "answering_read_only"
+              : "idle",
+      clarification: state.clarificationRequest ?? null,
+      pendingConfirmation: state.confirmation
+        ? {
+            confirmationId: state.confirmation.id,
+            type: "transfer",
+            status: "pending",
+            createdAt: new Date().toISOString(),
+            expiresAt: state.confirmation.expiresAt,
+            recipientEmail: state.confirmation.recipientEmail,
+            recipientFirstName: state.confirmation.recipientFirstName,
+            recipientLastName: state.confirmation.recipientLastName,
+            amount: state.confirmation.amount,
+            currency: state.confirmation.currency,
+            reason: state.confirmation.reason,
+            turnCreated: state.currentTurn,
+            version: state.confirmation.version
+          }
+        : state.counterpartyMemory.pendingConfirmation ?? null,
+      answerFrames: [
+        ...(state.counterpartyMemory.answerFrames ?? []),
+        {
+          id: `${state.conversationId}:${state.currentTurn}`,
+          turn: state.currentTurn,
+          intent: state.detectedIntent ?? "unsupported",
+          userMessage: getUserMessage(state),
+          assistantSummary:
+            state.responseMessage ?? "I could not process that request.",
+          primaryEntities:
+            state.counterpartyMemory.entities
+              ?.slice(-5)
+              .map((entity) => entity.id) ?? [],
+          secondaryEntities: [],
+          toolResultRefs: state.toolResults.map((result, index) => ({
+            toolName: result.toolName,
+            resultId: `${state.conversationId}:${state.currentTurn}:${index}`
+          }))
+        }
+      ],
+      entities: [
+        ...(state.counterpartyMemory.entities ?? []),
+        ...(state.resolvedCounterparty
+          ? [
+              {
+                id: `counterparty:${state.resolvedCounterparty.email}`,
+                type: "counterparty" as const,
+                turnIntroduced: state.resolvedCounterparty.firstMentionedAtTurn,
+                turnLastReferenced: state.currentTurn,
+                source: "tool_result" as const,
+                confidence: "high" as const,
+                displayName:
+                  state.resolvedCounterparty.userLabel ??
+                  state.resolvedCounterparty.email,
+                email: state.resolvedCounterparty.email,
+                aliases: state.resolvedCounterparty.aliases ?? [
+                  state.resolvedCounterparty.userLabel ??
+                    state.resolvedCounterparty.email,
+                  state.resolvedCounterparty.maskedLabel
+                ]
+              }
+            ]
+          : []),
+        ...(state.transferDraft?.amount
+          ? [
+              {
+                id: `amount:${state.conversationId}:${state.currentTurn}`,
+                type: "amount" as const,
+                turnIntroduced: state.currentTurn,
+                turnLastReferenced: state.currentTurn,
+                source: "transfer_draft" as const,
+                confidence: "high" as const,
+                amount: state.transferDraft.amount,
+                currency: state.transferDraft.currency ?? "ILS",
+                aliases: state.transferDraft.amountText
+                  ? [state.transferDraft.amountText]
+                  : []
+              }
+            ]
+          : [])
+      ]
+    });
+
+    await conversationStore.save({
+      userId: state.userId,
+      conversationId: state.conversationId,
+      assistantId: state.assistantId,
+      messages: trimConversationMessages([
+        ...state.messages,
+        {
+          role: "assistant",
+          content: state.responseMessage ?? "I could not process that request.",
+          createdAt: new Date()
+        }
+      ]),
+      memory
+    });
+
+    return {};
+  };
+}
+
+function buildAssistantGraph(options: GraphOptions) {
+  return new StateGraph(AssistantStateAnnotation)
+    .addNode("loadAuthenticatedContext", loadAuthenticatedContext)
+    .addNode("loadConversationContext", buildConversationLoader(options.conversationStore))
+    .addNode("normalizeUserMessage", normalizeMessageNode)
+    .addNode("classifyIntent", buildIntentClassifier(options.llmProvider))
+    .addNode("extractRequestSlots", extractRequestSlotsNode)
+    .addNode("extractTransferDraft", buildTransferDraftExtractor(options.llmProvider))
+    .addNode("resolveCounterpartyReference", buildCounterpartyResolver(options.llmProvider))
+    .addNode(
+      "prepareTransferConfirmation",
+      buildTransferConfirmationPreparer(options.transferPreparationService)
+    )
+    .addNode(
+      "modifyPendingTransferConfirmation",
+      buildPendingTransferModifier(options.transferModificationService)
+    )
+    .addNode("routeReadOnlyTools", buildToolRouter(options.tools))
+    .addNode("composeResponse", buildResponseComposer(options.llmProvider))
+    .addNode("saveConversation", buildConversationSaver(options.conversationStore))
+    .addEdge(START, "loadAuthenticatedContext")
+    .addEdge("loadAuthenticatedContext", "loadConversationContext")
+    .addEdge("loadConversationContext", "normalizeUserMessage")
+    .addEdge("normalizeUserMessage", "classifyIntent")
+    .addEdge("classifyIntent", "extractRequestSlots")
+    .addEdge("extractRequestSlots", "extractTransferDraft")
+    .addEdge("extractTransferDraft", "resolveCounterpartyReference")
+    .addEdge("resolveCounterpartyReference", "prepareTransferConfirmation")
+    .addEdge("prepareTransferConfirmation", "modifyPendingTransferConfirmation")
+    .addEdge("modifyPendingTransferConfirmation", "routeReadOnlyTools")
+    .addEdge("routeReadOnlyTools", "composeResponse")
+    .addEdge("composeResponse", "saveConversation")
+    .addEdge("saveConversation", END)
+    .compile();
+}
+
+export async function runAssistantGraph(
+  input: RunAssistantInput,
+  options: RunAssistantOptions = {}
+): Promise<RunAssistantResult> {
+  const graph = buildAssistantGraph({
+    tools: options.tools ?? readOnlyToolExecutors,
+    llmProvider: options.llmProvider,
+    conversationStore: options.conversationStore,
+    transferPreparationService:
+      options.transferPreparationService ?? prepareAiPendingTransfer,
+    transferModificationService:
+      options.transferModificationService ?? modifyAiPendingTransfer
+  });
+  const emptyMemory = createEmptyCounterpartyMemory();
+  const initialState: AssistantGraphState = {
+    userId: input.userId,
+    conversationId: input.conversationId,
+    requestId: input.requestId,
+    assistantId: input.assistantId ?? DEFAULT_ASSISTANT_ID,
+    messages: [{ role: "user", content: input.message }],
+    counterpartyMemory: emptyMemory,
+    currentTurn: emptyMemory.turn + 1,
+    requestedToolNames: [],
+    executedToolNames: [],
+    toolResults: []
+  };
+  const finalState = (await graph.invoke(initialState)) as AssistantGraphState;
+  const intent = finalState.detectedIntent ?? "unsupported";
+
+  if (input.userId && options.auditLogger) {
+    await options.auditLogger({
+      userId: input.userId,
+      conversationId: input.conversationId,
+      requestId: input.requestId,
+      assistantId: finalState.assistantId,
+      intent,
+      toolsRequested: finalState.requestedToolNames,
+      toolsExecuted: finalState.executedToolNames,
+      refusalReason: finalState.refusalReason
+    });
+  }
+
+  return {
+    message: finalState.responseMessage ?? "I could not process that request.",
+    conversationId: input.conversationId,
+    assistantId: finalState.assistantId,
+    intent,
+    toolCalls: finalState.executedToolNames,
+    toolResults: finalState.toolResults.map((result) => ({
+      toolName: result.toolName,
+      status: result.status
+    })),
+    clarification: finalState.clarificationRequest,
+    confirmation: finalState.confirmation,
+    supersededConfirmationId: finalState.supersededConfirmationId,
+    refusalReason: finalState.refusalReason
+  };
+}

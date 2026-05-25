@@ -1,0 +1,1463 @@
+openapi: 3.0.3
+info:
+  title: Virly API
+  version: 1.0.0
+  description: |
+    Swagger-compatible OpenAPI document for the Virly backend.
+
+servers:
+  - url: http://localhost:3000
+    description: Local development server
+tags:
+  - name: Authentication
+  - name: Account
+  - name: Transactions
+  - name: AI Assistant
+paths:
+  /api/auth/register:
+    post:
+      tags:
+        - Authentication
+      summary: Register a new user
+      description: |
+        Creates a pending user account, generates a short-lived verification
+        link, and sends it by email.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+            examples:
+              default:
+                value:
+                  email: user@example.com
+                  password: StrongPass123!
+                  rememberMe: true
+                  phone: "+15551234567"
+      responses:
+        '201':
+          description: Verification email sent
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RegisterResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/verify:
+    get:
+      tags:
+        - Authentication
+      summary: Verify email using a verification link token
+      description: Confirms the user's email, activates the account, and sets auth cookies.
+      parameters:
+        - in: query
+          name: token
+          required: true
+          schema:
+            type: string
+          description: Short-lived email verification token from the verification link
+      responses:
+        '200':
+          description: Email verified successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccessResponse'
+        '400':
+          description: Invalid or expired verification token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/resend-verification:
+    post:
+      tags:
+        - Authentication
+      summary: Resend an email verification link
+      description: |
+        Generates a fresh short-lived verification link for a registered,
+        unverified user and sends it by email. Unknown email addresses and
+        already verified accounts receive the same generic success response to
+        avoid revealing account existence or verification state.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResendVerificationRequest'
+            examples:
+              default:
+                value:
+                  email: user@example.com
+      responses:
+        '200':
+          description: Verification email sent or request accepted
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/login:
+    post:
+      tags:
+        - Authentication
+      summary: Log in with email and password
+      description: Sets the HttpOnly auth cookie and readable CSRF cookie on success.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+            examples:
+              default:
+                value:
+                  email: user@example.com
+                  password: StrongPass123!
+      responses:
+        '200':
+          description: Login succeeded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccessResponse'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Account is not verified
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/logout:
+    post:
+      tags:
+        - Authentication
+      summary: Log out the current user
+      description: Clears the auth and CSRF cookies.
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      responses:
+        '200':
+          description: Logout acknowledged
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MessageResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing or invalid CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/auth/me:
+    get:
+      tags:
+        - Authentication
+      summary: Get the current authenticated user
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Current authenticated user
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSuccessResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/accounts/me:
+    get:
+      tags:
+        - Account
+      summary: Get the current user's account summary
+      description: Returns the current balance, paginated transactions, and pagination metadata.
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Account summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountSummaryResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/accounts/personal-details:
+    get:
+      tags:
+        - Account
+      summary: Get the current user's personal details
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Personal details state and values
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalDetailsResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    put:
+      tags:
+        - Account
+      summary: Save the current user's personal details
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PersonalDetailsRequest'
+      responses:
+        '200':
+          description: Personal details saved
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PersonalDetailsResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing or invalid CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/accounts/personal-details/skip:
+    post:
+      tags:
+        - Account
+      summary: Skip personal details for the current session
+      description: Keeps the personal details status as not_provided so the user is prompted again on future logins.
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      responses:
+        '200':
+          description: Personal details prompt skipped
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/MessageResponse'
+                  - $ref: '#/components/schemas/PersonalDetailsResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing or invalid CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/transactions:
+    get:
+      tags:
+        - Transactions
+      summary: List recent transactions for the authenticated user
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+        - in: query
+          name: counterparty
+          schema:
+            type: string
+            format: email
+          description: Filter transactions by counterparty email
+      responses:
+        '200':
+          description: Recent transaction list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionsResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    post:
+      tags:
+        - Transactions
+      summary: Transfer money to another registered user
+      description: |
+        Creates a debit transaction for the sender and a matching credit
+        transaction for the receiver.
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRequest'
+            examples:
+              default:
+                value:
+                  recipientEmail: receiver@example.com
+                  amount: 125.5
+                  reason: Dinner split
+      responses:
+        '201':
+          description: Transfer completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+        '400':
+          description: Validation error, insufficient balance, or invalid amount
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Recipient not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing or invalid CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/ai/chat:
+    post:
+      tags:
+        - AI Assistant
+      summary: Ask the AI assistant a question
+      description: |
+        Runs the authenticated AI assistant. The assistant may query allowlisted
+        account-information tools and prepare a transfer confirmation, but it
+        cannot execute a transfer from chat text. Money movement requires the
+        separate confirmation endpoint.
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiChatRequest'
+            examples:
+              default:
+                value:
+                  message: What is my balance?
+                  conversationId: optional-existing-id
+                  assistantId: oshri
+      responses:
+        '200':
+          description: Assistant response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiChatResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/ai/confirmations/{id}:
+    post:
+      tags:
+        - AI Assistant
+      summary: Confirm or deny an AI-prepared transfer
+      description: |
+        Executes or cancels a pending transfer prepared by the AI assistant.
+        Confirmation ids are scoped to the authenticated user and expire.
+        Only confirmations with status `pending` can execute. Confirmations
+        that were replaced by a newer card are rejected with 409.
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Pending transfer confirmation id.
+        - name: Idempotency-Key
+          in: header
+          required: false
+          schema:
+            type: string
+            minLength: 8
+            maxLength: 120
+          description: Optional client-generated retry key for this confirmation action.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AiConfirmationRequest'
+            examples:
+              confirm:
+                value:
+                  action: confirm
+                  version: 1
+                  idempotencyKey: 1a36fd87-995c-4d73-b1a0-5bb8de8eea51
+              deny:
+                value:
+                  action: deny
+                  version: 1
+                  idempotencyKey: 1a36fd87-995c-4d73-b1a0-5bb8de8eea51
+      responses:
+        '200':
+          description: Confirmation result
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AiConfirmationResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Confirmation expired, already used, or superseded
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/ErrorResponse'
+                  - $ref: '#/components/schemas/AiSupersededConfirmationError'
+        '403':
+          description: Missing or invalid CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  parameters:
+    PageParam:
+      in: query
+      name: page
+      schema:
+        type: integer
+        minimum: 1
+        default: 1
+      description: Page number to return
+    LimitParam:
+      in: query
+      name: limit
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+        default: 10
+      description: Maximum number of records to return
+    CsrfTokenHeader:
+      in: header
+      name: X-CSRF-Token
+      required: true
+      schema:
+        type: string
+      description: Value from the readable virly_csrf cookie. Required for authenticated unsafe methods.
+
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: virly_auth
+
+  schemas:
+    RegisterRequest:
+      type: object
+      required:
+        - email
+        - password
+        - phone
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        password:
+          type: string
+          format: password
+          minLength: 8
+          example: StrongPass123!
+        phone:
+          type: string
+          description: E.164 formatted phone number
+          example: "+15551234567"
+
+    RegisterResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: Verification email sent to user@example.com
+
+    LoginRequest:
+      type: object
+      required:
+        - email
+        - password
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          format: password
+        rememberMe:
+          type: boolean
+          default: false
+          description: When true, auth and CSRF cookies are persistent for 30 days and refreshed on each successful login. When false or omitted, browser-session cookies are used.
+
+    ResendVerificationRequest:
+      type: object
+      required:
+        - email
+      properties:
+        email:
+          type: string
+          format: email
+          example: user@example.com
+
+    AuthSuccessResponse:
+      type: object
+      required:
+        - user
+      properties:
+        user:
+          $ref: '#/components/schemas/User'
+
+    User:
+      type: object
+      required:
+        - id
+        - email
+        - balance
+        - personalDetailsId
+        - personalDetailsStatus
+        - needsPersonalDetails
+      properties:
+        id:
+          type: string
+          example: 6630c4b2e93e5f6c8a321001
+        email:
+          type: string
+          format: email
+          example: user@example.com
+        balance:
+          type: number
+          format: double
+          example: 1042.75
+        personalDetailsId:
+          type: string
+          example: 6630c4b2e93e5f6c8a321010
+        personalDetailsStatus:
+          type: string
+          enum:
+            - not_provided
+            - provided
+          example: not_provided
+        needsPersonalDetails:
+          type: boolean
+          example: true
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-04-28T09:15:00.000Z"
+
+    PersonalDetailsRequest:
+      type: object
+      required:
+        - firstName
+        - lastName
+        - dateOfBirth
+        - address
+      properties:
+        firstName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Ada
+        lastName:
+          type: string
+          minLength: 1
+          maxLength: 100
+          example: Lovelace
+        dateOfBirth:
+          type: string
+          format: date
+          example: "1990-01-15"
+        address:
+          $ref: '#/components/schemas/PersonalDetailsAddressRequest'
+
+    PersonalDetailsAddressRequest:
+      type: object
+      required:
+        - country
+        - city
+        - street
+        - postalCode
+      properties:
+        country:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: Israel
+        stateRegion:
+          type: string
+          nullable: true
+          maxLength: 120
+          example: Tel Aviv District
+        city:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: Tel Aviv
+        street:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: Rothschild Boulevard 1
+        addressLine2:
+          type: string
+          nullable: true
+          maxLength: 120
+          example: Apt 4
+        postalCode:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: "6516101"
+
+    PersonalDetails:
+      type: object
+      required:
+        - id
+        - status
+        - firstName
+        - lastName
+        - dateOfBirth
+        - address
+        - lastSkippedAt
+      properties:
+        id:
+          type: string
+          example: 6630c4b2e93e5f6c8a321010
+        status:
+          type: string
+          enum:
+            - not_provided
+            - provided
+          example: provided
+        firstName:
+          type: string
+          nullable: true
+          example: Ada
+        lastName:
+          type: string
+          nullable: true
+          example: Lovelace
+        dateOfBirth:
+          type: string
+          nullable: true
+          format: date-time
+          example: "1990-01-15T00:00:00.000Z"
+        address:
+          $ref: '#/components/schemas/PersonalDetailsAddress'
+        lastSkippedAt:
+          type: string
+          nullable: true
+          format: date-time
+          example: "2026-04-28T09:30:00.000Z"
+        createdAt:
+          type: string
+          format: date-time
+          example: "2026-04-28T09:15:00.000Z"
+        updatedAt:
+          type: string
+          format: date-time
+          example: "2026-04-28T09:20:00.000Z"
+
+    PersonalDetailsAddress:
+      type: object
+      required:
+        - country
+        - city
+        - street
+        - postalCode
+      properties:
+        country:
+          type: string
+          nullable: true
+        stateRegion:
+          type: string
+          nullable: true
+        city:
+          type: string
+          nullable: true
+        street:
+          type: string
+          nullable: true
+        addressLine2:
+          type: string
+          nullable: true
+        postalCode:
+          type: string
+          nullable: true
+
+    PersonalDetailsResponse:
+      type: object
+      required:
+        - personalDetails
+      properties:
+        personalDetails:
+          $ref: '#/components/schemas/PersonalDetails'
+
+    Transaction:
+      type: object
+      required:
+        - id
+        - amount
+        - counterpartyEmail
+        - date
+      properties:
+        id:
+          type: string
+          example: 6630c68ce93e5f6c8a321099
+        amount:
+          type: number
+          format: double
+          description: Signed amount. Debits are negative and credits are positive.
+          example: -125.5
+        counterpartyEmail:
+          type: string
+          format: email
+          example: receiver@example.com
+        date:
+          type: string
+          format: date-time
+          example: "2026-04-28T10:00:00.000Z"
+        reason:
+          type: string
+          nullable: true
+          example: Dinner split
+
+    AccountSummaryResponse:
+      type: object
+      required:
+        - balance
+        - personalDetails
+        - transactions
+        - pagination
+      properties:
+        balance:
+          type: number
+          format: double
+          example: 1042.75
+        personalDetails:
+          type: object
+          required:
+            - id
+            - status
+            - needsPersonalDetails
+          properties:
+            id:
+              type: string
+              example: 6630c4b2e93e5f6c8a321010
+            status:
+              type: string
+              enum:
+                - not_provided
+                - provided
+              example: not_provided
+            firstName:
+              type: string
+              nullable: true
+              example: Ada
+            needsPersonalDetails:
+              type: boolean
+              example: true
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    TransactionsResponse:
+      type: object
+      required:
+        - transactions
+        - pagination
+      properties:
+        transactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    TransferRequest:
+      type: object
+      required:
+        - recipientEmail
+        - amount
+      properties:
+        recipientEmail:
+          type: string
+          format: email
+          example: receiver@example.com
+        amount:
+          type: number
+          format: double
+          exclusiveMinimum: true
+          minimum: 0
+          example: 125.5
+        reason:
+          type: string
+          maxLength: 200
+          example: Dinner split
+
+    TransferResponse:
+      type: object
+      required:
+        - message
+        - transaction
+        - newBalance
+      properties:
+        message:
+          type: string
+          example: Transfer completed successfully.
+        transaction:
+          $ref: '#/components/schemas/Transaction'
+        newBalance:
+          type: number
+          format: double
+          example: 917.25
+
+    AiChatRequest:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          minLength: 1
+          maxLength: 2000
+          example: What is my checking balance?
+        conversationId:
+          type: string
+          minLength: 1
+          maxLength: 120
+          example: 4b26485d-5e88-4b2b-a09f-05d66bd01157
+        assistantId:
+          type: string
+          default: oshri
+          enum:
+            - oshri
+            - chaya
+            - yehuda
+            - yohai_daniel
+          example: oshri
+
+    AiChatResponse:
+      type: object
+      required:
+        - message
+        - conversationId
+        - assistantId
+        - intent
+        - toolCalls
+      properties:
+        message:
+          type: string
+          example: Your Virly account available balance is 125.00.
+        conversationId:
+          type: string
+          example: 4b26485d-5e88-4b2b-a09f-05d66bd01157
+        assistantId:
+          type: string
+          enum:
+            - oshri
+            - chaya
+            - yehuda
+            - yohai_daniel
+          example: oshri
+        intent:
+          $ref: '#/components/schemas/AssistantIntent'
+          example: balance_inquiry
+        toolCalls:
+          type: array
+          items:
+            $ref: '#/components/schemas/AiToolName'
+          example:
+            - getUserAccounts
+            - getAccountBalance
+        toolResults:
+          type: array
+          items:
+            $ref: '#/components/schemas/AiToolCallResult'
+        clarification:
+          $ref: '#/components/schemas/AiClarificationRequest'
+        confirmation:
+          $ref: '#/components/schemas/AiTransferConfirmation'
+        supersededConfirmationId:
+          type: string
+          description: Previous pending confirmation id that the returned confirmation replaces.
+          example: 6650cc68782e55fbbf857111
+
+    AssistantIntent:
+      type: string
+      enum:
+        - balance_inquiry
+        - account_summary
+        - recent_transactions
+        - transaction_search
+        - transaction_summary
+        - transaction_count
+        - transaction_detail
+        - transaction_stats
+        - cashflow_summary
+        - counterparty_lookup
+        - recent_sent_counterparties
+        - recent_received_counterparties
+        - counterparty_summary
+        - counterparty_activity_timeline
+        - last_sent_counterparty
+        - counterparty_transactions
+        - counterparty_total_sent
+        - verified_recipients
+        - recipient_profile
+        - transfer_prepare
+        - transfer_modify_pending
+        - transfer_cancel_pending
+        - transfer_limits
+        - transfer_eligibility
+        - transfer_quote
+        - daily_transfer_usage
+        - transfer_status
+        - pending_ai_transfers
+        - pending_confirmation_status
+        - general_help
+        - unsafe_request
+        - unsupported
+
+    AiToolName:
+      type: string
+      enum:
+        - getUserAccounts
+        - getAccountBalance
+        - getRecentTransactions
+        - getLastSentCounterparty
+        - getTransactionsWithCounterparty
+        - getTotalSentToCounterparty
+        - getVerifiedRecipients
+        - getTransferLimits
+        - getRecentSentCounterparties
+        - getRecentReceivedCounterparties
+        - getCounterpartySummary
+        - getCounterpartyActivityTimeline
+        - resolveCounterpartyCandidates
+        - searchTransactions
+        - getTransactionStats
+        - resolveTransactionReference
+        - getTransactionReceipt
+        - getTransferEligibility
+        - getTransferQuote
+        - getDailyTransferUsage
+        - getPendingAiTransfers
+        - resolvePendingTransferReference
+        - getCashflowSummary
+        - getMyProfile
+        - getAvailableActions
+
+    AiToolStatus:
+      type: string
+      enum:
+        - ok
+        - empty
+        - error
+
+    AiToolCallResult:
+      type: object
+      required:
+        - toolName
+        - status
+      properties:
+        toolName:
+          $ref: '#/components/schemas/AiToolName'
+        status:
+          $ref: '#/components/schemas/AiToolStatus'
+
+    AiClarificationRequest:
+      type: object
+      required:
+        - reason
+        - message
+        - expectedReplyType
+      properties:
+        reason:
+          type: string
+          enum:
+            - ambiguous_recipient
+            - missing_recipient
+            - missing_amount
+            - ambiguous_amount
+            - unsupported_currency
+            - missing_date_range
+            - ambiguous_reference
+            - ambiguous_transaction
+            - ambiguous_pending_transfer
+            - unresolved_reference
+        message:
+          type: string
+          example: I found multiple matching counterparties: Daniel A, Daniel B. Which one do you mean?
+        expectedReplyType:
+          type: string
+          enum:
+            - recipient
+            - amount
+            - currency
+            - date_range
+            - transaction
+            - pending_transfer
+            - yes_no
+            - option_selection
+            - free_text
+        options:
+          type: array
+          items:
+            type: object
+            required:
+              - id
+              - label
+              - value
+            properties:
+              id:
+                type: string
+              label:
+                type: string
+              value:
+                type: string
+
+    AiTransferConfirmation:
+      type: object
+      required:
+        - id
+        - version
+        - type
+        - status
+        - recipientEmail
+        - recipientFirstName
+        - recipientLastName
+        - amount
+        - currency
+        - recipient
+        - amountDetails
+        - reason
+        - warnings
+        - expiresAt
+        - confirmAction
+        - denyAction
+      properties:
+        id:
+          type: string
+          example: 6650cc68782e55fbbf857111
+        version:
+          type: integer
+          minimum: 1
+          example: 1
+        type:
+          type: string
+          enum:
+            - transfer
+        status:
+          type: string
+          enum:
+            - pending
+        recipientEmail:
+          type: string
+          format: email
+          example: moran@example.com
+        recipientFirstName:
+          type: string
+          nullable: true
+          example: Moran
+        recipientLastName:
+          type: string
+          nullable: true
+          example: Ayal
+        amount:
+          type: number
+          example: 50
+        currency:
+          type: string
+          enum:
+            - ILS
+          example: ILS
+        recipient:
+          type: object
+          required:
+            - email
+            - firstName
+            - lastName
+            - displayName
+            - verified
+          properties:
+            email:
+              type: string
+              format: email
+              example: moran@example.com
+            firstName:
+              type: string
+              nullable: true
+              example: Moran
+            lastName:
+              type: string
+              nullable: true
+              example: Ayal
+            displayName:
+              type: string
+              example: Moran Ayal
+            verified:
+              type: boolean
+              example: true
+        amountDetails:
+          type: object
+          required:
+            - value
+            - currency
+            - formatted
+          properties:
+            value:
+              type: number
+              example: 50
+            currency:
+              type: string
+              enum:
+                - ILS
+            formatted:
+              type: string
+              example: ₪50.00
+        reason:
+          type: string
+          nullable: true
+          example: Dinner
+        warnings:
+          type: array
+          items:
+            type: object
+            required:
+              - code
+              - message
+            properties:
+              code:
+                type: string
+                enum:
+                  - MISSING_RECIPIENT_NAME
+                  - NEW_RECIPIENT
+                  - HIGH_AMOUNT
+                  - NEAR_DAILY_LIMIT
+                  - CURRENCY_ASSUMED
+              message:
+                type: string
+        confirmAction:
+          $ref: '#/components/schemas/AiConfirmationActionDescriptor'
+        denyAction:
+          $ref: '#/components/schemas/AiConfirmationActionDescriptor'
+        expiresAt:
+          type: string
+          format: date-time
+        supersedesId:
+          type: string
+          nullable: true
+          description: Previous pending confirmation id replaced by this card, when created by a pending-transfer modification.
+          example: 6650cc68782e55fbbf857111
+
+    AiConfirmationActionDescriptor:
+      type: object
+      required:
+        - method
+        - path
+        - body
+      properties:
+        method:
+          type: string
+          enum:
+            - POST
+        path:
+          type: string
+          example: /api/ai/confirmations/6650cc68782e55fbbf857111
+        body:
+          type: object
+          required:
+            - action
+            - version
+          properties:
+            action:
+              type: string
+              enum:
+                - confirm
+                - deny
+            version:
+              type: integer
+              minimum: 1
+              example: 1
+
+    AiConfirmationRequest:
+      type: object
+      required:
+        - action
+        - version
+      properties:
+        action:
+          type: string
+          enum:
+            - confirm
+            - deny
+        version:
+          type: integer
+          minimum: 1
+          example: 1
+        idempotencyKey:
+          type: string
+          minLength: 8
+          maxLength: 120
+          example: 1a36fd87-995c-4d73-b1a0-5bb8de8eea51
+
+    AiConfirmationResponse:
+      oneOf:
+        - type: object
+          required:
+            - status
+            - message
+            - newBalance
+            - transaction
+          properties:
+            status:
+              type: string
+              enum:
+                - confirmed
+            message:
+              type: string
+              example: Transfer completed successfully.
+            newBalance:
+              type: number
+              example: 75
+            transaction:
+              $ref: '#/components/schemas/Transaction'
+        - type: object
+          required:
+            - status
+            - message
+          properties:
+            status:
+              type: string
+              enum:
+                - denied
+            message:
+              type: string
+              example: Transfer cancelled.
+
+    AiSupersededConfirmationError:
+      type: object
+      required:
+        - message
+        - error
+      properties:
+        message:
+          type: string
+          example: This transfer confirmation was replaced by a newer one. Please review and confirm the latest transfer card.
+        error:
+          type: string
+          enum:
+            - confirmation_superseded
+        supersededById:
+          type: string
+          nullable: true
+          example: 6650cc68782e55fbbf857222
+
+    Pagination:
+      type: object
+      required:
+        - page
+        - limit
+        - total
+        - totalPages
+      properties:
+        page:
+          type: integer
+          example: 1
+        limit:
+          type: integer
+          example: 10
+        total:
+          type: integer
+          example: 42
+        totalPages:
+          type: integer
+          example: 5
+
+    MessageResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: Logged out successfully
+
+    ErrorResponse:
+      type: object
+      required:
+        - message
+      properties:
+        message:
+          type: string
+          example: Invalid credentials
+        details:
+          type: array
+          items:
+            type: string
+        issues:
+          type: array
+          items:
+            type: object
+            required:
+              - path
+              - message
+            properties:
+              path:
+                type: string
+                example: email
+              message:
+                type: string
+                example: Invalid email
