@@ -18,6 +18,10 @@
 !*.json
 !*.yaml
 !*.png
+!*.jpg
+!*.jpeg
+!*.ico
+!*.svg
 !*.env
 !*.css
 !*.html
