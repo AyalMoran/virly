@@ -3,11 +3,9 @@ import { z } from "zod";
 import { config } from "../config.js";
 import { getAssistantPersonality } from "./assistants.js";
 import { assistantSystemPolicy } from "./policy.js";
-import { maskEmail } from "./counterpartyMemory.js";
 import {
   assistantIntentValues,
   type AssistantIntent,
-  type ChatMessage,
   type AssistantLlmProvider,
   type ClassifyAssistantIntentInput,
   type ComposeAssistantResponseInput,
@@ -16,23 +14,6 @@ import {
   type ResolveCounterpartyReferenceInput,
   type ToolResultMetadata
 } from "./state.js";
-
-export function maskEmailsInText(text: string) {
-  return text.replace(
-    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,
-    (email) => maskEmail(email)
-  );
-}
-
-export function sanitizeMessagesForLlm(messages: ChatMessage[]) {
-  return messages.map((message) => ({
-    ...message,
-    content:
-      message.role === "assistant"
-        ? maskEmailsInText(message.content)
-        : message.content
-  }));
-}
 
 const intentValues = assistantIntentValues;
 
@@ -45,9 +26,18 @@ const responseSchema = z.object({
   message: z.string().min(1)
 });
 
+function normalizeEmail(raw: unknown) {
+  if (raw == null) return raw;
+
+  const text = String(raw).trim();
+  const match = text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+
+  return match?.[0]?.toLowerCase() ?? text;
+}
+
 const transferDraftSchema = z.object({
   recipientReference: z.string().max(120).nullable(),
-  recipientEmail: z.string().email().nullable(),
+  recipientEmail: z.preprocess(normalizeEmail, z.string().email()).nullable(),
   amount: z.number().positive().nullable(),
   amountText: z.string().max(80).nullable(),
   amountReferenceText: z.string().max(120).nullable(),
@@ -121,9 +111,7 @@ function createChatModel(temperature: number) {
 }
 
 function buildClassifierPrompt(input: ClassifyAssistantIntentInput) {
-  const recentMessages = sanitizeMessagesForLlm(input.messages)
-    .slice(-8)
-    .map((message) => ({
+  const recentMessages = input.messages.slice(-8).map((message) => ({
     role: message.role,
     content: message.content
   }));
@@ -402,9 +390,7 @@ function buildClassifierPrompt(input: ClassifyAssistantIntentInput) {
 }
 
 function buildTransferDraftPrompt(input: ExtractTransferDraftInput) {
-  const recentMessages = sanitizeMessagesForLlm(input.messages)
-    .slice(-8)
-    .map((message) => ({
+  const recentMessages = input.messages.slice(-8).map((message) => ({
     role: message.role,
     content: message.content
   }));
@@ -496,9 +482,7 @@ function buildResponsePrompt(input: ComposeAssistantResponseInput) {
     summary: result.summary,
     metadata: sanitizeMetadata(result.metadata)
   }));
-  const recentMessages = sanitizeMessagesForLlm(input.messages)
-    .slice(-6)
-    .map((message) => ({
+  const recentMessages = input.messages.slice(-6).map((message) => ({
     role: message.role,
     content: message.content
   }));
@@ -539,9 +523,7 @@ function buildReferenceResolverPrompt(input: ResolveCounterpartyReferenceInput) 
         input.memory.lastCounterparty?.email === counterparty.email
     })
   );
-  const recentMessages = sanitizeMessagesForLlm(input.messages)
-    .slice(-8)
-    .map((message) => ({
+  const recentMessages = input.messages.slice(-8).map((message) => ({
     role: message.role,
     content: message.content
   }));
