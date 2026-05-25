@@ -39,8 +39,10 @@ export function setUnauthorizedHandler(handler: (() => void) | null) {
   onUnauthorized = handler;
 }
 
-function normalizeEmail(email: string) {
-  return email.trim().toLowerCase();
+export function normalizeEmail(raw: unknown): string {
+  const text = String(raw ?? "").trim();
+  const match = text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+  return match?.[0]?.toLowerCase() ?? text;
 }
 
 function readCookie(name: string) {
