@@ -2,11 +2,13 @@ import { ChatOpenAI } from "@langchain/openai";
 import { z } from "zod";
 import { config } from "../config.js";
 import { getAssistantPersonality } from "./assistants.js";
+import { maskEmail } from "./counterpartyMemory.js";
 import { assistantSystemPolicy } from "./policy.js";
 import {
   assistantIntentValues,
   type AssistantIntent,
   type AssistantLlmProvider,
+  type ChatMessage,
   type ClassifyAssistantIntentInput,
   type ComposeAssistantResponseInput,
   type CounterpartyReferenceResolution,
@@ -16,6 +18,23 @@ import {
 } from "./state.js";
 
 const intentValues = assistantIntentValues;
+
+export function maskEmailsInText(text: string) {
+  return text.replace(
+    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,
+    (email) => maskEmail(email)
+  );
+}
+
+export function sanitizeMessagesForLlm(messages: ChatMessage[]) {
+  return messages.map((message) => ({
+    ...message,
+    content:
+      message.role === "assistant"
+        ? maskEmailsInText(message.content)
+        : message.content
+  }));
+}
 
 const classificationSchema = z.object({
   intent: z.enum(intentValues),
@@ -111,7 +130,7 @@ function createChatModel(temperature: number) {
 }
 
 function buildClassifierPrompt(input: ClassifyAssistantIntentInput) {
-  const recentMessages = input.messages.slice(-8).map((message) => ({
+  const recentMessages = sanitizeMessagesForLlm(input.messages).slice(-8).map((message) => ({
     role: message.role,
     content: message.content
   }));
@@ -390,7 +409,7 @@ function buildClassifierPrompt(input: ClassifyAssistantIntentInput) {
 }
 
 function buildTransferDraftPrompt(input: ExtractTransferDraftInput) {
-  const recentMessages = input.messages.slice(-8).map((message) => ({
+  const recentMessages = sanitizeMessagesForLlm(input.messages).slice(-8).map((message) => ({
     role: message.role,
     content: message.content
   }));
@@ -482,7 +501,7 @@ function buildResponsePrompt(input: ComposeAssistantResponseInput) {
     summary: result.summary,
     metadata: sanitizeMetadata(result.metadata)
   }));
-  const recentMessages = input.messages.slice(-6).map((message) => ({
+  const recentMessages = sanitizeMessagesForLlm(input.messages).slice(-6).map((message) => ({
     role: message.role,
     content: message.content
   }));
@@ -523,7 +542,7 @@ function buildReferenceResolverPrompt(input: ResolveCounterpartyReferenceInput) 
         input.memory.lastCounterparty?.email === counterparty.email
     })
   );
-  const recentMessages = input.messages.slice(-8).map((message) => ({
+  const recentMessages = sanitizeMessagesForLlm(input.messages).slice(-8).map((message) => ({
     role: message.role,
     content: message.content
   }));
