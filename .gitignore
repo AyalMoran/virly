@@ -13,6 +13,17 @@
 !*.hpp
 !*.md
 !*.sh
+!*.ts*
+!*.js*
+!*.json
+!*.yaml
+!*.png
+!*.env
+!*.css
+!*.html
+!*.xml
+!*.yml
+!*.conf
 
 # MAKEFILES
 !*.mk
@@ -31,3 +42,4 @@
 node_modules/
 build/
 
+projects/bank-fs/scripts/seed-transactions.sh
