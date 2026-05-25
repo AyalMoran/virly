@@ -3,6 +3,37 @@ import { getIntEnv, getOptionalStringEnv, getStringEnv } from "./utils/env.js";
 
 dotenv.config();
 
+export const isProduction = process.env.NODE_ENV === "production";
+
+type CookieSameSite = "lax" | "strict" | "none";
+
+function normalizeOrigins(value: string) {
+  return value
+    .split(",")
+    .map((origin) => origin.trim().replace(/\/+$/, ""))
+    .filter(Boolean);
+}
+
+function getCookieSameSite(): CookieSameSite {
+  const value = getStringEnv(
+    "VIRLY_COOKIE_SAME_SITE",
+    isProduction ? "none" : "lax",
+    {
+      aliases: ["COOKIE_SAME_SITE"]
+    }
+  ).toLowerCase();
+
+  if (value !== "lax" && value !== "strict" && value !== "none") {
+    throw new Error("VIRLY_COOKIE_SAME_SITE must be one of: lax, strict, none.");
+  }
+
+  return value;
+}
+
+const clientUrl = getStringEnv("VIRLY_CLIENT_URL", "http://localhost:5173", {
+  aliases: ["CLIENT_URL"]
+});
+
 export const config = {
   port: getIntEnv("VIRLY_PORT", {
     defaultValue: 3000,
@@ -10,9 +41,8 @@ export const config = {
     max: 65535,
     aliases: ["PORT"]
   }),
-  clientUrl: getStringEnv("VIRLY_CLIENT_URL", "http://localhost:5173", {
-    aliases: ["CLIENT_URL"]
-  }),
+  clientUrl,
+  clientUrls: normalizeOrigins(clientUrl),
   serverUrl: getStringEnv("VIRLY_SERVER_URL", "http://localhost:3000", {
     aliases: ["SERVER_URL"]
   }),
@@ -51,7 +81,8 @@ export const config = {
     openAIApiKey: getStringEnv("OPENAI_API_KEY", "", {
       aliases: ["OPENAI_API_KEY"]
     })
+  },
+  cookies: {
+    sameSite: getCookieSameSite()
   }
 };
-
-export const isProduction = process.env.NODE_ENV === "production";

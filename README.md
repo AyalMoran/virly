@@ -79,12 +79,27 @@ GET /api/auth/verify?token=<verificationToken>
 
 Successful login and email verification set two cookies:
 
-- `virly_auth`: HttpOnly, Secure, SameSite=Lax JWT session cookie
-- `virly_csrf`: Secure, SameSite=Lax CSRF cookie readable by the frontend
+- `virly_auth`: HttpOnly, Secure JWT session cookie
+- `virly_csrf`: Secure CSRF cookie readable by the frontend
+
+Cookies use `SameSite=Lax` locally by default. For cross-site deployments such as Vercel frontend + Render API, set `VIRLY_COOKIE_SAME_SITE=none` on the backend so browser `fetch` requests can include the auth cookies.
 
 On login, the Remember me checkbox controls cookie persistence. When checked, both cookies are persistent for 30 days and the expiration is refreshed on each successful login. When unchecked, the backend sets browser-session cookies without `Max-Age`; browsers generally clear those when the browser session ends, although "restore previous session" settings may preserve them.
 
 Email verification auto-login uses browser-session cookies by default. The frontend sends API requests with credentials included. Authenticated unsafe requests (`POST`, `PUT`, `PATCH`, `DELETE`) also send `X-CSRF-Token` with the value from `virly_csrf`.
+
+## Deploy
+
+For Vercel + Render + Atlas:
+
+- Vercel client env: `VITE_API_BASE_URL=https://<your-render-api>.onrender.com`
+- Render server env: `VIRLY_CLIENT_URL=https://<your-vercel-app>.vercel.app`
+- Render server env: `VIRLY_SERVER_URL=https://<your-render-api>.onrender.com`
+- Render server env: `VIRLY_COOKIE_SAME_SITE=none`
+- Render server env: `VIRLY_MONGODB_URI=<your-atlas-uri>`
+- Render server env: `VIRLY_JWT_SECRET=<long-random-secret>`
+
+`VIRLY_CLIENT_URL` may contain comma-separated origins if you need both production and preview frontend URLs. Do not use a wildcard when `credentials: "include"` is enabled.
 
 ## Default API
 

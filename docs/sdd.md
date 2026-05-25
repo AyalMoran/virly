@@ -64,8 +64,8 @@ The backend is a RESTful HTTP API server built with Node.js and Express. It is r
 | CORS               | Cross-Origin Resource Sharing — a browser mechanism that controls which origins may call an API |
 | HTTP               | Hypertext Transfer Protocol — the communication protocol used between the client and server |
 | JWT                | JSON Web Token — a compact, signed token used server-side to represent an authenticated identity |
-| Auth cookie        | `virly_auth` — an HttpOnly, Secure, SameSite=Lax cookie containing the signed JWT session |
-| CSRF cookie        | `virly_csrf` — a Secure, SameSite=Lax cookie readable by the frontend and echoed in `X-CSRF-Token` for unsafe authenticated requests |
+| Auth cookie        | `virly_auth` — an HttpOnly, Secure cookie containing the signed JWT session |
+| CSRF cookie        | `virly_csrf` — a Secure cookie readable by the frontend and echoed in `X-CSRF-Token` for unsafe authenticated requests |
 | Verification token | A short-lived signed string embedded in the email verification link |
 | Pagination         | A technique for splitting a large result set into discrete pages returned one at a time |
 | REST               | Representational State Transfer — an architectural style for stateless HTTP APIs |
@@ -107,7 +107,7 @@ All protected endpoints require the browser to send the `virly_auth` cookie:
 Cookie: virly_auth=<JWT session>
 ```
 
-The cookie is set by the backend with `HttpOnly`, `Secure`, `SameSite=Lax`, and `Path=/`. Login controls persistence with `rememberMe`: `true` adds a 30-day `Max-Age` and refreshes expiration on each successful login, while `false` or omitted uses browser-session cookies without `Max-Age`. Browser restore-session settings may preserve session cookies depending on the browser. The JWT payload contains only identity/session metadata:
+The cookie is set by the backend with `HttpOnly`, `Secure`, a configured `SameSite` value, and `Path=/`. Local development defaults to `SameSite=Lax`; cross-site deployments such as Vercel frontend + Render API should use `VIRLY_COOKIE_SAME_SITE=none` so browser `fetch` requests can include cookies. Login controls persistence with `rememberMe`: `true` adds a 30-day `Max-Age` and refreshes expiration on each successful login, while `false` or omitted uses browser-session cookies without `Max-Age`. Browser restore-session settings may preserve session cookies depending on the browser. The JWT payload contains only identity/session metadata:
 
 ```json
 {
