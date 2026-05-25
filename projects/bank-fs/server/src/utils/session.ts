@@ -1,5 +1,6 @@
 import crypto from "node:crypto";
 import { Response } from "express";
+import { config } from "../config.js";
 import {
   AUTH_COOKIE_NAME,
   CSRF_COOKIE_NAME,
@@ -14,7 +15,7 @@ type AuthCookieOptions = {
 
 const baseCookieOptions = {
   secure: true,
-  sameSite: "lax" as const,
+  sameSite: config.cookies.sameSite,
   path: "/"
 };
 

@@ -13,13 +13,20 @@ export const app = express();
 
 app.use(
   cors({
-    origin: config.clientUrl,
+    origin: config.clientUrls,
     credentials: true
   })
 );
 app.use(parseCookies);
 app.use(express.json());
 app.use(morgan("dev"));
+
+app.get("/", (_req, res) => {
+  return res.json({ name: "Virly API", status: "ok" });
+});
+app.get("/api/health", (_req, res) => {
+  return res.json({ status: "ok" });
+});
 
 app.use("/api/auth", authRoutes);
 app.use("/api/accounts", userRoutes);
