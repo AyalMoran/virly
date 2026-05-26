@@ -52,18 +52,10 @@ export const config = {
   jwtSecret: getStringEnv("VIRLY_JWT_SECRET", "change-me-in-production", {
     aliases: ["JWT_SECRET"]
   }),
-  smtp: {
-    host: getOptionalStringEnv("VIRLY_SMTP_HOST", { aliases: ["SMTP_HOST"] }),
-    port: getIntEnv("VIRLY_SMTP_PORT", {
-      defaultValue: 587,
-      min: 1,
-      max: 65535,
-      aliases: ["SMTP_PORT"]
-    }),
-    user: getOptionalStringEnv("VIRLY_SMTP_USER", { aliases: ["SMTP_USER"] }),
-    pass: getOptionalStringEnv("VIRLY_SMTP_PASS", { aliases: ["SMTP_PASS"] }),
-    from: getStringEnv("VIRLY_SMTP_FROM", "virly@example.com", {
-      aliases: ["SMTP_FROM"]
+  email: {
+    resendApiKey: getOptionalStringEnv("RESEND_API_KEY"),
+    from: getStringEnv("VIRLY_EMAIL_FROM", "Virly <verify@example.com>", {
+      aliases: ["EMAIL_FROM"]
     })
   },
   ai: {

@@ -53,9 +53,9 @@ npm run dev:client
 
 ## Email Verification
 
-If SMTP credentials are configured, the backend sends a real email containing a verification button.
+If Resend credentials are configured, the backend sends a real email containing a verification button.
 
-If SMTP is not configured, the backend logs the verification link to the server console so the flow is still easy to test locally.
+If Resend is not configured or email delivery fails, the backend logs the verification link to the server console so the flow is still easy to test locally.
 
 Registration uses:
 
@@ -98,8 +98,12 @@ For Vercel + Render + Atlas:
 - Render server env: `VIRLY_COOKIE_SAME_SITE=none`
 - Render server env: `VIRLY_MONGODB_URI=<your-atlas-uri>`
 - Render server env: `VIRLY_JWT_SECRET=<long-random-secret>`
+- Render server env: `RESEND_API_KEY=<your-resend-api-key>`
+- Render server env: `VIRLY_EMAIL_FROM=Virly <verify@your-verified-domain.com>`
 
 `VIRLY_CLIENT_URL` may contain comma-separated origins if you need both production and preview frontend URLs. Do not use a wildcard when `credentials: "include"` is enabled.
+
+Resend must have the sender domain verified before public production delivery works.
 
 ## Default API
 
