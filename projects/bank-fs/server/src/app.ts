@@ -17,6 +17,9 @@ app.use(
     credentials: true
   })
 );
+
+app.set("trust proxy", 1);
+
 app.use(parseCookies);
 app.use(express.json());
 app.use(morgan("dev"));
