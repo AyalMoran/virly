@@ -65,7 +65,7 @@ The backend is a RESTful HTTP API server built with Node.js and Express. It is r
 | HTTP               | Hypertext Transfer Protocol — the communication protocol used between the client and server |
 | JWT                | JSON Web Token — a compact, signed token used server-side to represent an authenticated identity |
 | Auth cookie        | `virly_auth` — an HttpOnly, Secure cookie containing the signed JWT session |
-| CSRF cookie        | `virly_csrf` — a Secure cookie readable by the frontend and echoed in `X-CSRF-Token` for unsafe authenticated requests |
+| CSRF token         | Token bound to the auth JWT hash and echoed in `X-CSRF-Token` for unsafe authenticated requests. Same-origin clients can read it from `virly_csrf`; cross-origin clients receive it in auth JSON responses. |
 | Verification token | A short-lived signed string embedded in the email verification link |
 | Pagination         | A technique for splitting a large result set into discrete pages returned one at a time |
 | REST               | Representational State Transfer — an architectural style for stateless HTTP APIs |
@@ -123,10 +123,10 @@ No user data (balance, email, role) is stored in the token. All user data is fet
 Authenticated unsafe methods (`POST`, `PUT`, `PATCH`, `DELETE`) also require:
 
 ```
-X-CSRF-Token: <value from virly_csrf cookie>
+X-CSRF-Token: <csrfToken response value or value from virly_csrf cookie>
 ```
 
-The server compares the submitted CSRF token with the hash bound into the JWT payload. Public auth endpoints such as register, login, verify, and resend verification do not require CSRF because they do not rely on an existing authenticated cookie session.
+The server compares the submitted CSRF token with the hash bound into the JWT payload. `POST /api/auth/login`, `GET /api/auth/verify`, and `GET /api/auth/me` return `csrfToken` in the JSON response so a Vercel frontend can send the token even though browser JavaScript cannot read cookies scoped to the Render API domain. Public auth endpoints such as register, login, verify, and resend verification do not require CSRF because they do not rely on an existing authenticated cookie session.
 
 ### 2.1.2 Endpoint Summary
 
@@ -153,7 +153,7 @@ The server compares the submitted CSRF token with the hash bound into the JWT pa
 
 `GET /api/auth/verify?token=<verificationToken>`
 - Query param: `token` — the signed verification token from the email link
-- 200: sets `virly_auth` and `virly_csrf`, returns `{ user: { id, email, balance, personalDetailsId, personalDetailsStatus, needsPersonalDetails } }`
+- 200: sets `virly_auth` and `virly_csrf`, returns `{ user: { id, email, balance, personalDetailsId, personalDetailsStatus, needsPersonalDetails }, csrfToken }`
 - 400: token missing, malformed, or expired
 - 404: no user found for this token
 
@@ -161,13 +161,13 @@ The server compares the submitted CSRF token with the hash bound into the JWT pa
 
 `POST /api/auth/login`
 - Body: `{ email, password, rememberMe }` — `rememberMe` defaults to `false`
-- 200: sets `virly_auth` and `virly_csrf`, persistent for 30 days when `rememberMe` is true or browser-session cookies when false, and returns `{ user: { id, email, balance, personalDetailsId, personalDetailsStatus, needsPersonalDetails } }`
+- 200: sets `virly_auth` and `virly_csrf`, persistent for 30 days when `rememberMe` is true or browser-session cookies when false, and returns `{ user: { id, email, balance, personalDetailsId, personalDetailsStatus, needsPersonalDetails }, csrfToken }`
 - 401: wrong credentials
 - 403: account not verified
 
 `GET /api/auth/me`
 - Cookie: `virly_auth` required
-- 200: `{ user: { id, email, balance, personalDetailsId, personalDetailsStatus, needsPersonalDetails } }`
+- 200: `{ user: { id, email, balance, personalDetailsId, personalDetailsStatus, needsPersonalDetails }, csrfToken }` when the CSRF cookie is present and matches the auth cookie
 - 401: missing or invalid auth cookie
 - 404: user no longer exists
 

@@ -47,15 +47,17 @@ async function withServer<T>(fn: (baseUrl: string) => Promise<T>) {
   app.use(parseCookies);
 
   app.post("/issue", (_req, res) => {
-    setAuthCookies(res, "507f1f77bcf86cd799439011");
-    return res.json({ user: { id: "507f1f77bcf86cd799439011" } });
+    const csrfToken = setAuthCookies(res, "507f1f77bcf86cd799439011");
+    return res.json({ user: { id: "507f1f77bcf86cd799439011" }, csrfToken });
   });
   app.post("/issue-persistent", (_req, res) => {
-    setAuthCookies(res, "507f1f77bcf86cd799439011", { rememberMe: true });
-    return res.json({ user: { id: "507f1f77bcf86cd799439011" } });
+    const csrfToken = setAuthCookies(res, "507f1f77bcf86cd799439011", {
+      rememberMe: true
+    });
+    return res.json({ user: { id: "507f1f77bcf86cd799439011" }, csrfToken });
   });
   app.get("/protected", requireAuth, (req, res) => {
-    return res.json({ userId: req.userId });
+    return res.json({ userId: req.userId, csrfToken: req.csrfToken });
   });
   app.post("/protected", requireAuth, (req, res) => {
     return res.json({ userId: req.userId });
@@ -93,14 +95,16 @@ async function withServer<T>(fn: (baseUrl: string) => Promise<T>) {
   }
 }
 
-test("auth session is issued in secure cookies without a response token", async () => {
+test("auth session is issued in secure cookies without a response auth token", async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/issue`, { method: "POST" });
-    const body = (await response.json()) as { token?: string };
+    const body = (await response.json()) as { csrfToken?: string; token?: string };
     const setCookieHeaders = getSetCookieHeaders(response);
+    const csrfToken = getCookieValue(setCookieHeaders, "virly_csrf");
 
     assert.equal(response.status, 200);
     assert.equal(body.token, undefined);
+    assert.equal(body.csrfToken, decodeURIComponent(csrfToken ?? ""));
     assert.ok(
       setCookieHeaders.some(
         (header) =>
@@ -177,15 +181,18 @@ test("protected route rejects missing auth cookie", async () => {
 test("protected route accepts a valid auth cookie", async () => {
   await withServer(async (baseUrl) => {
     const issueResponse = await fetch(`${baseUrl}/issue`, { method: "POST" });
-    const cookieHeader = toCookieHeader(getSetCookieHeaders(issueResponse));
+    const setCookieHeaders = getSetCookieHeaders(issueResponse);
+    const cookieHeader = toCookieHeader(setCookieHeaders);
+    const csrfToken = getCookieValue(setCookieHeaders, "virly_csrf");
 
     const response = await fetch(`${baseUrl}/protected`, {
       headers: { Cookie: cookieHeader }
     });
-    const body = (await response.json()) as { userId: string };
+    const body = (await response.json()) as { userId: string; csrfToken?: string };
 
     assert.equal(response.status, 200);
     assert.equal(body.userId, "507f1f77bcf86cd799439011");
+    assert.equal(body.csrfToken, decodeURIComponent(csrfToken ?? ""));
   });
 });
 

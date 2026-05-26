@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { config } from "../config.js";
-import { AUTH_COOKIE_NAME } from "../utils/auth.js";
+import { AUTH_COOKIE_NAME, CSRF_COOKIE_NAME } from "../utils/auth.js";
 import { hashCsrfToken } from "../utils/session.js";
 
 const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
@@ -21,6 +21,15 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     const payload = jwt.verify(token, config.jwtSecret) as jwt.JwtPayload;
     if (!payload.userId) {
       return res.status(401).json({ message: "Invalid or expired token." });
+    }
+
+    const csrfCookieToken = req.cookies[CSRF_COOKIE_NAME];
+    if (
+      csrfCookieToken &&
+      typeof payload.csrfTokenHash === "string" &&
+      hashCsrfToken(csrfCookieToken) === payload.csrfTokenHash
+    ) {
+      req.csrfToken = csrfCookieToken;
     }
 
     if (unsafeMethods.has(req.method)) {
