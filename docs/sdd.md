@@ -70,7 +70,7 @@ The backend is a RESTful HTTP API server built with Node.js and Express. It is r
 | Pagination         | A technique for splitting a large result set into discrete pages returned one at a time |
 | REST               | Representational State Transfer — an architectural style for stateless HTTP APIs |
 | SDD                | Software Design Document — a document describing the intended design of a software system |
-| SMTP               | Simple Mail Transfer Protocol — the protocol used to send email messages |
+| Resend             | Email API provider used to deliver verification-link emails |
 | 
 
 ---
@@ -91,7 +91,7 @@ Virly follows a client-server web architecture. The React frontend owns browser 
 └──────┬─────────────────────────┬────┘
        │                         │    
 ┌──────▼──────────┐     ┌────────▼────────┐
-│    MongoDB      │     │  SMTP Provider  │
+│    MongoDB      │     │  Resend API     │
 │  ( Mongoose )   │     │  Verification   │
 └─────────────────┘     │  email delivery │
                         └─────────────────┘

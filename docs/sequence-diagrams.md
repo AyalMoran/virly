@@ -9,7 +9,7 @@ It is based on the current repository documentation in `README.md` and `docs/vir
 - `Frontend`: React client application
 - `Backend API`: Node.js + Express server
 - `Database`: MongoDB persistence layer
-- `Email Service`: SMTP provider or development fallback
+- `Email Service`: Resend Email API or development fallback
 
 ## 1. Registration and Verification Link Dispatch
 
@@ -43,11 +43,11 @@ sequenceDiagram
             BackendAPI->>Database: Save pending user with token hash and expiry
             Database-->>BackendAPI: Pending user created
 
-            alt SMTP configured
+            alt Resend configured
                 BackendAPI->>EmailService: Send verification link email
                 EmailService-->>BackendAPI: Delivery accepted
                 BackendAPI-->>Frontend: 201 Registration started
-            else SMTP not configured
+            else Resend missing or delivery failed
                 BackendAPI->>BackendAPI: Log verification link locally for development
                 BackendAPI-->>Frontend: 201 Registration started
             end

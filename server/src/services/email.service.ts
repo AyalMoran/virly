@@ -1,28 +1,40 @@
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
 import { config } from "../config.js";
 
-function hasSmtpConfig() {
-  return Boolean(config.smtp.host && config.smtp.user && config.smtp.pass);
-}
+type EmailPayload = {
+  from: string;
+  to: string;
+  subject: string;
+  text: string;
+  html: string;
+};
 
-export async function sendVerificationEmail(email: string, verificationUrl: string) {
-  if (!hasSmtpConfig()) {
-    console.log(`Verification link for ${email}: ${verificationUrl}`);
-    return { delivered: false };
+type EmailSender = {
+  send(payload: EmailPayload): Promise<{ error?: unknown }>;
+};
+
+function logVerificationFallback(email: string, verificationUrl: string, error?: unknown) {
+  if (error) {
+    console.error("Verification email delivery failed; logging link instead.", error);
   }
 
-  const transporter = nodemailer.createTransport({
-    host: config.smtp.host,
-    port: config.smtp.port,
-    secure: config.smtp.port === 465,
-    auth: {
-      user: config.smtp.user,
-      pass: config.smtp.pass
-    }
-  });
+  console.log(`Verification link for ${email}: ${verificationUrl}`);
+}
 
-  await transporter.sendMail({
-    from: config.smtp.from,
+function createResendSender(apiKey: string): EmailSender {
+  const resend = new Resend(apiKey);
+
+  return {
+    async send(payload) {
+      const { error } = await resend.emails.send(payload);
+      return { error };
+    }
+  };
+}
+
+function createVerificationEmailPayload(email: string, verificationUrl: string) {
+  return {
+    from: config.email.from,
     to: email,
     subject: "Verify your Virly account",
     text: `Verify your account by opening this link. It expires in 10 minutes: ${verificationUrl}`,
@@ -31,7 +43,32 @@ export async function sendVerificationEmail(email: string, verificationUrl: stri
       <p><a href="${verificationUrl}" style="display:inline-block;padding:12px 18px;background:#111827;color:#ffffff;text-decoration:none;border-radius:6px;">Verify account</a></p>
       <p>This link expires in 10 minutes.</p>
     `
-  });
+  };
+}
+
+export async function sendVerificationEmailWithSender(
+  email: string,
+  verificationUrl: string,
+  sender: EmailSender | null
+) {
+  if (!sender) {
+    logVerificationFallback(email, verificationUrl);
+    return { delivered: false };
+  }
+
+  const result = await sender.send(createVerificationEmailPayload(email, verificationUrl));
+  if (result.error) {
+    logVerificationFallback(email, verificationUrl, result.error);
+    return { delivered: false };
+  }
 
   return { delivered: true };
+}
+
+export async function sendVerificationEmail(email: string, verificationUrl: string) {
+  const sender = config.email.resendApiKey
+    ? createResendSender(config.email.resendApiKey)
+    : null;
+
+  return sendVerificationEmailWithSender(email, verificationUrl, sender);
 }
