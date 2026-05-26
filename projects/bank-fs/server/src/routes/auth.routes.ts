@@ -54,11 +54,12 @@ async function sendNewVerificationLink(user: InstanceType<typeof User>) {
   await sendVerificationEmail(user.email, verificationUrl);
 }
 
-async function createAuthResponse(user: InstanceType<typeof User>) {
+async function createAuthResponse(user: InstanceType<typeof User>, csrfToken?: string) {
   const personalDetails = await ensurePersonalDetails(user);
 
   return {
-    user: toAuthUserDto(user, personalDetails)
+    user: toAuthUserDto(user, personalDetails),
+    ...(csrfToken ? { csrfToken } : {})
   };
 }
 //#endregion
@@ -110,8 +111,8 @@ router.get("/verify", async (req, res, next) => {
     }
 
     if (user.isVerified) {
-      setAuthCookies(res, user.id, { rememberMe: false });
-      return res.json(await createAuthResponse(user));
+      const csrfToken = setAuthCookies(res, user.id, { rememberMe: false });
+      return res.json(await createAuthResponse(user, csrfToken));
     }
 
     const isExpired =
@@ -130,8 +131,8 @@ router.get("/verify", async (req, res, next) => {
     user.verificationTokenExpiresAt = null;
     await user.save();
 
-    setAuthCookies(res, user.id, { rememberMe: false });
-    return res.json(await createAuthResponse(user));
+    const csrfToken = setAuthCookies(res, user.id, { rememberMe: false });
+    return res.json(await createAuthResponse(user, csrfToken));
   } catch (error) {
     next(error);
   }
@@ -174,8 +175,8 @@ router.post("/login", async (req, res, next) => {
       return res.status(403).json({ message: "Verify your email before logging in." });
     }
 
-    setAuthCookies(res, user.id, { rememberMe });
-    return res.json(await createAuthResponse(user));
+    const csrfToken = setAuthCookies(res, user.id, { rememberMe });
+    return res.json(await createAuthResponse(user, csrfToken));
   } catch (error) {
     next(error);
   }
@@ -189,7 +190,7 @@ router.get("/me", requireAuth, async (req, res, next) => {
       return res.status(404).json({ message: "User not found." });
     }
 
-    return res.json(await createAuthResponse(user));
+    return res.json(await createAuthResponse(user, req.csrfToken));
   } catch (error) {
     next(error);
   }

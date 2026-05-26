@@ -127,7 +127,7 @@ paths:
       tags:
         - Authentication
       summary: Log in with email and password
-      description: Sets the HttpOnly auth cookie and readable CSRF cookie on success.
+      description: Sets the HttpOnly auth cookie and readable CSRF cookie on success, and returns the CSRF token for cross-origin frontends that cannot read the API-domain cookie.
       requestBody:
         required: true
         content:
@@ -581,7 +581,7 @@ components:
       required: true
       schema:
         type: string
-      description: Value from the readable virly_csrf cookie. Required for authenticated unsafe methods.
+      description: Value from the csrfToken auth response field or readable virly_csrf cookie. Required for authenticated unsafe methods.
 
   securitySchemes:
     cookieAuth:
@@ -654,6 +654,10 @@ components:
       properties:
         user:
           $ref: '#/components/schemas/User'
+        csrfToken:
+          type: string
+          description: CSRF token bound to the auth cookie. Same-origin clients can also read this from the virly_csrf cookie; cross-origin clients should cache this response value and send it in X-CSRF-Token for unsafe methods.
+          example: lRZlG2Yd3xEY3EbOg8p7Yj37TyoEL7x9ySd9uSx4vxM
 
     User:
       type: object

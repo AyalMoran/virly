@@ -80,13 +80,13 @@ GET /api/auth/verify?token=<verificationToken>
 Successful login and email verification set two cookies:
 
 - `virly_auth`: HttpOnly, Secure JWT session cookie
-- `virly_csrf`: Secure CSRF cookie readable by the frontend
+- `virly_csrf`: Secure CSRF cookie, plus the same CSRF token in auth JSON responses for cross-origin deployments
 
 Cookies use `SameSite=Lax` locally by default. For cross-site deployments such as Vercel frontend + Render API, set `VIRLY_COOKIE_SAME_SITE=none` on the backend so browser `fetch` requests can include the auth cookies.
 
 On login, the Remember me checkbox controls cookie persistence. When checked, both cookies are persistent for 30 days and the expiration is refreshed on each successful login. When unchecked, the backend sets browser-session cookies without `Max-Age`; browsers generally clear those when the browser session ends, although "restore previous session" settings may preserve them.
 
-Email verification auto-login uses browser-session cookies by default. The frontend sends API requests with credentials included. Authenticated unsafe requests (`POST`, `PUT`, `PATCH`, `DELETE`) also send `X-CSRF-Token` with the value from `virly_csrf`.
+Email verification auto-login uses browser-session cookies by default. The frontend sends API requests with credentials included. Authenticated unsafe requests (`POST`, `PUT`, `PATCH`, `DELETE`) also send `X-CSRF-Token` with the `csrfToken` response value, falling back to the readable `virly_csrf` cookie when available.
 
 ## Deploy
 
