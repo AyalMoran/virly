@@ -17,6 +17,8 @@ import type {
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
 
+let cachedCsrfToken: string | null = null;
+
 export class ApiError extends Error {
   readonly status: number;
   readonly issues: Record<string, string>;
@@ -69,7 +71,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   if (isUnsafeMethod(options.method)) {
-    const csrfToken = readCookie("virly_csrf");
+    const csrfToken = readCookie("virly_csrf") ?? cachedCsrfToken;
     if (csrfToken) {
       headers.set("X-CSRF-Token", decodeURIComponent(csrfToken));
     }
@@ -84,8 +86,13 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const text = await response.text();
   const body = text ? JSON.parse(text) : {};
 
+  if (typeof body.csrfToken === "string") {
+    cachedCsrfToken = body.csrfToken;
+  }
+
   if (!response.ok) {
     if (response.status === 401) {
+      cachedCsrfToken = null;
       onUnauthorized?.();
     }
 
@@ -130,6 +137,8 @@ export const api = {
   logout() {
     return request<{ message: string }>("/api/auth/logout", {
       method: "POST"
+    }).finally(() => {
+      cachedCsrfToken = null;
     });
   },
   me() {

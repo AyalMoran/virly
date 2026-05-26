@@ -50,6 +50,8 @@ export function setAuthCookies(
     ...cookieOptions,
     httpOnly: false
   });
+
+  return csrfToken;
 }
 
 export function clearAuthCookies(res: Response) {

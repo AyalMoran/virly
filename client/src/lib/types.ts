@@ -65,6 +65,7 @@ export type TransactionsResponse = {
 
 export type AuthSuccessResponse = {
   user: User;
+  csrfToken?: string;
 };
 
 export type RegisterRequest = {
