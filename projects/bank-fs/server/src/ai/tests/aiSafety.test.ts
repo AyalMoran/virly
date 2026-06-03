@@ -3,12 +3,18 @@ import test from "node:test";
 import http from "node:http";
 import { app } from "../../app.js";
 import { config } from "../../config.js";
+import { Transaction } from "../../models/Transaction.js";
 import { createToken } from "../../utils/auth.js";
 import { hashCsrfToken } from "../../utils/session.js";
+import {
+  classifyAmountReference,
+  resolveContextualAmount
+} from "../amountResolution.js";
 import { AssistantId } from "../assistants.js";
 import {
   createEmptyCounterpartyMemory,
   rememberCounterparty,
+  resolveCounterpartyReferenceDeterministic,
   trimConversationMessages
 } from "../counterpartyMemory.js";
 import { runAssistantGraph } from "../graph.js";
@@ -21,6 +27,7 @@ import { createToolResult } from "../toolResults.js";
 import {
   AssistantLlmProvider,
   AssistantToolExecutors,
+  AmountResolutionService,
   AuditLogInput,
   ChatMessage,
   ConversationContext,
@@ -42,7 +49,12 @@ import {
 } from "../tools/transferPreflightHelpers.js";
 import { getPendingTransferScope } from "../tools/pendingTransferHelpers.js";
 import { resolvePendingTransferReference } from "../tools/resolvePendingTransferReference.js";
-import { sanitizeMessagesForLlm } from "../llm.js";
+import { getTotalReceivedFromCounterparty } from "../tools/getTotalReceivedFromCounterparty.js";
+import { getNetWithCounterparty } from "../tools/getNetWithCounterparty.js";
+import {
+  normalizeTransferDraftOutput,
+  sanitizeMessagesForLlm
+} from "../llm.js";
 
 function fakeResult(input: {
   toolName: Parameters<typeof createToolResult>[0]["toolName"];
@@ -155,6 +167,83 @@ function createFakeTools(
           amount: 42,
           counterpartyEmail: context.resolvedCounterparty?.email,
           maskedLabel: context.resolvedCounterparty?.maskedLabel
+        },
+        memoryUpdates: {
+          totals: [
+            {
+              id: `sent:${context.resolvedCounterparty?.email ?? counterpartyEmail}`,
+              counterpartyEmail:
+                context.resolvedCounterparty?.email ?? counterpartyEmail,
+              direction: "sent",
+              amount: 42,
+              currency: "ILS",
+              sourceToolName: "getTotalSentToCounterparty",
+              aliases: ["that amount", "that total", "the total I sent"]
+            }
+          ]
+        }
+      });
+    },
+    async getTotalReceivedFromCounterparty(context: ToolContext) {
+      executed.push(
+        `getTotalReceivedFromCounterparty:${context.resolvedCounterparty?.email ?? "none"}`
+      );
+      return fakeResult({
+        toolName: "getTotalReceivedFromCounterparty",
+        summary: `${context.resolvedCounterparty?.maskedLabel ?? maskedLabel} has sent you 35.00 in total.`,
+        userSummary: `${context.resolvedCounterparty?.userLabel ?? userLabel} has sent you 35.00 in total.`,
+        metadata: {
+          recordCount: 2,
+          amount: 35,
+          counterpartyEmail: context.resolvedCounterparty?.email,
+          maskedLabel: context.resolvedCounterparty?.maskedLabel
+        },
+        memoryUpdates: {
+          totals: [
+            {
+              id: `received:${context.resolvedCounterparty?.email ?? counterpartyEmail}`,
+              counterpartyEmail:
+                context.resolvedCounterparty?.email ?? counterpartyEmail,
+              direction: "received",
+              amount: 35,
+              currency: "ILS",
+              sourceToolName: "getTotalReceivedFromCounterparty",
+              aliases: ["that amount", "that total", "the total they sent me"]
+            }
+          ]
+        }
+      });
+    },
+    async getNetWithCounterparty(context: ToolContext) {
+      executed.push(
+        `getNetWithCounterparty:${context.resolvedCounterparty?.email ?? "none"}`
+      );
+      return fakeResult({
+        toolName: "getNetWithCounterparty",
+        summary: `Net with ${context.resolvedCounterparty?.maskedLabel ?? maskedLabel}: received 35.00, sent 20.00, net 15.00.`,
+        userSummary: `Net with ${context.resolvedCounterparty?.userLabel ?? userLabel}: received 35.00, sent 20.00, net 15.00.`,
+        metadata: {
+          recordCount: 3,
+          amount: 15,
+          netAmount: 15,
+          receivedAmount: 35,
+          sentAmount: 20,
+          counterpartyEmail: context.resolvedCounterparty?.email,
+          maskedLabel: context.resolvedCounterparty?.maskedLabel
+        },
+        memoryUpdates: {
+          totals: [
+            {
+              id: `net:${context.resolvedCounterparty?.email ?? counterpartyEmail}`,
+              counterpartyEmail:
+                context.resolvedCounterparty?.email ?? counterpartyEmail,
+              direction: "net",
+              amount: 15,
+              currency: "ILS",
+              sourceToolName: "getNetWithCounterparty",
+              aliases: ["that amount", "that total", "the net total"]
+            }
+          ]
         }
       });
     },
@@ -1852,6 +1941,140 @@ test("first person reference resolves by first mention order", async () => {
   assert.ok(executed.includes("getTotalSentToCounterparty:alex@example.com"));
 });
 
+test("received-total follow-up is read-only and resolves from memory", async () => {
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory: createMemoryWithCounterparties(["alex@example.com"])
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-received-total-follow-up",
+      message: "How much did he send me?"
+    },
+    {
+      tools: createFakeTools(executed),
+      conversationStore
+    }
+  );
+
+  assert.equal(result.intent, "counterparty_total_received");
+  assert.deepEqual(result.toolCalls, ["getTotalReceivedFromCounterparty"]);
+  assert.ok(
+    executed.includes("getTotalReceivedFromCounterparty:alex@example.com")
+  );
+});
+
+test("named received-total request resolves counterparty before total tool", async () => {
+  const executed: string[] = [];
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-named-received-total",
+      message: "How much has Daniel paid me?"
+    },
+    {
+      tools: createFakePhaseTwoCounterpartyTools(executed)
+    }
+  );
+
+  assert.equal(result.intent, "counterparty_total_received");
+  assert.deepEqual(result.toolCalls, [
+    "resolveCounterpartyCandidates",
+    "getTotalReceivedFromCounterparty"
+  ]);
+  assert.ok(executed.includes("resolveCounterpartyCandidates"));
+  assert.ok(
+    executed.includes("getTotalReceivedFromCounterparty:daniel@example.com")
+  );
+});
+
+test("net-total follow-up is read-only and resolves from memory", async () => {
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory: createMemoryWithCounterparties(["alex@example.com"])
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-net-total-follow-up",
+      message: "What is the net between me and him?"
+    },
+    {
+      tools: createFakeTools(executed),
+      conversationStore
+    }
+  );
+
+  assert.equal(result.intent, "counterparty_net_total");
+  assert.deepEqual(result.toolCalls, ["getNetWithCounterparty"]);
+  assert.ok(executed.includes("getNetWithCounterparty:alex@example.com"));
+});
+
+test("named net-total request resolves counterparty before net tool", async () => {
+  const executed: string[] = [];
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-named-net-total",
+      message: "What is my net with Daniel?"
+    },
+    {
+      tools: createFakePhaseTwoCounterpartyTools(executed)
+    }
+  );
+
+  assert.equal(result.intent, "counterparty_net_total");
+  assert.deepEqual(result.toolCalls, [
+    "resolveCounterpartyCandidates",
+    "getNetWithCounterparty"
+  ]);
+  assert.ok(executed.includes("resolveCounterpartyCandidates"));
+  assert.ok(executed.includes("getNetWithCounterparty:daniel@example.com"));
+});
+
+test("read-only total answers persist total entity and answer-frame query context", async () => {
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory: createMemoryWithCounterparties(["alex@example.com"])
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-total-answer-memory",
+      message: "What is the net between me and him?"
+    },
+    {
+      tools: createFakeTools(executed),
+      conversationStore
+    }
+  );
+  const savedMemory = conversationStore.saved.at(-1)?.memory;
+  const totalEntity = savedMemory?.entities?.find(
+    (entity) => entity.id === "total:net:alex@example.com"
+  );
+  const answerFrame = savedMemory?.answerFrames?.at(-1);
+
+  assert.equal(result.intent, "counterparty_net_total");
+  assert.equal(totalEntity?.type, "total");
+  assert.equal(totalEntity?.counterpartyEmail, "alex@example.com");
+  assert.equal(totalEntity?.direction, "net");
+  assert.equal(totalEntity?.amount, 15);
+  assert.equal(totalEntity?.sourceToolName, "getNetWithCounterparty");
+  assert.deepEqual(answerFrame?.queryContext, {
+    counterpartyEmail: "alex@example.com",
+    direction: "both",
+    amountRole: "total"
+  });
+  assert.ok(answerFrame?.primaryEntities.includes("total:net:alex@example.com"));
+});
+
 test("llm resolver handles hebrew counterparty references before deterministic fallback", async () => {
   const executed: string[] = [];
   let resolverCalls = 0;
@@ -2151,6 +2374,36 @@ test("counterparty memory keeps eight entries and evicts least recently referenc
   assert.equal(withSixth.lastCounterparty?.email, "ron@example.com");
 });
 
+test("deterministic counterparty resolver handles english pronouns from memory", () => {
+  const memory = rememberCounterparty(
+    createEmptyCounterpartyMemory(),
+    {
+      email: "alex@example.com",
+      maskedLabel: "a***@example.com",
+      userLabel: "Alex Example (alex@example.com)",
+      displayName: "Alex Example",
+      firstMentionedAtTurn: 1,
+      lastReferencedAtTurn: 1
+    },
+    1
+  );
+
+  assert.equal(
+    resolveCounterpartyReferenceDeterministic(
+      "how much did he send me?",
+      memory
+    )?.email,
+    "alex@example.com"
+  );
+  assert.equal(
+    resolveCounterpartyReferenceDeterministic(
+      "send it to the same recipient",
+      memory
+    )?.email,
+    "alex@example.com"
+  );
+});
+
 test("conversation store trims saved messages to the last twenty", async () => {
   const conversationStore = createFakeConversationStore();
   const messages: ChatMessage[] = Array.from({ length: 22 }, (_, index) => ({
@@ -2217,6 +2470,365 @@ test("send money request prepares a transfer confirmation and executes no tool",
     version: 1
   });
   assert.equal(transferPreparations[0].draft.amount, 50);
+});
+
+test("deterministic mixed-language pronoun transfer resolves last counterparty", async () => {
+  const transferPreparations: Array<Parameters<TransferPreparationService>[0]> = [];
+  const memory = rememberCounterparty(
+    createEmptyCounterpartyMemory(),
+    {
+      email: "alex@example.com",
+      maskedLabel: "a***@example.com",
+      userLabel: "Alex Example (alex@example.com)",
+      displayName: "Alex Example",
+      firstMentionedAtTurn: 1,
+      lastReferencedAtTurn: 1
+    },
+    1
+  );
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory
+  });
+  const amountResolutionService: AmountResolutionService = async () => ({
+    status: "unresolved",
+    reason: "no_received_transaction_for_counterparty"
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-mixed-pronoun-transfer",
+      message: "תעביר him again 50"
+    },
+    {
+      tools: createFakeTools([]),
+      conversationStore,
+      amountResolutionService,
+      transferPreparationService:
+        createFakeTransferPreparationService(transferPreparations)
+    }
+  );
+
+  assert.equal(result.intent, "transfer_prepare");
+  assert.equal(result.confirmation?.recipientEmail, "alex@example.com");
+  assert.equal(transferPreparations[0].draft.amount, 50);
+  assert.equal(
+    transferPreparations[0].resolvedCounterparty?.email,
+    "alex@example.com"
+  );
+});
+
+test("deterministic transfer parser preserves contextual amount references", async () => {
+  const transferPreparations: Array<Parameters<TransferPreparationService>[0]> = [];
+  const memory = rememberCounterparty(
+    createEmptyCounterpartyMemory(),
+    {
+      email: "alex@example.com",
+      maskedLabel: "a***@example.com",
+      userLabel: "Alex Example (alex@example.com)",
+      displayName: "Alex Example",
+      firstMentionedAtTurn: 1,
+      lastReferencedAtTurn: 1
+    },
+    1
+  );
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory
+  });
+  const amountResolutionService: AmountResolutionService = async () => ({
+    status: "unresolved",
+    reason: "no_received_transaction_for_counterparty"
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-deterministic-contextual-amount",
+      message: "send him the same amount he sent me"
+    },
+    {
+      tools: createFakeTools([]),
+      conversationStore,
+      amountResolutionService,
+      transferPreparationService:
+        createFakeTransferPreparationService(transferPreparations)
+    }
+  );
+
+  assert.equal(result.intent, "transfer_prepare");
+  assert.equal(result.confirmation, undefined);
+  assert.equal(result.clarification?.reason, "missing_amount");
+  assert.equal(
+    transferPreparations[0].draft.amountReferenceText,
+    "same amount he sent me"
+  );
+  assert.equal(
+    transferPreparations[0].resolvedCounterparty?.email,
+    "alex@example.com"
+  );
+});
+
+test("amount reference classifier maps directional references", () => {
+  assert.equal(
+    classifyAmountReference("same amount he sent me"),
+    "last_received_transaction"
+  );
+  assert.equal(
+    classifyAmountReference("what I sent him last time"),
+    "last_sent_transaction"
+  );
+  assert.equal(
+    classifyAmountReference("אותה כמות"),
+    "last_pending_transfer"
+  );
+});
+
+test("received-total tool aggregates credits by authenticated user and counterparty", async () => {
+  const originalAggregate = Transaction.aggregate;
+  const pipelines: unknown[][] = [];
+
+  (Transaction as unknown as {
+    aggregate: (pipeline: unknown[]) => Promise<Array<{ total: number; count: number }>>;
+  }).aggregate = async (pipeline: unknown[]) => {
+    pipelines.push(pipeline);
+    return [{ total: 35, count: 2 }];
+  };
+
+  try {
+    const result = await getTotalReceivedFromCounterparty({
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-received-total-tool",
+      message: "How much did Alex send me?",
+      resolvedCounterparty: {
+        email: "Alex@Example.com",
+        maskedLabel: "a***@example.com",
+        userLabel: "Alex Example (alex@example.com)",
+        displayName: "Alex Example",
+        firstMentionedAtTurn: 1,
+        lastReferencedAtTurn: 1
+      }
+    });
+    const match = (pipelines[0][0] as { $match: Record<string, unknown> }).$match;
+
+    assert.equal(result.status, "ok");
+    assert.equal(result.displayData?.metadata.amount, 35);
+    assert.equal(String(match.ownerId), "507f1f77bcf86cd799439011");
+    assert.equal(match.counterpartyEmail, "alex@example.com");
+    assert.equal(match.type, "credit");
+    assert.equal(JSON.stringify(pipelines[0]).includes("$set"), false);
+    assert.equal(JSON.stringify(pipelines[0]).includes("$out"), false);
+  } finally {
+    Transaction.aggregate = originalAggregate;
+  }
+});
+
+test("net-total tool aggregates credits and debits by authenticated user and counterparty", async () => {
+  const originalAggregate = Transaction.aggregate;
+  const pipelines: unknown[][] = [];
+
+  (Transaction as unknown as {
+    aggregate: (
+      pipeline: unknown[]
+    ) => Promise<Array<{ _id: "credit" | "debit"; total: number; count: number }>>;
+  }).aggregate = async (pipeline: unknown[]) => {
+    pipelines.push(pipeline);
+    return [
+      { _id: "credit", total: 90, count: 2 },
+      { _id: "debit", total: 35, count: 1 }
+    ];
+  };
+
+  try {
+    const result = await getNetWithCounterparty({
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-net-total-tool",
+      message: "What is my net with Alex?",
+      resolvedCounterparty: {
+        email: "Alex@Example.com",
+        maskedLabel: "a***@example.com",
+        userLabel: "Alex Example (alex@example.com)",
+        displayName: "Alex Example",
+        firstMentionedAtTurn: 1,
+        lastReferencedAtTurn: 1
+      }
+    });
+    const match = (pipelines[0][0] as { $match: Record<string, unknown> }).$match;
+
+    assert.equal(result.status, "ok");
+    assert.equal(result.displayData?.metadata.amount, 55);
+    assert.equal(result.displayData?.metadata.netAmount, 55);
+    assert.equal(result.displayData?.metadata.receivedAmount, 90);
+    assert.equal(result.displayData?.metadata.sentAmount, 35);
+    assert.equal(String(match.ownerId), "507f1f77bcf86cd799439011");
+    assert.equal(match.counterpartyEmail, "alex@example.com");
+    assert.deepEqual(match.type, { $in: ["credit", "debit"] });
+    assert.equal(JSON.stringify(pipelines[0]).includes("$set"), false);
+    assert.equal(JSON.stringify(pipelines[0]).includes("$out"), false);
+  } finally {
+    Transaction.aggregate = originalAggregate;
+  }
+});
+
+test("default contextual amount resolver scopes latest received lookup by user and counterparty", async () => {
+  const originalFindOne = Transaction.findOne;
+  const queries: unknown[] = [];
+
+  (Transaction as unknown as {
+    findOne: (query: unknown) => {
+      sort: () => {
+        select: () => Promise<{ amount: number }>;
+      };
+    };
+  }).findOne = (query: unknown) => {
+    queries.push(query);
+    return {
+      sort() {
+        return {
+          async select() {
+            return { amount: 88 };
+          }
+        };
+      }
+    };
+  };
+
+  try {
+    const result = await resolveContextualAmount({
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-default-amount-resolver",
+      transferDraft: {
+        amountReferenceText: "same amount he sent me"
+      },
+      resolvedCounterparty: {
+        email: "Alex@Example.com",
+        maskedLabel: "a***@example.com",
+        firstMentionedAtTurn: 1,
+        lastReferencedAtTurn: 1
+      },
+      counterpartyMemory: createEmptyCounterpartyMemory()
+    });
+
+    assert.equal(result.status, "resolved");
+    assert.equal(result.status === "resolved" ? result.amount.amount : 0, 88);
+    assert.deepEqual(queries[0], {
+      ownerId: "507f1f77bcf86cd799439011",
+      counterpartyEmail: "alex@example.com",
+      type: "credit"
+    });
+  } finally {
+    Transaction.findOne = originalFindOne;
+  }
+});
+
+test("contextual amount resolver fills transfer amount before preparation", async () => {
+  const transferPreparations: Array<Parameters<TransferPreparationService>[0]> = [];
+  const amountResolutionInputs: Array<Parameters<AmountResolutionService>[0]> = [];
+  const memory = rememberCounterparty(
+    createEmptyCounterpartyMemory(),
+    {
+      email: "alex@example.com",
+      maskedLabel: "a***@example.com",
+      userLabel: "Alex Example (alex@example.com)",
+      displayName: "Alex Example",
+      firstMentionedAtTurn: 1,
+      lastReferencedAtTurn: 1
+    },
+    1
+  );
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory
+  });
+  const amountResolutionService: AmountResolutionService = async (input) => {
+    amountResolutionInputs.push(input);
+    return {
+      status: "resolved",
+      amount: {
+        amount: 75,
+        currency: "ILS",
+        source: "last_received_transaction",
+        confidence: "high",
+        explanation:
+          "Resolved amount from the latest received transaction with the counterparty."
+      }
+    };
+  };
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-contextual-amount-resolution",
+      message: "send him the same amount he sent me"
+    },
+    {
+      tools: createFakeTools([]),
+      conversationStore,
+      amountResolutionService,
+      transferPreparationService:
+        createFakeTransferPreparationService(transferPreparations)
+    }
+  );
+
+  assert.equal(result.confirmation?.amount, 75);
+  assert.equal(result.confirmation?.recipientEmail, "alex@example.com");
+  assert.equal(
+    amountResolutionInputs[0].resolvedCounterparty?.email,
+    "alex@example.com"
+  );
+  assert.equal(
+    amountResolutionInputs[0].transferDraft.amountReferenceText,
+    "same amount he sent me"
+  );
+  assert.equal(transferPreparations[0].draft.amount, 75);
+});
+
+test("unresolved contextual amount does not create a pending transfer", async () => {
+  const transferPreparations: Array<Parameters<TransferPreparationService>[0]> = [];
+  const memory = rememberCounterparty(
+    createEmptyCounterpartyMemory(),
+    {
+      email: "alex@example.com",
+      maskedLabel: "a***@example.com",
+      userLabel: "Alex Example (alex@example.com)",
+      displayName: "Alex Example",
+      firstMentionedAtTurn: 1,
+      lastReferencedAtTurn: 1
+    },
+    1
+  );
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory
+  });
+  const amountResolutionService: AmountResolutionService = async () => ({
+    status: "unresolved",
+    reason: "no_received_transaction_for_counterparty"
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-contextual-amount-unresolved",
+      message: "send him the same amount he sent me"
+    },
+    {
+      tools: createFakeTools([]),
+      conversationStore,
+      amountResolutionService,
+      transferPreparationService:
+        createFakeTransferPreparationService(transferPreparations)
+    }
+  );
+
+  assert.equal(result.confirmation, undefined);
+  assert.equal(result.clarification?.reason, "missing_amount");
+  assert.equal(transferPreparations[0].draft.amount, undefined);
+  assert.equal(
+    transferPreparations[0].draft.amountReferenceText,
+    "same amount he sent me"
+  );
 });
 
 test("unsupported transfer currency asks clarification before preparation", async () => {
@@ -2853,4 +3465,302 @@ test("audit log is written for accepted and refused requests", async () => {
   assert.equal(auditLogs[1].intent, "unsafe_request");
   assert.equal(auditLogs[1].refusalReason, "chat_text_is_not_authorization");
   assert.deepEqual(auditLogs[1].toolsExecuted, []);
+});
+
+test("transfer draft normalization extracts a single email from display labels", () => {
+  const draft = normalizeTransferDraftOutput({
+    recipientReference: null,
+    recipientEmail: "Nikola Jokic (jokic@nuggets.com)",
+    amount: 50,
+    amountText: "50",
+    amountReferenceText: null,
+    currency: "ILS",
+    currencyMentioned: true,
+    currencySupported: true,
+    reason: "tickets"
+  });
+
+  assert.equal(draft.recipientEmail, "jokic@nuggets.com");
+  assert.equal(draft.recipientReference, null);
+  assert.equal(draft.amount, 50);
+  assert.equal(draft.reason, "tickets");
+});
+
+test("transfer draft normalization downgrades invalid recipient email to reference", () => {
+  const draft = normalizeTransferDraftOutput({
+    recipientReference: null,
+    recipientEmail: "him",
+    amount: 50,
+    amountText: "50",
+    amountReferenceText: null,
+    currency: "ILS",
+    currencyMentioned: true,
+    currencySupported: true,
+    reason: null
+  });
+
+  assert.equal(draft.recipientEmail, null);
+  assert.equal(draft.recipientReference, "him");
+  assert.equal(draft.amount, 50);
+  assert.equal(draft.debugEvents?.[0]?.failureClass, "draft_partial_recovered");
+  assert.equal(draft.debugEvents?.[0]?.failedField, "recipientEmail");
+});
+
+test("transfer draft normalization preserves contextual amounts when recipient is invalid", () => {
+  const draft = normalizeTransferDraftOutput({
+    recipientReference: null,
+    recipientEmail: "that recipient",
+    amount: null,
+    amountText: null,
+    amountReferenceText: "same amount",
+    currency: null,
+    currencyMentioned: false,
+    currencySupported: true,
+    reason: null
+  });
+
+  assert.equal(draft.recipientEmail, null);
+  assert.equal(draft.recipientReference, "that recipient");
+  assert.equal(draft.amount, null);
+  assert.equal(draft.amountReferenceText, "same amount");
+});
+
+test("malformed llm recipient preserves valid transfer amount in graph", async () => {
+  const confirmations: Array<Parameters<TransferPreparationService>[0]> = [];
+  const auditLogs: AuditLogInput[] = [];
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "transfer_prepare" };
+    },
+    async extractTransferDraft() {
+      return {
+        recipientReference: null,
+        recipientEmail: "him",
+        amount: 50,
+        amountText: "50",
+        amountReferenceText: null,
+        currency: "ILS",
+        currencyMentioned: true,
+        currencySupported: true,
+        reason: null
+      };
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-malformed-recipient-preserves-amount",
+      requestId: "request-malformed-recipient-preserves-amount",
+      message: "send him 50"
+    },
+    {
+      tools: createFakeTools([]),
+      llmProvider,
+      auditLogger: async (input) => {
+        auditLogs.push(input);
+      },
+      transferPreparationService:
+        createFakeTransferPreparationService(confirmations)
+    }
+  );
+
+  assert.equal(result.confirmation, undefined);
+  assert.equal(result.clarification?.reason, "missing_recipient");
+  assert.equal(confirmations[0].draft.amount, 50);
+  assert.equal(confirmations[0].draft.recipientReference, "him");
+  assert.ok(
+    auditLogs[0].diagnostics?.some(
+      (event) => event.failureClass === "draft_partial_recovered"
+    )
+  );
+});
+
+test("transfer draft extractor failure records sanitized deterministic fallback diagnostics", async () => {
+  const auditLogs: AuditLogInput[] = [];
+  const confirmations: Array<Parameters<TransferPreparationService>[0]> = [];
+  const auditLogger = async (input: AuditLogInput) => {
+    auditLogs.push(input);
+  };
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "transfer_prepare" };
+    },
+    async extractTransferDraft() {
+      throw new Error(
+        "raw prompt leaked jokic@nuggets.com and transfer to jokic@nuggets.com"
+      );
+    }
+  });
+
+  await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-draft-diagnostics",
+      requestId: "request-draft-diagnostics",
+      message: "send jokic@nuggets.com 50"
+    },
+    {
+      tools: createFakeTools([]),
+      llmProvider,
+      auditLogger,
+      transferPreparationService:
+        createFakeTransferPreparationService(confirmations)
+    }
+  );
+
+  const diagnostics = auditLogs[0].diagnostics ?? [];
+  const serializedDiagnostics = JSON.stringify(diagnostics);
+
+  assert.ok(
+    diagnostics.some(
+      (event) => event.failureClass === "draft_schema_failed"
+    )
+  );
+  assert.ok(
+    diagnostics.some(
+      (event) =>
+        event.failureClass === "deterministic_fallback_used" &&
+        event.fallbackReason === "transfer_draft_extractor_failed"
+    )
+  );
+  assert.equal(serializedDiagnostics.includes("jokic@nuggets.com"), false);
+  assert.equal(serializedDiagnostics.includes("raw prompt leaked"), false);
+  assert.equal(confirmations[0].draft.amount, 50);
+});
+
+test("classifier failure records fallback diagnostics and keeps deterministic classification", async () => {
+  const auditLogs: AuditLogInput[] = [];
+  const executed: string[] = [];
+  const auditLogger = async (input: AuditLogInput) => {
+    auditLogs.push(input);
+  };
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      throw new Error("raw classifier prompt for alex@example.com");
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-classifier-diagnostics",
+      requestId: "request-classifier-diagnostics",
+      message: "What is my balance?"
+    },
+    {
+      tools: createFakeTools(executed),
+      llmProvider,
+      auditLogger
+    }
+  );
+
+  const diagnostics = auditLogs[0].diagnostics ?? [];
+  const serializedDiagnostics = JSON.stringify(diagnostics);
+
+  assert.equal(result.intent, "balance_inquiry");
+  assert.deepEqual(executed, ["getUserAccounts", "getAccountBalance"]);
+  assert.ok(
+    diagnostics.some(
+      (event) =>
+        event.failureClass === "classifier_failed" &&
+        event.fallbackUsed === true
+    )
+  );
+  assert.equal(serializedDiagnostics.includes("alex@example.com"), false);
+  assert.equal(serializedDiagnostics.includes("raw classifier prompt"), false);
+});
+
+test("missing contextual amount records unresolved amount and clarification diagnostics", async () => {
+  const auditLogs: AuditLogInput[] = [];
+  const auditLogger = async (input: AuditLogInput) => {
+    auditLogs.push(input);
+  };
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "transfer_prepare" };
+    },
+    async extractTransferDraft() {
+      return {
+        recipientEmail: "alex@example.com",
+        amount: null,
+        amountText: null,
+        amountReferenceText: "same amount",
+        currency: "ILS",
+        currencyMentioned: false,
+        currencySupported: true,
+        reason: null
+      };
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-contextual-amount-diagnostics",
+      requestId: "request-contextual-amount-diagnostics",
+      message: "send him the same amount"
+    },
+    {
+      tools: createFakeTools([]),
+      llmProvider,
+      auditLogger,
+      transferPreparationService: createFakeTransferPreparationService()
+    }
+  );
+
+  const diagnostics = auditLogs[0].diagnostics ?? [];
+
+  assert.equal(result.confirmation, undefined);
+  assert.equal(result.clarification?.reason, "missing_amount");
+  assert.ok(
+    diagnostics.some(
+      (event) => event.failureClass === "contextual_amount_unresolved"
+    )
+  );
+  assert.ok(
+    diagnostics.some(
+      (event) =>
+        event.failureClass === "clarification_started" &&
+        event.fallbackReason === "missing_amount"
+    )
+  );
+});
+
+test("debug trace flag records node transitions without changing public result shape", async () => {
+  const previousDebugTrace = config.ai.debugTrace;
+  const auditLogs: AuditLogInput[] = [];
+  const auditLogger = async (input: AuditLogInput) => {
+    auditLogs.push(input);
+  };
+
+  config.ai.debugTrace = true;
+
+  try {
+    const result = await runAssistantGraph(
+      {
+        userId: "507f1f77bcf86cd799439011",
+        conversationId: "test-debug-trace-flag",
+        requestId: "request-debug-trace-flag",
+        message: "What is my balance?"
+      },
+      {
+        tools: createFakeTools([]),
+        auditLogger
+      }
+    );
+
+    const diagnostics = auditLogs[0].diagnostics ?? [];
+
+    assert.equal("debugTrace" in result, false);
+    assert.ok(
+      diagnostics.some(
+        (event) =>
+          event.type === "node_transition" &&
+          event.nodeName === "classifyIntent"
+      )
+    );
+  } finally {
+    config.ai.debugTrace = previousDebugTrace;
+  }
 });

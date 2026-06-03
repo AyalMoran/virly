@@ -347,11 +347,13 @@ export function resolveCounterpartyReferenceDeterministic(
   const normalized = message.toLowerCase();
 
   if (
+    /\b(he|him|she|her|they|them)\b/.test(normalized) ||
+    /\b(him|her|them)\s+again\b/.test(normalized) ||
+    /\bsame\s+(person|recipient|counterparty)\b/.test(normalized) ||
+    /\b(the guy|the person from before|the last one)\b/.test(normalized) ||
     /\b(this|that)\s+(person|recipient|counterparty)\b/.test(normalized) ||
     /\b(with|to)\s+(them|that person|this person)\b/.test(normalized) ||
-    /(לו|לה|אליו|אליה|איתו|איתה|אותו|אותה|האדם הזה|הבן אדם הזה|הנמען הזה|האחרון)/.test(
-      message
-    )
+    /(לו|לה|אליו|אליה|איתו|איתה|אותו|אותה|אותו אחד|אותה אחת|האדם הזה|הבן אדם הזה|הנמען הזה|הנמען הקודם|האדם הקודם|האחרון)/.test(message)
   ) {
     return memory.lastCounterparty;
   }

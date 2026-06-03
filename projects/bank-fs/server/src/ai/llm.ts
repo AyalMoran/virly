@@ -14,6 +14,7 @@ import {
   type CounterpartyReferenceResolution,
   type ExtractTransferDraftInput,
   type ResolveCounterpartyReferenceInput,
+  type TransferDraftExtraction,
   type ToolResultMetadata
 } from "./state.js";
 
@@ -45,25 +46,64 @@ const responseSchema = z.object({
   message: z.string().min(1)
 });
 
-function normalizeEmail(raw: unknown) {
-  if (raw == null) return raw;
+const emailPattern = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 
-  const text = String(raw).trim();
-  const match = text.match(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/);
+function extractSingleEmail(raw: unknown) {
+  if (typeof raw !== "string") return null;
 
-  return match?.[0]?.toLowerCase() ?? text;
+  const matches = [...raw.matchAll(emailPattern)].map((match) =>
+    match[0].toLowerCase()
+  );
+
+  return matches.length === 1 ? matches[0] : null;
 }
 
-const transferDraftSchema = z.object({
-  recipientReference: z.string().max(120).nullable(),
-  recipientEmail: z.preprocess(normalizeEmail, z.string().email()).nullable(),
-  amount: z.number().positive().nullable(),
-  amountText: z.string().max(80).nullable(),
-  amountReferenceText: z.string().max(120).nullable(),
-  currency: z.enum(["ILS", "USD", "EUR", "UNKNOWN"]).nullable(),
-  currencyMentioned: z.boolean().nullable(),
-  currencySupported: z.boolean().nullable(),
-  reason: z.string().max(200).nullable()
+function normalizeString(raw: unknown, maxLength: number) {
+  if (typeof raw !== "string") return null;
+
+  const text = raw.trim();
+  if (!text) return null;
+
+  return text.slice(0, maxLength);
+}
+
+function normalizePositiveNumber(raw: unknown) {
+  const value =
+    typeof raw === "number"
+      ? raw
+      : typeof raw === "string" && raw.trim()
+        ? Number(raw.trim())
+        : NaN;
+
+  return Number.isFinite(value) && value > 0 ? value : null;
+}
+
+function normalizeCurrency(raw: unknown) {
+  if (typeof raw !== "string") return null;
+
+  const currency = raw.trim().toUpperCase();
+  return currency === "ILS" ||
+    currency === "USD" ||
+    currency === "EUR" ||
+    currency === "UNKNOWN"
+    ? currency
+    : null;
+}
+
+function normalizeBoolean(raw: unknown) {
+  return typeof raw === "boolean" ? raw : undefined;
+}
+
+const transferDraftRawSchema = z.object({
+  recipientReference: z.unknown().nullable().optional(),
+  recipientEmail: z.unknown().nullable().optional(),
+  amount: z.unknown().nullable().optional(),
+  amountText: z.unknown().nullable().optional(),
+  amountReferenceText: z.unknown().nullable().optional(),
+  currency: z.unknown().nullable().optional(),
+  currencyMentioned: z.unknown().nullable().optional(),
+  currencySupported: z.unknown().nullable().optional(),
+  reason: z.unknown().nullable().optional()
 });
 
 const referenceResolutionSchema = z.object({
@@ -80,8 +120,57 @@ const referenceResolutionSchema = z.object({
 
 type ClassificationOutput = z.infer<typeof classificationSchema>;
 type ResponseOutput = z.infer<typeof responseSchema>;
-type TransferDraftOutput = z.infer<typeof transferDraftSchema>;
+type TransferDraftRawOutput = z.infer<typeof transferDraftRawSchema>;
 type ReferenceResolutionOutput = z.infer<typeof referenceResolutionSchema>;
+
+function rawValueType(raw: unknown) {
+  return raw === null ? "null" : Array.isArray(raw) ? "array" : typeof raw;
+}
+
+export function normalizeTransferDraftOutput(
+  result: TransferDraftRawOutput
+): TransferDraftExtraction {
+  const explicitEmail = extractSingleEmail(
+    typeof result.recipientEmail === "string" ? result.recipientEmail : null
+  );
+  const recipientEmailRaw = normalizeString(result.recipientEmail, 120);
+  const recipientReferenceRaw = normalizeString(result.recipientReference, 120);
+  const recipientReference =
+    recipientReferenceRaw ??
+    (!explicitEmail && recipientEmailRaw ? recipientEmailRaw : null);
+  const amount = normalizePositiveNumber(result.amount);
+  const amountText = normalizeString(result.amountText, 80);
+  const amountReferenceText = normalizeString(result.amountReferenceText, 120);
+  const currency = normalizeCurrency(result.currency);
+  const reason = normalizeString(result.reason, 200);
+  const debugEvents: TransferDraftExtraction["debugEvents"] = [];
+
+  if (recipientEmailRaw && !explicitEmail) {
+    debugEvents.push({
+      type: "failure",
+      nodeName: "extractTransferDraft",
+      schemaName: "transferDraftRawSchema",
+      failureClass: "draft_partial_recovered",
+      failedField: "recipientEmail",
+      rawValueType: rawValueType(result.recipientEmail),
+      fallbackUsed: false,
+      fallbackReason: "invalid_recipient_email_downgraded_to_reference"
+    });
+  }
+
+  return {
+    recipientReference,
+    recipientEmail: explicitEmail,
+    amount,
+    amountText,
+    amountReferenceText,
+    currency,
+    currencyMentioned: normalizeBoolean(result.currencyMentioned),
+    currencySupported: normalizeBoolean(result.currencySupported),
+    reason,
+    ...(debugEvents.length > 0 ? { debugEvents } : {})
+  };
+}
 
 function normalizeReferenceResolution(
   result: ReferenceResolutionOutput
@@ -260,6 +349,25 @@ function buildClassifierPrompt(input: ClassifyAssistantIntentInput) {
     "- כמה העברתי אליו בסך הכל?",
     "- כמה שלחתי לנמען הזה עד היום?",
     "",
+    "counterparty_total_received:",
+    "Use when the user asks how much a specific referenced person, recipient, or counterparty sent or paid to them.",
+    "Examples:",
+    "- how much did Dan send me?",
+    "- how much has Maya paid me?",
+    "- how much did I receive from him?",
+    "- כמה הוא שלח לי?",
+    "- כמה קיבלתי ממנה?",
+    "",
+    "counterparty_net_total:",
+    "Use when the user asks for the net total, balance, or who is ahead between them and a named/referenced counterparty.",
+    "Net means total received from the counterparty minus total sent to that counterparty.",
+    "Examples:",
+    "- what is the net between me and Dan?",
+    "- what's my net with Maya?",
+    "- who owes who between me and him?",
+    "- מה הנטו בינינו?",
+    "- מה המאזן שלי מולו?",
+    "",
     "transfer_prepare:",
     "Use when the user asks to send, transfer, pay, move, wire, return, or give money to a person/account.",
     "Use this even if the amount, recipient, or reason is missing.",
@@ -358,20 +466,22 @@ function buildClassifierPrompt(input: ClassifyAssistantIntentInput) {
     "2. Otherwise, if the request asks for new money movement, classify as transfer_prepare.",
     "3. Otherwise, if the request asks for multiple recent sent/received people, classify as recent_sent_counterparties or recent_received_counterparties.",
     "4. Otherwise, if the request asks who the user last sent money to, classify as last_sent_counterparty.",
-    "5. Otherwise, if the request asks for a broad history or relationship with a counterparty, classify as counterparty_summary.",
-    "6. Otherwise, if the request asks for ordered activity with a counterparty, classify as counterparty_activity_timeline.",
-    "7. Otherwise, if the request asks for total amount sent to a referenced counterparty, classify as counterparty_total_sent.",
-    "8. Otherwise, if the request asks for transactions with a referenced counterparty, classify as counterparty_transactions.",
-    "9. Otherwise, if the request searches or filters transactions by date, amount, reason, or direction, classify as transaction_search.",
-    "10. Otherwise, if the request asks for details about a numbered or previously shown transaction, classify as transaction_detail.",
-    "11. Otherwise, if the request asks whether a possible transfer is allowed, classify as transfer_eligibility.",
-    "12. Otherwise, if the request previews the outcome of a possible transfer, classify as transfer_quote.",
-    "13. Otherwise, if the request asks about today's daily transfer limit usage, classify as daily_transfer_usage.",
-    "14. Otherwise, if the request asks for pending AI confirmations, classify as pending_ai_transfers.",
-    "15. Otherwise, choose the closest remaining supported intent or unsupported.",
-    "16. If multiple read-only intents appear, choose the most specific one.",
-    "17. If ambiguous but action-oriented, imperative, or future-looking, prefer transfer_prepare unless it is eligibility, quote, or pending-status wording.",
-    "18. If ambiguous but past-tense or historical, prefer the relevant read-only intent.",
+    "5. Otherwise, if the request asks for net total, balance, or who is ahead with a counterparty, classify as counterparty_net_total.",
+    "6. Otherwise, if the request asks for a broad history or relationship with a counterparty, classify as counterparty_summary.",
+    "7. Otherwise, if the request asks for ordered activity with a counterparty, classify as counterparty_activity_timeline.",
+    "8. Otherwise, if the request asks for total amount received from a referenced counterparty, classify as counterparty_total_received.",
+    "9. Otherwise, if the request asks for total amount sent to a referenced counterparty, classify as counterparty_total_sent.",
+    "10. Otherwise, if the request asks for transactions with a referenced counterparty, classify as counterparty_transactions.",
+    "11. Otherwise, if the request searches or filters transactions by date, amount, reason, or direction, classify as transaction_search.",
+    "12. Otherwise, if the request asks for details about a numbered or previously shown transaction, classify as transaction_detail.",
+    "13. Otherwise, if the request asks whether a possible transfer is allowed, classify as transfer_eligibility.",
+    "14. Otherwise, if the request previews the outcome of a possible transfer, classify as transfer_quote.",
+    "15. Otherwise, if the request asks about today's daily transfer limit usage, classify as daily_transfer_usage.",
+    "16. Otherwise, if the request asks for pending AI confirmations, classify as pending_ai_transfers.",
+    "17. Otherwise, choose the closest remaining supported intent or unsupported.",
+    "18. If multiple read-only intents appear, choose the most specific one.",
+    "19. If ambiguous but action-oriented, imperative, or future-looking, prefer transfer_prepare unless it is eligibility, quote, or pending-status wording.",
+    "20. If ambiguous but past-tense or historical, prefer the relevant read-only intent.",
     "",
     "Hebrew tense and phrasing rules:",
     "The Hebrew verb root ע.ב.ר / להעביר can describe either a new transfer or a historical transfer depending on tense and context.",
@@ -452,6 +562,8 @@ function buildTransferDraftPrompt(input: ExtractTransferDraftInput) {
     "Recipient rules:",
     "Use recent messages and known counterparties only to understand references.",
     "Do not resolve a masked label or nickname to an email yourself unless the email is explicit in the user message.",
+    "Do not put display labels such as Nikola Jokic (j***@example.com) in recipientEmail.",
+    "If the user refers to a person by label, nickname, name, masked email, or pronoun, put those words in recipientReference.",
     "If the user says him/her/this recipient/לו/לה/אליו/אליה, keep that phrase as recipientReference.",
     "",
     `Known counterparties: ${JSON.stringify(knownCounterparties)}`,
@@ -583,8 +695,8 @@ export function createConfiguredAssistantLlmProvider():
     { method: "jsonSchema" }
   );
   const transferDraftExtractor =
-    createChatModel(0).withStructuredOutput<TransferDraftOutput>(
-      transferDraftSchema,
+    createChatModel(0).withStructuredOutput<TransferDraftRawOutput>(
+      transferDraftRawSchema,
       { method: "jsonSchema" }
     );
   const referenceResolver =
@@ -611,17 +723,7 @@ export function createConfiguredAssistantLlmProvider():
         ["human", input.userMessage]
       ]);
 
-      return {
-        recipientReference: result.recipientReference,
-        recipientEmail: result.recipientEmail,
-        amount: result.amount,
-        amountText: result.amountText,
-        amountReferenceText: result.amountReferenceText,
-        currency: result.currency,
-        currencyMentioned: result.currencyMentioned ?? undefined,
-        currencySupported: result.currencySupported ?? undefined,
-        reason: result.reason
-      };
+      return normalizeTransferDraftOutput(result);
     },
     async resolveCounterpartyReference(input: ResolveCounterpartyReferenceInput) {
       const result = await referenceResolver.invoke([
