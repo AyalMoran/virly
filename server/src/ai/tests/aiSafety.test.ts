@@ -97,7 +97,7 @@ function createFakeTools(
       return fakeResult({
         toolName: "getAccountBalance",
         summary: "Your Virly account available balance is 125.00.",
-        metadata: { recordCount: 1, accountLabel: "Virly account" }
+        metadata: { recordCount: 1, accountLabel: "Virly account", amount: 125 }
       });
     },
     async getRecentTransactions() {
@@ -666,6 +666,22 @@ function createFakePhaseThreeTransactionTools(
         toolName: "getTransactionReceipt",
         summary: `Transaction details for ${context.resolvedTransactionId}: received 200.00 ILS with Sarah Example (s***@example.com).`,
         userSummary: `Transaction details for ${context.resolvedTransactionId}: received 200.00 ILS with Sarah Example (sarah@example.com).`,
+        data: {
+          transactionId: context.resolvedTransactionId ?? "missing",
+          label:
+            "2. received 200.00 ILS with Sarah Example (sarah@example.com)",
+          llmLabel:
+            "2. received 200.00 ILS with Sarah Example (s***@example.com)",
+          amount: 200,
+          currency: "ILS",
+          direction: "received",
+          counterpartyLabel: "Sarah Example (sarah@example.com)",
+          counterpartyMaskedLabel: "s***@example.com",
+          counterpartyEmail: "sarah@example.com",
+          reason: null,
+          occurredAt: "2026-05-19T10:00:00.000Z",
+          status: "completed"
+        },
         metadata: {
           recordCount: 1,
           transactionId: context.resolvedTransactionId,
@@ -678,6 +694,7 @@ function createFakePhaseThreeTransactionTools(
               currency: "ILS",
               direction: "received",
               occurredAt: "2026-05-19T10:00:00.000Z",
+              status: "completed",
               counterpartyLabel: "Sarah Example (s***@example.com)"
             }
           ]
@@ -769,8 +786,10 @@ function createFakePhaseFourTransferTools(
             pendingTransferId: "pending-transfer-1",
             label: "1. 50.00 ILS to Alex Example (alex@example.com)",
             recipientLabel: "Alex Example (alex@example.com)",
+            recipientMaskedLabel: "Alex Example (a***@example.com)",
             amount: 50,
             currency: "ILS",
+            status: "pending",
             expiresAt: "2026-05-24T12:00:00.000Z"
           }
         ],
@@ -799,6 +818,7 @@ function createFakePhaseFourTransferTools(
               recipientLabel: "Alex Example (a***@example.com)",
               amount: 50,
               currency: "ILS",
+              status: "pending",
               expiresAt: "2026-05-24T12:00:00.000Z"
             }
           ]
@@ -2233,6 +2253,7 @@ test("local-part follow-up resolves from remembered counterparty aliases when un
 test("llm sees masked assistant context and masked tool summaries while the user sees full emails", async () => {
   const executed: string[] = [];
   let llmToolSummary = "";
+  let llmConversationSummary = "";
   const sanitizedMessages = sanitizeMessagesForLlm([
     {
       role: "assistant",
@@ -2253,7 +2274,9 @@ test("llm sees masked assistant context and masked tool summaries while the user
       return { intent: "recent_sent_counterparties" };
     },
     async composeResponse(input) {
-      llmToolSummary = input.toolResults[0]?.summary ?? "";
+      llmToolSummary = input.safeToolSummaries[0]?.summary ?? "";
+      llmConversationSummary =
+        input.safeConversationSummary.recentMessages[0]?.content ?? "";
       return `LLM response: ${llmToolSummary}`;
     }
   });
@@ -2273,10 +2296,133 @@ test("llm sees masked assistant context and masked tool summaries while the user
 
   assert.match(sanitizedMessages[0]?.content ?? "", /a\*\*\*@example\.com/);
   assert.doesNotMatch(sanitizedMessages[0]?.content ?? "", /alex@example\.com/);
+  assert.match(llmConversationSummary, /a\*\*\*@example\.com/);
+  assert.doesNotMatch(llmConversationSummary, /alex@example\.com/);
   assert.match(llmToolSummary, /d\*\*\*@example\.com/);
   assert.doesNotMatch(llmToolSummary, /daniel@example\.com/);
   assert.match(result.message, /daniel@example\.com/);
   assert.doesNotMatch(result.message, /d\*\*\*@example\.com/);
+});
+
+test("llm responder input includes deterministic required amount facts", async () => {
+  const executed: string[] = [];
+  let requiredResponseFacts: Array<{ source: string; value: string }> = [];
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "balance_inquiry" };
+    },
+    async composeResponse(input) {
+      requiredResponseFacts = input.requiredResponseFacts.map((fact) => ({
+        source: fact.source,
+        value: fact.value
+      }));
+      return input.fallbackMessage;
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-required-response-facts",
+      message: "What is my balance?"
+    },
+    {
+      tools: createFakeTools(executed),
+      llmProvider
+    }
+  );
+
+  assert.equal(result.intent, "balance_inquiry");
+  assert.deepEqual(result.toolCalls, ["getUserAccounts", "getAccountBalance"]);
+  assert.deepEqual(requiredResponseFacts, [
+    {
+      source: "getAccountBalance.amount",
+      value: "125.00"
+    }
+  ]);
+});
+
+test("llm responder input includes deterministic recipient date and status facts", async () => {
+  const executed: string[] = [];
+  let requiredResponseFacts: Array<{
+    kind: string;
+    source: string;
+    value: string;
+  }> = [];
+  const conversationStore = createFakeConversationStore();
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent(input) {
+      return {
+        intent: /second one/i.test(input.userMessage)
+          ? "transaction_detail"
+          : "transaction_search"
+      };
+    },
+    async composeResponse(input) {
+      requiredResponseFacts = input.requiredResponseFacts.map((fact) => ({
+        kind: fact.kind,
+        source: fact.source,
+        value: fact.value
+      }));
+      return input.fallbackMessage;
+    }
+  });
+
+  await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-transaction-detail-required-facts",
+      message: "Show transfers over 100 from last week"
+    },
+    {
+      tools: createFakePhaseThreeTransactionTools(executed),
+      conversationStore,
+      llmProvider
+    }
+  );
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-transaction-detail-required-facts",
+      message: "Tell me more about the second one"
+    },
+    {
+      tools: createFakePhaseThreeTransactionTools(executed),
+      conversationStore,
+      llmProvider
+    }
+  );
+
+  assert.equal(result.intent, "transaction_detail");
+  assert.deepEqual(result.toolCalls, [
+    "resolveTransactionReference",
+    "getTransactionReceipt"
+  ]);
+  assert.ok(
+    requiredResponseFacts.some(
+      (fact) =>
+        fact.kind === "recipient" &&
+        fact.source === "getTransactionReceipt.recipient" &&
+        fact.value === "s***@example.com"
+    )
+  );
+  assert.ok(
+    requiredResponseFacts.some(
+      (fact) =>
+        fact.kind === "date" &&
+        fact.source === "getTransactionReceipt.occurredAt" &&
+        fact.value === "2026-05-19T10:00:00.000Z"
+    )
+  );
+  assert.ok(
+    requiredResponseFacts.some(
+      (fact) =>
+        fact.kind === "status" &&
+        fact.source === "getTransactionReceipt.status" &&
+        fact.value === "completed"
+    )
+  );
 });
 
 test("ambiguous counterparty reference asks for clarification and runs no tool", async () => {
@@ -2583,6 +2729,8 @@ test("amount reference classifier maps directional references", () => {
     classifyAmountReference("אותה כמות"),
     "last_pending_transfer"
   );
+  assert.equal(classifyAmountReference("that amount"), "last_answer_total");
+  assert.equal(classifyAmountReference("that total"), "last_answer_total");
 });
 
 test("received-total tool aggregates credits by authenticated user and counterparty", async () => {
@@ -2722,6 +2870,105 @@ test("default contextual amount resolver scopes latest received lookup by user a
   }
 });
 
+test("contextual amount resolver uses latest positive total answer for resolved counterparty", async () => {
+  const memory = createMemoryWithCounterparties(["alex@example.com"]);
+  memory.entities = [
+    {
+      id: "total:received:maya@example.com",
+      type: "total",
+      turnIntroduced: 2,
+      turnLastReferenced: 2,
+      source: "tool_result",
+      confidence: "high",
+      displayName: "total received from m***@example.com",
+      counterpartyEmail: "maya@example.com",
+      direction: "received",
+      sourceToolName: "getTotalReceivedFromCounterparty",
+      amount: 200,
+      currency: "ILS",
+      aliases: ["that amount"]
+    },
+    {
+      id: "total:received:alex@example.com",
+      type: "total",
+      turnIntroduced: 3,
+      turnLastReferenced: 3,
+      source: "tool_result",
+      confidence: "high",
+      displayName: "total received from a***@example.com",
+      counterpartyEmail: "alex@example.com",
+      direction: "received",
+      sourceToolName: "getTotalReceivedFromCounterparty",
+      amount: 120,
+      currency: "ILS",
+      aliases: ["that amount", "that total"]
+    }
+  ];
+
+  const result = await resolveContextualAmount({
+    userId: "507f1f77bcf86cd799439011",
+    conversationId: "test-total-answer-amount-resolver",
+    transferDraft: {
+      amountReferenceText: "that amount"
+    },
+    resolvedCounterparty: {
+      email: "Alex@Example.com",
+      maskedLabel: "a***@example.com",
+      firstMentionedAtTurn: 1,
+      lastReferencedAtTurn: 1
+    },
+    counterpartyMemory: memory
+  });
+
+  assert.equal(result.status, "resolved");
+  assert.equal(result.status === "resolved" ? result.amount.amount : 0, 120);
+  assert.equal(
+    result.status === "resolved" ? result.amount.source : undefined,
+    "last_answer_total_received"
+  );
+});
+
+test("contextual amount resolver flags same-amount ambiguity when total answer exists", async () => {
+  const memory = createMemoryWithCounterparties(["alex@example.com"]);
+  memory.entities = [
+    {
+      id: "total:received:alex@example.com",
+      type: "total",
+      turnIntroduced: 3,
+      turnLastReferenced: 3,
+      source: "tool_result",
+      confidence: "high",
+      displayName: "total received from a***@example.com",
+      counterpartyEmail: "alex@example.com",
+      direction: "received",
+      sourceToolName: "getTotalReceivedFromCounterparty",
+      amount: 120,
+      currency: "ILS",
+      aliases: ["that amount", "that total"]
+    }
+  ];
+
+  const result = await resolveContextualAmount({
+    userId: "507f1f77bcf86cd799439011",
+    conversationId: "test-ambiguous-same-amount-resolver",
+    transferDraft: {
+      amountReferenceText: "same amount"
+    },
+    resolvedCounterparty: {
+      email: "alex@example.com",
+      maskedLabel: "a***@example.com",
+      firstMentionedAtTurn: 1,
+      lastReferencedAtTurn: 1
+    },
+    counterpartyMemory: memory
+  });
+
+  assert.deepEqual(result, {
+    status: "unresolved",
+    reason: "ambiguous_amount_scope"
+  });
+});
+
 test("contextual amount resolver fills transfer amount before preparation", async () => {
   const transferPreparations: Array<Parameters<TransferPreparationService>[0]> = [];
   const amountResolutionInputs: Array<Parameters<AmountResolutionService>[0]> = [];
@@ -2782,6 +3029,185 @@ test("contextual amount resolver fills transfer amount before preparation", asyn
     "same amount he sent me"
   );
   assert.equal(transferPreparations[0].draft.amount, 75);
+});
+
+test("transfer can resolve that amount from latest total answer memory", async () => {
+  const transferPreparations: Array<Parameters<TransferPreparationService>[0]> = [];
+  const memory = createMemoryWithCounterparties(["alex@example.com"]);
+  memory.entities = [
+    {
+      id: "total:received:alex@example.com",
+      type: "total",
+      turnIntroduced: 2,
+      turnLastReferenced: 2,
+      source: "tool_result",
+      confidence: "high",
+      displayName: "total received from a***@example.com",
+      counterpartyEmail: "alex@example.com",
+      direction: "received",
+      sourceToolName: "getTotalReceivedFromCounterparty",
+      amount: 120,
+      currency: "ILS",
+      aliases: ["that amount", "that total"]
+    }
+  ];
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-transfer-from-total-answer",
+      message: "send him that amount"
+    },
+    {
+      tools: createFakeTools([]),
+      conversationStore,
+      transferPreparationService:
+        createFakeTransferPreparationService(transferPreparations)
+    }
+  );
+
+  assert.equal(result.intent, "transfer_prepare");
+  assert.equal(result.confirmation?.amount, 120);
+  assert.equal(result.confirmation?.recipientEmail, "alex@example.com");
+  assert.equal(transferPreparations[0].draft.amount, 120);
+  assert.equal(
+    transferPreparations[0].draft.amountReferenceText,
+    "that amount"
+  );
+});
+
+test("ambiguous same-amount transfer stores amount-scope clarification with resume draft", async () => {
+  const transferPreparations: Array<Parameters<TransferPreparationService>[0]> = [];
+  const memory = createMemoryWithCounterparties(["alex@example.com"]);
+  memory.entities = [
+    {
+      id: "total:received:alex@example.com",
+      type: "total",
+      turnIntroduced: 2,
+      turnLastReferenced: 2,
+      source: "tool_result",
+      confidence: "high",
+      displayName: "total received from a***@example.com",
+      counterpartyEmail: "alex@example.com",
+      direction: "received",
+      sourceToolName: "getTotalReceivedFromCounterparty",
+      amount: 120,
+      currency: "ILS",
+      aliases: ["that amount", "that total"]
+    }
+  ];
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-amount-scope-clarification",
+      message: "send him the same amount"
+    },
+    {
+      tools: createFakeTools([]),
+      conversationStore,
+      transferPreparationService:
+        createFakeTransferPreparationService(transferPreparations)
+    }
+  );
+  const savedClarification =
+    conversationStore.saved.at(-1)?.memory.clarification;
+
+  assert.equal(result.intent, "transfer_prepare");
+  assert.equal(result.confirmation, undefined);
+  assert.equal(transferPreparations.length, 0);
+  assert.equal(result.clarification?.reason, "ambiguous_amount");
+  assert.equal(result.clarification?.expectedReplyType, "amount_scope");
+  assert.equal(result.clarification?.resumeIntent, "transfer_prepare");
+  assert.equal(result.clarification?.resumeDraft?.amountReferenceText, "same amount");
+  assert.deepEqual(
+    result.clarification?.options?.map((option) => option.value),
+    ["last_sent_transaction", "last_answer_total"]
+  );
+  assert.equal(savedClarification?.resumeIntent, "transfer_prepare");
+  assert.equal(savedClarification?.resumeDraft?.amountReferenceText, "same amount");
+});
+
+test("amount-scope clarification reply resumes transfer with previous answer total", async () => {
+  const transferPreparations: Array<Parameters<TransferPreparationService>[0]> = [];
+  const memory = createMemoryWithCounterparties(["alex@example.com"]);
+  memory.entities = [
+    {
+      id: "total:received:alex@example.com",
+      type: "total",
+      turnIntroduced: 2,
+      turnLastReferenced: 2,
+      source: "tool_result",
+      confidence: "high",
+      displayName: "total received from a***@example.com",
+      counterpartyEmail: "alex@example.com",
+      direction: "received",
+      sourceToolName: "getTotalReceivedFromCounterparty",
+      amount: 120,
+      currency: "ILS",
+      aliases: ["that amount", "that total"]
+    }
+  ];
+  memory.clarification = {
+    reason: "ambiguous_amount",
+    message:
+      "Do you mean the last amount from that counterparty, or the total from the previous answer?",
+    expectedReplyType: "amount_scope",
+    resumeIntent: "transfer_prepare",
+    resumeDraft: {
+      recipientReference: "him",
+      amountReferenceText: "same amount"
+    },
+    options: [
+      {
+        id: "last_sent_transaction",
+        label: "Last sent amount",
+        value: "last_sent_transaction"
+      },
+      {
+        id: "last_answer_total",
+        label: "Previous answer total",
+        value: "last_answer_total"
+      }
+    ]
+  };
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-amount-scope-resume-total",
+      message: "the previous answer total"
+    },
+    {
+      tools: createFakeTools([]),
+      conversationStore,
+      transferPreparationService:
+        createFakeTransferPreparationService(transferPreparations)
+    }
+  );
+  const savedMemory = conversationStore.saved.at(-1)?.memory;
+
+  assert.equal(result.intent, "transfer_prepare");
+  assert.equal(result.confirmation?.amount, 120);
+  assert.equal(result.confirmation?.recipientEmail, "alex@example.com");
+  assert.equal(transferPreparations[0].draft.amount, 120);
+  assert.equal(
+    transferPreparations[0].draft.amountReferenceText,
+    "that amount"
+  );
+  assert.equal(savedMemory?.clarification, null);
 });
 
 test("unresolved contextual amount does not create a pending transfer", async () => {
@@ -2938,6 +3364,443 @@ test("chat confirmation wording never executes money movement", async () => {
   assert.equal(result.intent, "pending_confirmation_status");
   assert.deepEqual(result.toolCalls, []);
   assert.match(result.message, /cannot confirm a transfer from chat text/i);
+});
+
+test("llm response post-check rejects chat-confirmation money movement claims", async () => {
+  const auditLogs: AuditLogInput[] = [];
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "pending_confirmation_status" };
+    },
+    async composeResponse() {
+      return "I confirmed it and the transfer has been sent.";
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-response-post-check-transfer-claim",
+      requestId: "request-response-post-check-transfer-claim",
+      message: "yes confirm it"
+    },
+    {
+      tools: createFakeTools([]),
+      llmProvider,
+      auditLogger: async (input) => {
+        auditLogs.push(input);
+      },
+      conversationStore: createFakeConversationStore({
+        messages: [],
+        memory: {
+          ...createEmptyCounterpartyMemory(),
+          pendingConfirmation: {
+            confirmationId: "pending-transfer-1",
+            type: "transfer",
+            status: "pending",
+            createdAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 600000).toISOString(),
+            recipientEmail: "alex@example.com",
+            amount: 50,
+            currency: "ILS",
+            turnCreated: 1,
+            version: 1
+          },
+          mode: "transfer_confirmation_pending"
+        }
+      })
+    }
+  );
+  const diagnostics = auditLogs[0].diagnostics ?? [];
+
+  assert.equal(result.intent, "pending_confirmation_status");
+  assert.match(result.message, /cannot confirm a transfer from chat text/i);
+  assert.ok(
+    diagnostics.some(
+      (event) =>
+        event.nodeName === "composeResponse" &&
+        event.fallbackReason ===
+          "response_post_check_failed:unsafe_money_movement_claim"
+    )
+  );
+});
+
+test("llm responder input includes pending confirmation memory facts", async () => {
+  let safeConfirmation:
+    | {
+        status: string;
+        recipientMaskedLabel: string;
+        amount: number;
+        formattedAmount: string;
+        expiresAt: string;
+      }
+    | undefined;
+  let requiredResponseFacts: Array<{
+    kind: string;
+    source: string;
+    value: string;
+  }> = [];
+  const expiresAt = "2026-05-24T12:00:00.000Z";
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "pending_confirmation_status" };
+    },
+    async composeResponse(input) {
+      safeConfirmation = input.safeResolvedReferences.confirmation ?? undefined;
+      requiredResponseFacts = input.requiredResponseFacts.map((fact) => ({
+        kind: fact.kind,
+        source: fact.source,
+        value: fact.value
+      }));
+      return input.fallbackMessage;
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-pending-memory-response-facts",
+      message: "what is pending?"
+    },
+    {
+      tools: createFakeTools([]),
+      llmProvider,
+      conversationStore: createFakeConversationStore({
+        messages: [],
+        memory: {
+          ...createEmptyCounterpartyMemory(),
+          pendingConfirmation: {
+            confirmationId: "pending-transfer-1",
+            type: "transfer",
+            status: "pending",
+            createdAt: "2026-05-24T11:50:00.000Z",
+            expiresAt,
+            recipientEmail: "alex@example.com",
+            amount: 50,
+            currency: "ILS",
+            turnCreated: 1,
+            version: 1
+          },
+          mode: "transfer_confirmation_pending"
+        }
+      })
+    }
+  );
+
+  assert.equal(result.intent, "pending_confirmation_status");
+  assert.deepEqual(safeConfirmation, {
+    status: "pending",
+    recipientMaskedLabel: "a***@example.com",
+    amount: 50,
+    currency: "ILS",
+    formattedAmount: "50.00 ILS",
+    reason: null,
+    warningCodes: [],
+    expiresAt
+  });
+  assert.ok(
+    requiredResponseFacts.some(
+      (fact) =>
+        fact.kind === "amount" &&
+        fact.source === "confirmation.amount" &&
+        fact.value === "50.00"
+    )
+  );
+  assert.ok(
+    requiredResponseFacts.some(
+      (fact) =>
+        fact.kind === "recipient" &&
+        fact.source === "confirmation.recipient" &&
+        fact.value === "a***@example.com"
+    )
+  );
+  assert.ok(
+    requiredResponseFacts.some(
+      (fact) =>
+        fact.kind === "status" &&
+        fact.source === "confirmation.status" &&
+        fact.value === "pending"
+    )
+  );
+  assert.ok(
+    requiredResponseFacts.some(
+      (fact) =>
+        fact.kind === "date" &&
+        fact.source === "confirmation.expiresAt" &&
+        fact.value === expiresAt
+    )
+  );
+});
+
+test("llm response post-check preserves required balance amount facts", async () => {
+  const auditLogs: AuditLogInput[] = [];
+  const executed: string[] = [];
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "balance_inquiry" };
+    },
+    async composeResponse() {
+      return "Your Virly balance is 999.00.";
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-response-post-check-balance-fact",
+      requestId: "request-response-post-check-balance-fact",
+      message: "What is my balance?"
+    },
+    {
+      tools: createFakeTools(executed),
+      llmProvider,
+      auditLogger: async (input) => {
+        auditLogs.push(input);
+      }
+    }
+  );
+  const diagnostics = auditLogs[0].diagnostics ?? [];
+
+  assert.equal(result.intent, "balance_inquiry");
+  assert.deepEqual(result.toolCalls, ["getUserAccounts", "getAccountBalance"]);
+  assert.equal(
+    result.message,
+    "Virly account Your Virly account available balance is 125.00."
+  );
+  assert.ok(
+    diagnostics.some(
+      (event) =>
+        event.nodeName === "composeResponse" &&
+        event.fallbackReason ===
+          "response_post_check_failed:missing_required_amount_fact"
+    )
+  );
+});
+
+test("llm response post-check preserves required aggregate amount facts", async () => {
+  const auditLogs: AuditLogInput[] = [];
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory: createMemoryWithCounterparties(["alex@example.com"])
+  });
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "counterparty_total_sent" };
+    },
+    async resolveCounterpartyReference() {
+      return { kind: "last_counterparty", confidence: "high" };
+    },
+    async composeResponse() {
+      return "You have sent 420.00 in total.";
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-response-post-check-total-fact",
+      requestId: "request-response-post-check-total-fact",
+      message: "How much did I send him?"
+    },
+    {
+      tools: createFakeTools(executed),
+      conversationStore,
+      llmProvider,
+      auditLogger: async (input) => {
+        auditLogs.push(input);
+      }
+    }
+  );
+  const diagnostics = auditLogs[0].diagnostics ?? [];
+
+  assert.equal(result.intent, "counterparty_total_sent");
+  assert.deepEqual(result.toolCalls, ["getTotalSentToCounterparty"]);
+  assert.equal(
+    result.message,
+    "You have sent 42.00 in total to alex@example.com."
+  );
+  assert.ok(
+    diagnostics.some(
+      (event) =>
+        event.nodeName === "composeResponse" &&
+        event.fallbackReason ===
+          "response_post_check_failed:missing_required_amount_fact"
+    )
+  );
+});
+
+test("llm response post-check rejects contradictory transaction status and date facts", async () => {
+  const auditLogs: AuditLogInput[] = [];
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore();
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent(input) {
+      return {
+        intent: /second one/i.test(input.userMessage)
+          ? "transaction_detail"
+          : "transaction_search"
+      };
+    },
+    async composeResponse() {
+      return "Transaction details for tx-2: received 200.00 ILS with Sarah Example (sarah@example.com) on 2026-05-20T10:00:00.000Z. Status: pending.";
+    }
+  });
+
+  await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-response-post-check-transaction-facts",
+      message: "Show transfers over 100 from last week"
+    },
+    {
+      tools: createFakePhaseThreeTransactionTools(executed),
+      conversationStore,
+      llmProvider
+    }
+  );
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-response-post-check-transaction-facts",
+      requestId: "request-response-post-check-transaction-facts",
+      message: "Tell me more about the second one"
+    },
+    {
+      tools: createFakePhaseThreeTransactionTools(executed),
+      conversationStore,
+      llmProvider,
+      auditLogger: async (input) => {
+        auditLogs.push(input);
+      }
+    }
+  );
+  const diagnostics = auditLogs.at(-1)?.diagnostics ?? [];
+
+  assert.equal(result.intent, "transaction_detail");
+  assert.deepEqual(result.toolCalls, [
+    "resolveTransactionReference",
+    "getTransactionReceipt"
+  ]);
+  assert.match(result.message, /Resolved transaction reference to tx-2\./);
+  assert.match(
+    result.message,
+    /Transaction details for tx-2: received 200\.00 ILS with Sarah Example \(sarah@example\.com\)\./
+  );
+  assert.ok(
+    diagnostics.some(
+      (event) =>
+        event.nodeName === "composeResponse" &&
+        event.fallbackReason ===
+          "response_post_check_failed:contradicting_required_status_fact"
+    )
+  );
+});
+
+test("llm response post-check rejects contradictory pending-transfer recipient facts", async () => {
+  const auditLogs: AuditLogInput[] = [];
+  const executed: string[] = [];
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "pending_ai_transfers" };
+    },
+    async composeResponse() {
+      return "Pending transfer confirmations in this conversation: 1. 50.00 ILS to Maya Example (maya@example.com), expires 2026-05-24T12:00:00.000Z.";
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-response-post-check-pending-recipient",
+      requestId: "request-response-post-check-pending-recipient",
+      message: "Do I have pending confirmations?"
+    },
+    {
+      tools: createFakePhaseFourTransferTools(executed),
+      llmProvider,
+      auditLogger: async (input) => {
+        auditLogs.push(input);
+      }
+    }
+  );
+  const diagnostics = auditLogs[0].diagnostics ?? [];
+
+  assert.equal(result.intent, "pending_ai_transfers");
+  assert.deepEqual(result.toolCalls, ["getPendingAiTransfers"]);
+  assert.equal(
+    result.message,
+    "Pending transfer confirmations in this conversation: 1. 50.00 ILS to Alex Example (alex@example.com)."
+  );
+  assert.ok(
+    diagnostics.some(
+      (event) =>
+        event.nodeName === "composeResponse" &&
+        event.fallbackReason ===
+          "response_post_check_failed:contradicting_required_recipient_fact"
+    )
+  );
+});
+
+test("llm response post-check rejects contradictory pending confirmation memory facts", async () => {
+  const auditLogs: AuditLogInput[] = [];
+  const expiresAt = "2026-05-24T12:00:00.000Z";
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "pending_confirmation_status" };
+    },
+    async composeResponse() {
+      return "Your pending transfer to maya@example.com for 70.00 ILS is pending until 2026-05-25T12:00:00.000Z.";
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-response-post-check-pending-memory-facts",
+      requestId: "request-response-post-check-pending-memory-facts",
+      message: "what is pending?"
+    },
+    {
+      tools: createFakeTools([]),
+      llmProvider,
+      auditLogger: async (input) => {
+        auditLogs.push(input);
+      },
+      conversationStore: createFakeConversationStore({
+        messages: [],
+        memory: {
+          ...createEmptyCounterpartyMemory(),
+          pendingConfirmation: {
+            confirmationId: "pending-transfer-1",
+            type: "transfer",
+            status: "pending",
+            createdAt: "2026-05-24T11:50:00.000Z",
+            expiresAt,
+            recipientEmail: "alex@example.com",
+            amount: 50,
+            currency: "ILS",
+            turnCreated: 1,
+            version: 1
+          },
+          mode: "transfer_confirmation_pending"
+        }
+      })
+    }
+  );
+  const diagnostics = auditLogs[0].diagnostics ?? [];
+
+  assert.equal(result.intent, "pending_confirmation_status");
+  assert.match(result.message, /cannot confirm a transfer from chat text/i);
+  assert.ok(
+    diagnostics.some(
+      (event) =>
+        event.nodeName === "composeResponse" &&
+        event.fallbackReason ===
+          "response_post_check_failed:missing_required_amount_fact"
+    )
+  );
 });
 
 test("pending transfer amount modification creates new confirmation and supersedes old", async () => {

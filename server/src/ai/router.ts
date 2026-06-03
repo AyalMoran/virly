@@ -235,9 +235,9 @@ export function classifyAssistantIntentDeterministic(
 
   if (
     /\b(send|transfer|pay|move|wire|return|give)\b.*\b(\$|usd|dollar|dollars|nis|shekel|shekels|money|[0-9])/i.test(normalized) ||
-    /\b(send|transfer|pay|move|wire|return|give)\b.*\b(same amount|same as before|same as last time|what\s+(?:he|she|they)\s+sent\s+me|what\s+i\s+sent\s+(?:him|her|them))\b/i.test(normalized) ||
+    /\b(send|transfer|pay|move|wire|return|give)\b.*\b(same amount|same as before|same as last time|what\s+(?:he|she|they)\s+sent\s+me|what\s+i\s+sent\s+(?:him|her|them)|(?:that|this)\s+(?:amount|total|net)|the\s+(?:last|previous)\s+(?:amount|total|net))\b/i.test(normalized) ||
     /\b(send|transfer|pay|move|wire|return|give)\b.*\b(to|for)\b/i.test(normalized) ||
-    /(תעביר|תשלח|שלח|תחזיר|תן).*?(\d+|כסף|שקל|שח|ש״ח|דולר|אירו|לו|לה|אליו|אליה|אותה כמות|אותו סכום|כמו קודם|כמו פעם שעברה|מה שהוא שלח לי|מה שהיא שלחה לי|מה ששלחתי לו|מה ששלחתי לה)/.test(message)
+    /(תעביר|תשלח|שלח|תחזיר|תן).*?(\d+|כסף|שקל|שח|ש״ח|דולר|אירו|לו|לה|אליו|אליה|אותה כמות|אותו סכום|כמו קודם|כמו פעם שעברה|מה שהוא שלח לי|מה שהיא שלחה לי|מה ששלחתי לו|מה ששלחתי לה|הסכום הזה|הסכום ההוא|הסכום האחרון|הסה"כ הזה|הסך הזה|הנטו הזה)/.test(message)
   ) {
     return { intent: "transfer_prepare" };
   }
