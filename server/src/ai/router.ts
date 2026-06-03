@@ -1,5 +1,6 @@
 import {
   AssistantIntent,
+  AiDiagnosticsRecorder,
   AssistantLlmProvider,
   AssistantToolName,
   ClassifyAssistantIntentInput,
@@ -38,6 +39,14 @@ export const intentToReadOnlyTools: Record<
   last_sent_counterparty: ["getLastSentCounterparty"],
   counterparty_transactions: ["getTransactionsWithCounterparty"],
   counterparty_total_sent: ["getTotalSentToCounterparty"],
+  counterparty_total_received: [
+    "resolveCounterpartyCandidates",
+    "getTotalReceivedFromCounterparty"
+  ],
+  counterparty_net_total: [
+    "resolveCounterpartyCandidates",
+    "getNetWithCounterparty"
+  ],
   verified_recipients: ["getVerifiedRecipients"],
   recipient_profile: ["resolveCounterpartyCandidates"],
   transfer_prepare: [],
@@ -129,6 +138,24 @@ export function classifyAssistantIntentDeterministic(
   }
 
   if (
+    /\b(net|net total|balance between|settle up|who owes)\b.*\b(with|between|me and|us|him|her|them|this person|that person|recipient|counterparty)\b/i.test(normalized) ||
+    /\b(with|between|me and|us|him|her|them|this person|that person|recipient|counterparty)\b.*\b(net|net total|balance between|settle up|who owes)\b/i.test(normalized) ||
+    /(נטו|מאזן|יתרה).*?(בינינו|ביני|איתו|איתה|מולו|מולה|עם|נמען|אדם)/.test(message)
+  ) {
+    return { intent: "counterparty_net_total" };
+  }
+
+  if (
+    /\bhow much\b.*\b(?:did|has)?\s*(?:he|she|they|this person|that person|this recipient|that recipient|them)\b.*\b(send|sent|paid|transferred)\b.*\b(me|to me)\b/i.test(normalized) ||
+    /\bhow much\b.*\b(send|sent|paid|transferred)\b.*\b(me|to me)\b/i.test(normalized) ||
+    /\bhow much\b.*\b(?:receive|received|got)\b.*\b(?:from)\b.*\b(?:him|her|them|this person|that person|this recipient|that recipient)\b/i.test(normalized) ||
+    /(כמה).*?(הוא|היא|הם|הן|לו|לה|אליו|אליה).*?(שלח|שלחה|שלחו|העביר|העבירה|העבירו).*?(לי|אליי|אלי)/.test(message) ||
+    /(כמה).*?(קיבלתי).*?(ממנו|ממנה|מהם|מהן|מהנמען|מהאדם)/.test(message)
+  ) {
+    return { intent: "counterparty_total_received" };
+  }
+
+  if (
     /\b(total|ever|altogether|in total|sum)\b.*\b(send|sent|paid|transferred)\b.*\b(this|that|person|recipient|counterparty|them)\b/i.test(normalized) ||
     /\bhow much\b.*\b(send|sent|paid|transferred)\b.*\b(this|that|person|recipient|counterparty|them)\b/i.test(normalized) ||
     /(כמה).*?(שלחתי|העברתי).*?(לו|לה|אליו|אליה|לנמען|לאדם)/.test(message)
@@ -208,8 +235,9 @@ export function classifyAssistantIntentDeterministic(
 
   if (
     /\b(send|transfer|pay|move|wire|return|give)\b.*\b(\$|usd|dollar|dollars|nis|shekel|shekels|money|[0-9])/i.test(normalized) ||
+    /\b(send|transfer|pay|move|wire|return|give)\b.*\b(same amount|same as before|same as last time|what\s+(?:he|she|they)\s+sent\s+me|what\s+i\s+sent\s+(?:him|her|them))\b/i.test(normalized) ||
     /\b(send|transfer|pay|move|wire|return|give)\b.*\b(to|for)\b/i.test(normalized) ||
-    /(תעביר|תשלח|שלח|תחזיר|תן).*?(\d+|כסף|שקל|שח|ש״ח|דולר|אירו|לו|לה|אליו|אליה)/.test(message)
+    /(תעביר|תשלח|שלח|תחזיר|תן).*?(\d+|כסף|שקל|שח|ש״ח|דולר|אירו|לו|לה|אליו|אליה|אותה כמות|אותו סכום|כמו קודם|כמו פעם שעברה|מה שהוא שלח לי|מה שהיא שלחה לי|מה ששלחתי לו|מה ששלחתי לה)/.test(message)
   ) {
     return { intent: "transfer_prepare" };
   }
@@ -269,7 +297,9 @@ function normalizeClassification(
 export async function classifyAssistantIntent(
   message: string,
   llmProvider?: AssistantLlmProvider,
-  context?: Pick<ClassifyAssistantIntentInput, "messages" | "counterpartyMemory">
+  context?: Pick<ClassifyAssistantIntentInput, "messages" | "counterpartyMemory"> & {
+    diagnostics?: AiDiagnosticsRecorder;
+  }
 ): Promise<IntentClassification> {
   const refusalReason = getUnsafeRequestReason(message);
   if (refusalReason) {
@@ -305,10 +335,13 @@ export async function classifyAssistantIntent(
       })
     );
   } catch (error) {
-    console.warn(
-      "AI intent classifier failed; using deterministic fallback.",
-      error instanceof Error ? error.message : error
-    );
+    context?.diagnostics?.({
+      type: "failure",
+      nodeName: "classifyIntent",
+      failureClass: "classifier_failed",
+      fallbackUsed: true,
+      fallbackReason: error instanceof Error ? `error:${error.name}` : typeof error
+    });
     return deterministicClassification;
   }
 }

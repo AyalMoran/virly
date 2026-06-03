@@ -10,6 +10,7 @@ export async function writeAiAuditLog(input: AuditLogInput) {
     intent: input.intent,
     toolsRequested: input.toolsRequested,
     toolsExecuted: input.toolsExecuted,
-    refusalReason: input.refusalReason ?? null
+    refusalReason: input.refusalReason ?? null,
+    diagnostics: input.diagnostics ?? []
   });
 }

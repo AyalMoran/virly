@@ -2,6 +2,7 @@ import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { DEFAULT_ASSISTANT_ID } from "./assistants.js";
 import {
   createEmptyCounterpartyMemory,
+  maskEmail,
   rememberCounterparty,
   normalizeCounterpartyMemory,
   resolveCounterpartyReferenceDeterministic,
@@ -21,6 +22,7 @@ import {
 import { buildToolInput } from "./toolInputs.js";
 import {
   getUserVisibleSummary,
+  getToolDisplayData,
   getResolutionResultData,
   toAssistantToolResult
 } from "./toolResults.js";
@@ -28,6 +30,9 @@ import { applyToolMemoryUpdates } from "./toolMemory.js";
 import type {
   AssistantGraphState,
   AssistantLlmProvider,
+  AiGraphDebugEvent,
+  AiGraphDebugEventInput,
+  AmountResolutionService,
   AssistantToolName,
   AssistantToolExecutors,
   AuditLogger,
@@ -43,6 +48,9 @@ import type {
   RunAssistantResult
 } from "./state.js";
 import { readOnlyToolExecutors } from "./tools/index.js";
+import { normalizeTransferDraftOutput } from "./llm.js";
+import { resolveContextualAmount } from "./amountResolution.js";
+import { config } from "../config.js";
 import {
   modifyAiPendingTransfer,
   prepareAiPendingTransfer
@@ -70,13 +78,15 @@ const AssistantStateAnnotation = Annotation.Root({
   clarificationRequest: Annotation<AssistantGraphState["clarificationRequest"]>(),
   clarificationMessage: Annotation<string | undefined>(),
   refusalReason: Annotation<string | undefined>(),
-  responseMessage: Annotation<string | undefined>()
+  responseMessage: Annotation<string | undefined>(),
+  debugTrace: Annotation<AssistantGraphState["debugTrace"]>()
 });
 
 type GraphOptions = {
   tools: AssistantToolExecutors;
   llmProvider?: AssistantLlmProvider;
   conversationStore?: ConversationStore;
+  amountResolutionService: AmountResolutionService;
   transferPreparationService: TransferPreparationService;
   transferModificationService: TransferModificationService;
 };
@@ -84,6 +94,171 @@ type GraphOptions = {
 export type RunAssistantOptions = Partial<GraphOptions> & {
   auditLogger?: AuditLogger;
 };
+
+type GraphNode = (
+  state: AssistantGraphState
+) => Partial<AssistantGraphState> | Promise<Partial<AssistantGraphState>>;
+
+function appendDebugEvents(
+  currentTrace: AiGraphDebugEvent[] | undefined,
+  events: AiGraphDebugEventInput[]
+) {
+  const createdAt = new Date().toISOString();
+  return [
+    ...(currentTrace ?? []),
+    ...events.map((event) => ({
+      ...event,
+      createdAt: event.createdAt ?? createdAt
+    }))
+  ];
+}
+
+function withDebugEvents(
+  state: AssistantGraphState,
+  changes: Partial<AssistantGraphState>,
+  events: AiGraphDebugEventInput[]
+): Partial<AssistantGraphState> {
+  return {
+    ...changes,
+    debugTrace: appendDebugEvents(changes.debugTrace ?? state.debugTrace, events)
+  };
+}
+
+function sanitizeErrorReason(error: unknown) {
+  return error instanceof Error ? `error:${error.name}` : typeof error;
+}
+
+function getZodIssue(error: unknown) {
+  if (!error || typeof error !== "object" || !("issues" in error)) {
+    return undefined;
+  }
+
+  const issues = (error as { issues?: unknown }).issues;
+  if (!Array.isArray(issues) || issues.length === 0) {
+    return undefined;
+  }
+
+  return issues[0] as {
+    path?: Array<string | number>;
+    code?: string;
+    received?: string;
+  };
+}
+
+function sanitizeString(value: string) {
+  return value.replace(
+    /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,
+    (email) => maskEmail(email)
+  );
+}
+
+function sanitizeTransferDraftSnapshot(draft?: TransferDraft | null) {
+  if (!draft) {
+    return {
+      present: false,
+      recipientEmail: null,
+      recipientReferencePresent: false,
+      recipientReferenceType: null,
+      amount: null,
+      amountTextPresent: false,
+      amountReferenceTextPresent: false,
+      currency: null,
+      currencyMentioned: null,
+      currencySupported: null,
+      reasonPresent: false,
+      missingFields: []
+    };
+  }
+
+  return {
+    present: true,
+    recipientEmail: draft.recipientEmail
+      ? maskEmail(draft.recipientEmail)
+      : null,
+    recipientReferencePresent: Boolean(draft.recipientReference),
+    recipientReferenceType:
+      draft.recipientReference == null ? null : typeof draft.recipientReference,
+    amount: typeof draft.amount === "number" ? draft.amount : null,
+    amountTextPresent: Boolean(draft.amountText),
+    amountReferenceTextPresent: Boolean(draft.amountReferenceText),
+    currency: draft.currency ?? null,
+    currencyMentioned: draft.currencyMentioned ?? null,
+    currencySupported: draft.currencySupported ?? null,
+    reasonPresent: Boolean(draft.reason),
+    missingFields: draft.missingFields ?? []
+  };
+}
+
+function sanitizeStateSnapshot(state: AssistantGraphState) {
+  return {
+    intent: state.detectedIntent ?? null,
+    requestedToolNames: state.requestedToolNames,
+    executedToolNames: state.executedToolNames,
+    clarificationReason: state.clarificationRequest?.reason ?? null,
+    hasConfirmation: Boolean(state.confirmation),
+    refusalReason: state.refusalReason ?? null,
+    transferDraft: sanitizeTransferDraftSnapshot(state.transferDraft)
+  };
+}
+
+function buildSchemaFailureEvent(input: {
+  nodeName: string;
+  schemaName: string;
+  failureClass: AiGraphDebugEventInput["failureClass"];
+  error: unknown;
+  fallbackUsed: boolean;
+  fallbackReason: string;
+}): AiGraphDebugEventInput {
+  const issue = getZodIssue(input.error);
+
+  return {
+    type: "failure",
+    nodeName: input.nodeName,
+    schemaName: input.schemaName,
+    failureClass: input.failureClass,
+    failedField: issue?.path?.join(".") || undefined,
+    rawValueType: issue?.received ?? undefined,
+    fallbackUsed: input.fallbackUsed,
+    fallbackReason: input.fallbackReason,
+    details: issue?.code ? { errorCode: sanitizeString(issue.code) } : undefined
+  };
+}
+
+function withNodeTrace(nodeName: string, node: GraphNode): GraphNode {
+  return async (state) => {
+    if (!config.ai.debugTrace) {
+      return node(state);
+    }
+
+    const stateWithStartTrace: AssistantGraphState = {
+      ...state,
+      debugTrace: appendDebugEvents(state.debugTrace, [
+        {
+          type: "node_transition",
+          nodeName,
+          details: { phase: "started" }
+        }
+      ])
+    };
+    const result = await node(stateWithStartTrace);
+    const mergedState = {
+      ...stateWithStartTrace,
+      ...result
+    };
+
+    return {
+      ...result,
+      debugTrace: appendDebugEvents(result.debugTrace ?? stateWithStartTrace.debugTrace, [
+        {
+          type: "node_transition",
+          nodeName,
+          details: { phase: "completed" },
+          snapshot: sanitizeStateSnapshot(mergedState)
+        }
+      ])
+    };
+  };
+}
 
 function getUserMessage(state: AssistantGraphState) {
   for (let index = state.messages.length - 1; index >= 0; index -= 1) {
@@ -147,18 +322,26 @@ function buildIntentClassifier(llmProvider?: AssistantLlmProvider) {
       return {};
     }
 
+    const diagnosticEvents: AiGraphDebugEventInput[] = [];
     const classification = await classifyAssistantIntent(
       getUserMessage(state),
       llmProvider,
       {
         messages: state.messages,
-        counterpartyMemory: state.counterpartyMemory
+        counterpartyMemory: state.counterpartyMemory,
+        diagnostics: (event) => {
+          diagnosticEvents.push(event);
+        }
       }
     );
-    return {
+    const changes = {
       detectedIntent: classification.intent,
       refusalReason: classification.refusalReason
     };
+
+    return diagnosticEvents.length > 0
+      ? withDebugEvents(state, changes, diagnosticEvents)
+      : changes;
   };
 }
 
@@ -189,18 +372,19 @@ function applySlotDataToDraft(
   const amount = slots?.amount;
   const counterparty = slots?.counterparty;
   const nextDraft: TransferDraft = {
-    ...draft,
     recipientEmail:
       draft.recipientEmail ?? counterparty?.explicitEmail ?? undefined,
     recipientReference:
       draft.recipientReference ?? counterparty?.referenceText ?? undefined,
     amount: draft.amount ?? amount?.value ?? undefined,
     amountText: draft.amountText ?? amount?.rawText ?? undefined,
+    amountReferenceText: draft.amountReferenceText,
     currency: draft.currency ?? amount?.currency ?? undefined,
     currencyMentioned:
       draft.currencyMentioned ?? amount?.currencyMentioned ?? false,
     currencySupported:
-      draft.currencySupported ?? amount?.currencySupported ?? true
+      draft.currencySupported ?? amount?.currencySupported ?? true,
+    reason: draft.reason
   };
 
   const missingFields: TransferDraft["missingFields"] = [];
@@ -230,8 +414,15 @@ function extractTransferDraftDeterministic(
   );
   const amount = amountMatch ? Number(amountMatch[1]) : null;
   const referenceMatch = message.match(
-    /\b(him|her|them|this person|that person|this recipient|that recipient)\b/i
+    /\b(he|him|she|her|they|them|him again|her again|them again|same person|same recipient|the guy|the person from before|the last one|this person|that person|this recipient|that recipient)\b/i
   );
+  const amountReferenceMatch =
+    message.match(
+      /\b(same amount\s+(?:i\s+sent\s+(?:him|her|them)|(?:he|she|they)\s+sent\s+me)|what\s+(?:he|she|they)\s+sent\s+me|what\s+i\s+sent\s+(?:him|her|them)|same amount(?:\s+again)?|same as before|same as last time)\b/i
+    ) ??
+    message.match(
+      /(אותה כמות|אותו סכום|כמו קודם|כמו פעם שעברה|מה שהוא שלח לי|מה שהיא שלחה לי|מה שהם שלחו לי|מה ששלחתי לו|מה ששלחתי לה|מה ששלחתי להם)/
+    );
   const reasonMatch =
     message.match(/\b(?:add|set|change)?\s*reason\s+(?:to\s+)?(.{1,80})$/i) ??
     message.match(/(?:סיבה|הסיבה)\s+(.{1,80})$/);
@@ -254,6 +445,9 @@ function extractTransferDraftDeterministic(
         (intent === "transfer_prepare" ? message.trim() : null),
     amount: Number.isFinite(amount) && amount ? amount : null,
     amountText: amountMatch?.[0]?.trim() ?? null,
+    amountReferenceText: amount
+      ? null
+      : amountReferenceMatch?.[0]?.trim() ?? null,
     currency: unsupportedCurrency
       ? /(\$|usd|dollar|dollars|דולר)/i.test(lowerMessage)
         ? "USD"
@@ -281,30 +475,82 @@ function buildTransferDraftExtractor(llmProvider?: AssistantLlmProvider) {
 
     if (llmProvider) {
       try {
-        const transferDraft = await llmProvider.extractTransferDraft({
+        const rawTransferDraft = await llmProvider.extractTransferDraft({
           userMessage: getUserMessage(state),
           messages: state.messages,
           counterpartyMemory: state.counterpartyMemory
         });
+        const transferDraft = normalizeTransferDraftOutput(rawTransferDraft);
+        const debugEvents = [
+          ...(rawTransferDraft.debugEvents ?? []),
+          ...(transferDraft.debugEvents ?? [])
+        ];
+        const nextTransferDraft = applySlotDataToDraft(transferDraft, state);
+        const changes = { transferDraft: nextTransferDraft };
 
-        return { transferDraft: applySlotDataToDraft(transferDraft, state) };
+        return debugEvents.length
+          ? withDebugEvents(state, changes, debugEvents)
+          : changes;
       } catch (error) {
-        console.warn(
-          "AI transfer draft extractor failed; using deterministic fallback.",
-          error instanceof Error ? error.message : error
+        const deterministicDraft = applySlotDataToDraft(
+          extractTransferDraftDeterministic(
+            getUserMessage(state),
+            state.detectedIntent
+          ),
+          state
+        );
+
+        return withDebugEvents(
+          state,
+          { transferDraft: deterministicDraft },
+          [
+            buildSchemaFailureEvent({
+              nodeName: "extractTransferDraft",
+              schemaName: "transferDraftSchema",
+              failureClass: "draft_schema_failed",
+              error,
+              fallbackUsed: true,
+              fallbackReason: sanitizeErrorReason(error)
+            }),
+            {
+              type: "fallback",
+              nodeName: "extractTransferDraft",
+              failureClass: "deterministic_fallback_used",
+              fallbackUsed: true,
+              fallbackReason: "transfer_draft_extractor_failed",
+              snapshot: {
+                transferDraft: sanitizeTransferDraftSnapshot(deterministicDraft)
+              }
+            }
+          ]
         );
       }
     }
 
-    return {
-      transferDraft: applySlotDataToDraft(
-        extractTransferDraftDeterministic(
-          getUserMessage(state),
-          state.detectedIntent
-        ),
-        state
-      )
-    };
+    const deterministicDraft = applySlotDataToDraft(
+      extractTransferDraftDeterministic(
+        getUserMessage(state),
+        state.detectedIntent
+      ),
+      state
+    );
+
+    return withDebugEvents(
+      state,
+      { transferDraft: deterministicDraft },
+      [
+        {
+          type: "fallback",
+          nodeName: "extractTransferDraft",
+          failureClass: "deterministic_fallback_used",
+          fallbackUsed: true,
+          fallbackReason: "llm_provider_unavailable",
+          snapshot: {
+            transferDraft: sanitizeTransferDraftSnapshot(deterministicDraft)
+          }
+        }
+      ]
+    );
   };
 }
 
@@ -314,25 +560,48 @@ function buildClarificationRequest(
   message: string,
   expectedReplyType: NonNullable<AssistantGraphState["clarificationRequest"]>["expectedReplyType"]
 ) {
-  return {
-    clarificationMessage: message,
-    clarificationRequest: {
-      reason,
-      message,
-      expectedReplyType
-    }
-  };
+  return withDebugEvents(
+    state,
+    {
+      clarificationMessage: message,
+      clarificationRequest: {
+        reason,
+        message,
+        expectedReplyType
+      }
+    },
+    [
+      {
+        type: "clarification",
+        nodeName: "buildClarificationRequest",
+        failureClass: "clarification_started",
+        fallbackUsed: false,
+        fallbackReason: reason,
+        details: {
+          expectedReplyType
+        }
+      }
+    ]
+  );
 }
 
 function needsCounterpartyResolution(state: AssistantGraphState) {
   return (
     state.detectedIntent === "counterparty_transactions" ||
     state.detectedIntent === "counterparty_total_sent" ||
+    state.detectedIntent === "counterparty_total_received" ||
+    state.detectedIntent === "counterparty_net_total" ||
     (state.detectedIntent === "transfer_prepare" &&
       !state.transferDraft?.recipientEmail) ||
     (state.detectedIntent === "transfer_modify_pending" &&
       Boolean(state.transferDraft?.recipientReference) &&
       !state.transferDraft?.recipientEmail)
+  );
+}
+
+function canUseCounterpartyResolverTool(state: AssistantGraphState) {
+  return getReadOnlyToolsForIntent(state.detectedIntent ?? "unsupported").includes(
+    "resolveCounterpartyCandidates"
   );
 }
 
@@ -369,9 +638,63 @@ function buildCounterpartyResolver(llmProvider?: AssistantLlmProvider) {
           };
         }
       } catch (error) {
-        console.warn(
-          "AI counterparty resolver failed; using deterministic fallback.",
-          error instanceof Error ? error.message : error
+        const deterministicCounterparty = resolveCounterpartyReferenceDeterministic(
+          getUserMessage(state),
+          state.counterpartyMemory
+        );
+        const diagnosticEvents: AiGraphDebugEventInput[] = [
+          buildSchemaFailureEvent({
+            nodeName: "resolveCounterpartyReference",
+            schemaName: "referenceResolutionSchema",
+            failureClass: "resolver_failed",
+            error,
+            fallbackUsed: true,
+            fallbackReason: sanitizeErrorReason(error)
+          }),
+          {
+            type: "fallback",
+            nodeName: "resolveCounterpartyReference",
+            failureClass: "deterministic_fallback_used",
+            fallbackUsed: true,
+            fallbackReason: "counterparty_resolver_failed"
+          }
+        ];
+
+        if (deterministicCounterparty) {
+          return withDebugEvents(
+            state,
+            {
+              resolvedCounterparty: deterministicCounterparty,
+              counterpartyMemory: rememberCounterparty(
+                state.counterpartyMemory,
+                deterministicCounterparty,
+                state.currentTurn
+              )
+            },
+            diagnosticEvents
+          );
+        }
+
+        if (
+          state.detectedIntent === "transfer_prepare" ||
+          state.detectedIntent === "transfer_modify_pending"
+        ) {
+          return withDebugEvents(state, {}, diagnosticEvents);
+        }
+
+        if (canUseCounterpartyResolverTool(state)) {
+          return withDebugEvents(state, {}, diagnosticEvents);
+        }
+
+        return withDebugEvents(
+          state,
+          buildClarificationRequest(
+            state,
+            "ambiguous_reference",
+            "Which recipient should I use for that question?",
+            "recipient"
+          ),
+          diagnosticEvents
         );
       }
     }
@@ -395,6 +718,10 @@ function buildCounterpartyResolver(llmProvider?: AssistantLlmProvider) {
       state.detectedIntent === "transfer_prepare" ||
       state.detectedIntent === "transfer_modify_pending"
     ) {
+      return {};
+    }
+
+    if (canUseCounterpartyResolverTool(state)) {
       return {};
     }
 
@@ -453,7 +780,7 @@ function buildTransferConfirmationPreparer(
       }
 
       if (!state.transferDraft?.amount) {
-        return buildClarificationRequest(
+        const clarification = buildClarificationRequest(
           state,
           "missing_amount",
           state.resolvedCounterparty
@@ -461,6 +788,21 @@ function buildTransferConfirmationPreparer(
             : result.message,
           "amount"
         );
+
+        return state.transferDraft?.amountReferenceText
+          ? withDebugEvents(state, clarification, [
+              {
+                type: "failure",
+                nodeName: "prepareTransferConfirmation",
+                failureClass: "contextual_amount_unresolved",
+                fallbackUsed: false,
+                fallbackReason: "amount_reference_text_without_resolved_amount",
+                details: {
+                  amountReferenceTextPresent: true
+                }
+              }
+            ])
+          : clarification;
       }
 
       return buildClarificationRequest(
@@ -472,6 +814,83 @@ function buildTransferConfirmationPreparer(
     }
 
     return { confirmation: result.confirmation };
+  };
+}
+
+function buildContextualAmountResolver(
+  amountResolutionService: AmountResolutionService
+) {
+  return async function resolveContextualAmounts(
+    state: AssistantGraphState
+  ): Promise<Partial<AssistantGraphState>> {
+    if (
+      !state.userId ||
+      state.refusalReason ||
+      state.clarificationMessage ||
+      state.detectedIntent !== "transfer_prepare" ||
+      !state.transferDraft?.amountReferenceText ||
+      state.transferDraft.amount
+    ) {
+      return {};
+    }
+
+    const result = await amountResolutionService({
+      userId: state.userId,
+      conversationId: state.conversationId,
+      transferDraft: state.transferDraft,
+      resolvedCounterparty: state.resolvedCounterparty,
+      counterpartyMemory: state.counterpartyMemory
+    });
+
+    if (result.status !== "resolved") {
+      return withDebugEvents(
+        state,
+        {},
+        [
+          {
+            type: "failure",
+            nodeName: "resolveContextualAmounts",
+            failureClass: "contextual_amount_unresolved",
+            fallbackUsed: false,
+            fallbackReason: result.reason,
+            details: {
+              amountReferenceTextPresent: true
+            }
+          }
+        ]
+      );
+    }
+
+    const transferDraft: TransferDraft = {
+      ...state.transferDraft,
+      amount: result.amount.amount,
+      currency: result.amount.currency,
+      currencyMentioned: state.transferDraft.currencyMentioned ?? false,
+      currencySupported: true,
+      amountText:
+        state.transferDraft.amountText ??
+        `${result.amount.amount.toFixed(2)} ${result.amount.currency}`
+    };
+
+    return withDebugEvents(
+      state,
+      { transferDraft },
+      [
+        {
+          type: "snapshot",
+          nodeName: "resolveContextualAmounts",
+          fallbackUsed: false,
+          fallbackReason: result.amount.source,
+          details: {
+            source: result.amount.source,
+            confidence: result.amount.confidence
+          },
+          snapshot: {
+            transferDraft: sanitizeTransferDraftSnapshot(transferDraft)
+          }
+        }
+      ]
+    );
   };
 }
 
@@ -649,6 +1068,15 @@ function buildToolRouter(tools: AssistantToolExecutors) {
         toolName === "resolveCounterpartyCandidates" &&
         intent === "transfer_quote" &&
         state.requestSlots?.counterparty?.explicitEmail
+      ) {
+        continue;
+      }
+
+      if (
+        toolName === "resolveCounterpartyCandidates" &&
+        resolvedCounterparty &&
+        (intent === "counterparty_total_received" ||
+          intent === "counterparty_net_total")
       ) {
         continue;
       }
@@ -961,16 +1389,52 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
           ) || userFallbackMessage
       };
     } catch (error) {
-      console.warn(
-        "AI response composer failed; using deterministic fallback.",
-        error instanceof Error ? error.message : error
+      return withDebugEvents(
+        state,
+        { responseMessage: userFallbackMessage },
+        [
+          {
+            type: "fallback",
+            nodeName: "composeResponse",
+            failureClass: "deterministic_fallback_used",
+            fallbackUsed: true,
+            fallbackReason: `response_composer_failed:${sanitizeErrorReason(error)}`
+          }
+        ]
       );
-      return { responseMessage: userFallbackMessage };
     }
   };
 }
 
 function buildConversationSaver(conversationStore?: ConversationStore) {
+  function buildAnswerFrameQueryContext(state: AssistantGraphState) {
+    const totalResult = [...state.toolResults].reverse().find((result) =>
+      [
+        "getTotalSentToCounterparty",
+        "getTotalReceivedFromCounterparty",
+        "getNetWithCounterparty"
+      ].includes(result.toolName)
+    );
+
+    if (!totalResult || totalResult.status !== "ok") {
+      return undefined;
+    }
+
+    const metadata = getToolDisplayData(totalResult).metadata;
+    const direction =
+      totalResult.toolName === "getTotalSentToCounterparty"
+        ? ("sent" as const)
+        : totalResult.toolName === "getTotalReceivedFromCounterparty"
+          ? ("received" as const)
+          : ("both" as const);
+
+    return {
+      counterpartyEmail: metadata.counterpartyEmail,
+      direction,
+      amountRole: "total" as const
+    };
+  }
+
   return async function saveConversation(
     state: AssistantGraphState
   ): Promise<Partial<AssistantGraphState>> {
@@ -1021,6 +1485,7 @@ function buildConversationSaver(conversationStore?: ConversationStore) {
               ?.slice(-5)
               .map((entity) => entity.id) ?? [],
           secondaryEntities: [],
+          queryContext: buildAnswerFrameQueryContext(state),
           toolResultRefs: state.toolResults.map((result, index) => ({
             toolName: result.toolName,
             resultId: `${state.conversationId}:${state.currentTurn}:${index}`
@@ -1091,24 +1556,79 @@ function buildConversationSaver(conversationStore?: ConversationStore) {
 
 function buildAssistantGraph(options: GraphOptions) {
   return new StateGraph(AssistantStateAnnotation)
-    .addNode("loadAuthenticatedContext", loadAuthenticatedContext)
-    .addNode("loadConversationContext", buildConversationLoader(options.conversationStore))
-    .addNode("normalizeUserMessage", normalizeMessageNode)
-    .addNode("classifyIntent", buildIntentClassifier(options.llmProvider))
-    .addNode("extractRequestSlots", extractRequestSlotsNode)
-    .addNode("extractTransferDraft", buildTransferDraftExtractor(options.llmProvider))
-    .addNode("resolveCounterpartyReference", buildCounterpartyResolver(options.llmProvider))
+    .addNode(
+      "loadAuthenticatedContext",
+      withNodeTrace("loadAuthenticatedContext", loadAuthenticatedContext)
+    )
+    .addNode(
+      "loadConversationContext",
+      withNodeTrace(
+        "loadConversationContext",
+        buildConversationLoader(options.conversationStore)
+      )
+    )
+    .addNode(
+      "normalizeUserMessage",
+      withNodeTrace("normalizeUserMessage", normalizeMessageNode)
+    )
+    .addNode(
+      "classifyIntent",
+      withNodeTrace("classifyIntent", buildIntentClassifier(options.llmProvider))
+    )
+    .addNode(
+      "extractRequestSlots",
+      withNodeTrace("extractRequestSlots", extractRequestSlotsNode)
+    )
+    .addNode(
+      "extractTransferDraft",
+      withNodeTrace(
+        "extractTransferDraft",
+        buildTransferDraftExtractor(options.llmProvider)
+      )
+    )
+    .addNode(
+      "resolveCounterpartyReference",
+      withNodeTrace(
+        "resolveCounterpartyReference",
+        buildCounterpartyResolver(options.llmProvider)
+      )
+    )
+    .addNode(
+      "resolveContextualAmounts",
+      withNodeTrace(
+        "resolveContextualAmounts",
+        buildContextualAmountResolver(options.amountResolutionService)
+      )
+    )
     .addNode(
       "prepareTransferConfirmation",
-      buildTransferConfirmationPreparer(options.transferPreparationService)
+      withNodeTrace(
+        "prepareTransferConfirmation",
+        buildTransferConfirmationPreparer(options.transferPreparationService)
+      )
     )
     .addNode(
       "modifyPendingTransferConfirmation",
-      buildPendingTransferModifier(options.transferModificationService)
+      withNodeTrace(
+        "modifyPendingTransferConfirmation",
+        buildPendingTransferModifier(options.transferModificationService)
+      )
     )
-    .addNode("routeReadOnlyTools", buildToolRouter(options.tools))
-    .addNode("composeResponse", buildResponseComposer(options.llmProvider))
-    .addNode("saveConversation", buildConversationSaver(options.conversationStore))
+    .addNode(
+      "routeReadOnlyTools",
+      withNodeTrace("routeReadOnlyTools", buildToolRouter(options.tools))
+    )
+    .addNode(
+      "composeResponse",
+      withNodeTrace("composeResponse", buildResponseComposer(options.llmProvider))
+    )
+    .addNode(
+      "saveConversation",
+      withNodeTrace(
+        "saveConversation",
+        buildConversationSaver(options.conversationStore)
+      )
+    )
     .addEdge(START, "loadAuthenticatedContext")
     .addEdge("loadAuthenticatedContext", "loadConversationContext")
     .addEdge("loadConversationContext", "normalizeUserMessage")
@@ -1116,7 +1636,8 @@ function buildAssistantGraph(options: GraphOptions) {
     .addEdge("classifyIntent", "extractRequestSlots")
     .addEdge("extractRequestSlots", "extractTransferDraft")
     .addEdge("extractTransferDraft", "resolveCounterpartyReference")
-    .addEdge("resolveCounterpartyReference", "prepareTransferConfirmation")
+    .addEdge("resolveCounterpartyReference", "resolveContextualAmounts")
+    .addEdge("resolveContextualAmounts", "prepareTransferConfirmation")
     .addEdge("prepareTransferConfirmation", "modifyPendingTransferConfirmation")
     .addEdge("modifyPendingTransferConfirmation", "routeReadOnlyTools")
     .addEdge("routeReadOnlyTools", "composeResponse")
@@ -1133,6 +1654,8 @@ export async function runAssistantGraph(
     tools: options.tools ?? readOnlyToolExecutors,
     llmProvider: options.llmProvider,
     conversationStore: options.conversationStore,
+    amountResolutionService:
+      options.amountResolutionService ?? resolveContextualAmount,
     transferPreparationService:
       options.transferPreparationService ?? prepareAiPendingTransfer,
     transferModificationService:
@@ -1163,7 +1686,8 @@ export async function runAssistantGraph(
       intent,
       toolsRequested: finalState.requestedToolNames,
       toolsExecuted: finalState.executedToolNames,
-      refusalReason: finalState.refusalReason
+      refusalReason: finalState.refusalReason,
+      diagnostics: finalState.debugTrace ?? []
     });
   }
 

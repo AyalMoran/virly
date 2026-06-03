@@ -38,6 +38,10 @@ const aiAuditLogSchema = new Schema(
     refusalReason: {
       type: String,
       default: null
+    },
+    diagnostics: {
+      type: [Schema.Types.Mixed],
+      default: []
     }
   },
   {

@@ -1,5 +1,10 @@
 import dotenv from "dotenv";
-import { getIntEnv, getOptionalStringEnv, getStringEnv } from "./utils/env.js";
+import {
+  getBooleanEnv,
+  getIntEnv,
+  getOptionalStringEnv,
+  getStringEnv
+} from "./utils/env.js";
 
 dotenv.config();
 
@@ -72,6 +77,9 @@ export const config = {
     }),
     openAIApiKey: getStringEnv("OPENAI_API_KEY", "", {
       aliases: ["OPENAI_API_KEY"]
+    }),
+    debugTrace: getBooleanEnv("VIRLY_AI_DEBUG_TRACE", {
+      defaultValue: false
     })
   },
   cookies: {

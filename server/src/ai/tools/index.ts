@@ -3,6 +3,7 @@ import { getAccountBalance } from "./getAccountBalance.js";
 import { getCounterpartyActivityTimeline } from "./getCounterpartyActivityTimeline.js";
 import { getCounterpartySummary } from "./getCounterpartySummary.js";
 import { getLastSentCounterparty } from "./getLastSentCounterparty.js";
+import { getNetWithCounterparty } from "./getNetWithCounterparty.js";
 import { getDailyTransferUsage } from "./getDailyTransferUsage.js";
 import { getPendingAiTransfers } from "./getPendingAiTransfers.js";
 import { getRecentReceivedCounterparties } from "./getRecentReceivedCounterparties.js";
@@ -10,6 +11,7 @@ import { getRecentSentCounterparties } from "./getRecentSentCounterparties.js";
 import { getRecentTransactions } from "./getRecentTransactions.js";
 import { getTransactionReceipt } from "./getTransactionReceipt.js";
 import { getTransactionStats } from "./getTransactionStats.js";
+import { getTotalReceivedFromCounterparty } from "./getTotalReceivedFromCounterparty.js";
 import { getTotalSentToCounterparty } from "./getTotalSentToCounterparty.js";
 import { getTransferEligibility } from "./getTransferEligibility.js";
 import { getTransferLimits } from "./getTransferLimits.js";
@@ -29,6 +31,8 @@ export const readOnlyToolExecutors: AssistantToolExecutors = {
   getLastSentCounterparty,
   getTransactionsWithCounterparty,
   getTotalSentToCounterparty,
+  getTotalReceivedFromCounterparty,
+  getNetWithCounterparty,
   getVerifiedRecipients,
   getTransferLimits,
   getRecentSentCounterparties,
