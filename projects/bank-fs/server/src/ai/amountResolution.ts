@@ -10,10 +10,21 @@ type AmountReferenceKind =
   | "last_pending_transfer"
   | "last_sent_transaction"
   | "last_received_transaction"
+  | "last_answer_total"
   | "unknown";
 
 export function classifyAmountReference(rawText: string): AmountReferenceKind {
   const normalized = rawText.toLowerCase();
+
+  if (
+    /\b(that|this)\s+(amount|total|net)\b/i.test(normalized) ||
+    /\b(the\s+)?(last|previous)\s+(amount|total|net)\b/i.test(normalized) ||
+    /(הסכום הזה|הסכום ההוא|הסכום האחרון|הסה"כ הזה|הסך הזה|הנטו הזה)/.test(
+      rawText
+    )
+  ) {
+    return "last_answer_total";
+  }
 
   if (
     /\b(?:he|she|they)\s+sent\s+me\b/i.test(normalized) ||
@@ -41,6 +52,91 @@ export function classifyAmountReference(rawText: string): AmountReferenceKind {
   }
 
   return "unknown";
+}
+
+function sourceForTotalDirection(
+  direction: "sent" | "received" | "both" | "net" | undefined
+): ResolvedAmountRef["source"] {
+  if (direction === "sent") {
+    return "last_answer_total_sent";
+  }
+
+  if (direction === "received") {
+    return "last_answer_total_received";
+  }
+
+  return "last_answer_total_net";
+}
+
+function getScopedTotalEntities(input: AmountResolutionInput) {
+  const resolvedCounterpartyEmail = input.resolvedCounterparty?.email
+    ? normalizeCounterpartyEmail(input.resolvedCounterparty.email)
+    : undefined;
+  const totalEntities = (input.counterpartyMemory.entities ?? [])
+    .filter(
+      (entity) =>
+        entity.type === "total" &&
+        typeof entity.amount === "number" &&
+        Number.isFinite(entity.amount)
+    )
+    .sort((left, right) => {
+      if (left.turnLastReferenced !== right.turnLastReferenced) {
+        return right.turnLastReferenced - left.turnLastReferenced;
+      }
+
+      return right.turnIntroduced - left.turnIntroduced;
+    });
+  const scopedTotals = resolvedCounterpartyEmail
+    ? totalEntities.filter(
+        (entity) =>
+          entity.counterpartyEmail &&
+          normalizeCounterpartyEmail(entity.counterpartyEmail) ===
+            resolvedCounterpartyEmail
+      )
+    : totalEntities;
+
+  return scopedTotals;
+}
+
+function hasPositiveAnswerTotal(input: AmountResolutionInput) {
+  return getScopedTotalEntities(input).some(
+    (entity) =>
+      typeof entity.amount === "number" &&
+      Number.isFinite(entity.amount) &&
+      entity.amount > 0
+  );
+}
+
+function resolveLatestAnswerTotal(input: AmountResolutionInput): AmountResolutionResult {
+  const scopedTotals = getScopedTotalEntities(input);
+  const latestTotal = scopedTotals[0];
+
+  if (!latestTotal) {
+    return {
+      status: "unresolved",
+      reason: input.resolvedCounterparty?.email
+        ? "no_answer_total_for_counterparty"
+        : "no_answer_total_available"
+    };
+  }
+
+  if (!latestTotal.amount || latestTotal.amount <= 0) {
+    return {
+      status: "unresolved",
+      reason: "invalid_answer_total_amount"
+    };
+  }
+
+  return {
+    status: "resolved",
+    amount: {
+      amount: latestTotal.amount,
+      currency: "ILS",
+      source: sourceForTotalDirection(latestTotal.direction),
+      confidence: "high",
+      explanation: "Resolved amount from the latest total answer in memory."
+    }
+  };
 }
 
 async function resolveLatestTransactionAmount(input: {
@@ -101,6 +197,10 @@ export async function resolveContextualAmount(
 
   const kind = classifyAmountReference(amountReferenceText);
 
+  if (kind === "last_answer_total") {
+    return resolveLatestAnswerTotal(input);
+  }
+
   if (kind === "last_pending_transfer") {
     const pending = input.counterpartyMemory.pendingConfirmation;
     if (pending?.status === "pending" && pending.amount > 0) {
@@ -113,6 +213,13 @@ export async function resolveContextualAmount(
           confidence: "high",
           explanation: "Resolved amount from the active pending transfer."
         }
+      };
+    }
+
+    if (hasPositiveAnswerTotal(input)) {
+      return {
+        status: "unresolved",
+        reason: "ambiguous_amount_scope"
       };
     }
   }

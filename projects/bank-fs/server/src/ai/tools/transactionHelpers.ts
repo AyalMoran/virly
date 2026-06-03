@@ -260,6 +260,7 @@ export function metadataFromTransactionRows(
       currency: row.currency,
       direction: row.direction,
       occurredAt: row.occurredAt,
+      status: row.status,
       counterpartyLabel: row.counterpartyMaskedLabel
     })),
     counterparties: rows.map((row) => ({

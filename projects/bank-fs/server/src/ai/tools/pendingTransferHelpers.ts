@@ -109,6 +109,7 @@ export function pendingTransferMetadata(
       recipientLabel: row.recipientMaskedLabel,
       amount: row.amount,
       currency: row.currency,
+      status: row.status,
       expiresAt: row.expiresAt
     })),
     ...(resolutionStatus ? { pendingTransferResolutionStatus: resolutionStatus } : {}),
@@ -120,6 +121,7 @@ export function pendingTransferMetadata(
           recipientLabel: row.recipientMaskedLabel,
           amount: row.amount,
           currency: row.currency,
+          status: row.status,
           expiresAt: row.expiresAt
           }))
         }

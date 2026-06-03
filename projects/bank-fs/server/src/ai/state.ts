@@ -224,6 +224,7 @@ export type ToolResultMetadata = {
     currency: string;
     direction: "sent" | "received";
     occurredAt: string;
+    status?: "completed";
     counterpartyLabel?: string;
   }>;
   transactionResolutionStatus?: "resolved" | "ambiguous" | "unresolved";
@@ -242,6 +243,7 @@ export type ToolResultMetadata = {
     recipientLabel: string;
     amount: number;
     currency: string;
+    status?: "pending";
     expiresAt: string;
   }>;
   pendingTransferResolutionStatus?: "resolved" | "ambiguous" | "unresolved";
@@ -269,6 +271,69 @@ export type AssistantToolResult = {
   toolName: AssistantToolName;
   summary: string;
   metadata: ToolResultMetadata;
+};
+
+export type SafeToolSummary = {
+  toolName: AssistantToolName;
+  summary: string;
+  metadata: Record<string, unknown>;
+};
+
+export type SafeConversationSummary = {
+  recentMessages: Array<{
+    role: ChatRole;
+    content: string;
+  }>;
+};
+
+export type SafeTransferDraft = {
+  recipientReference?: string | null;
+  recipientEmailMasked?: string | null;
+  amount?: number | null;
+  amountText?: string | null;
+  amountReferenceText?: string | null;
+  currency?: CurrencyCode | "UNKNOWN" | null;
+  currencyMentioned?: boolean;
+  currencySupported?: boolean;
+  reason?: string | null;
+};
+
+export type SafeTransferConfirmation = {
+  status: PendingConfirmationMemory["status"];
+  recipientMaskedLabel: string;
+  amount: number;
+  currency: CurrencyCode;
+  formattedAmount: string;
+  reason: string | null;
+  warningCodes: TransferConfirmation["warnings"][number]["code"][];
+  expiresAt: string;
+};
+
+export type SafeResolvedReferences = {
+  resolvedCounterpartyMaskedLabel?: string;
+  transferDraft?: SafeTransferDraft | null;
+  confirmation?: SafeTransferConfirmation | null;
+};
+
+export type RequiredResponseFact = {
+  kind: "amount";
+  source: string;
+  value: string;
+  numericValue: number;
+} | {
+  kind: "recipient";
+  source: string;
+  value: string;
+  userValue?: string;
+  userEmail?: string;
+} | {
+  kind: "date";
+  source: string;
+  value: string;
+} | {
+  kind: "status";
+  source: string;
+  value: string;
 };
 
 export type PublicAiToolCallResult = {
@@ -351,6 +416,7 @@ export type ResolvedAmountRef = {
     | "last_received_transaction"
     | "last_answer_total_sent"
     | "last_answer_total_received"
+    | "last_answer_total_net"
     | "clarification_reply";
   confidence: "low" | "medium" | "high";
   explanation: string;
@@ -466,6 +532,8 @@ export type ClarificationRequest = {
     | "ambiguous_pending_transfer"
     | "unresolved_reference";
   message: string;
+  resumeIntent?: AssistantIntent;
+  resumeDraft?: TransferDraft;
   options?: Array<{
     id: string;
     label: string;
@@ -474,6 +542,7 @@ export type ClarificationRequest = {
   expectedReplyType:
     | "recipient"
     | "amount"
+    | "amount_scope"
     | "currency"
     | "date_range"
     | "transaction"
@@ -592,13 +661,11 @@ export type TransferConfirmation = {
 export type ComposeAssistantResponseInput = {
   assistantId: AssistantId;
   userMessage: string;
-  messages: ChatMessage[];
   intent: AssistantIntent;
-  toolResults: AssistantToolResult[];
-  counterpartyMemory: CounterpartyMemory;
-  resolvedCounterparty?: CounterpartyRef;
-  transferDraft?: TransferDraft;
-  confirmation?: TransferConfirmation;
+  safeToolSummaries: SafeToolSummary[];
+  safeConversationSummary: SafeConversationSummary;
+  safeResolvedReferences: SafeResolvedReferences;
+  requiredResponseFacts: RequiredResponseFact[];
   refusalReason?: string;
   fallbackMessage: string;
 };
