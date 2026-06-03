@@ -1,6 +1,7 @@
 import type {
   AssistantToolResult,
   RuntimeToolResult,
+  SafeToolSummary,
   ToolDisplayData,
   ToolResultMetadata
 } from "./state.js";
@@ -93,6 +94,55 @@ export function toAssistantToolResult(
     toolName: result.toolName,
     summary: displayData.summary,
     metadata: displayData.metadata
+  };
+}
+
+export function sanitizeToolResultMetadata(
+  metadata: ToolResultMetadata
+): Record<string, unknown> {
+  const {
+    counterpartyEmail: _counterpartyEmail,
+    counterparties,
+    counterpartyCandidates,
+    transactions,
+    transactionCandidates,
+    pendingTransfers,
+    pendingTransferCandidates,
+    ...safeMetadata
+  } = metadata;
+
+  return {
+    ...safeMetadata,
+    ...(counterparties
+      ? {
+          counterparties: counterparties.map(
+            ({ counterpartyEmail: _email, ...counterparty }) => counterparty
+          )
+        }
+      : {}),
+    ...(counterpartyCandidates
+      ? {
+          counterpartyCandidates: counterpartyCandidates.map(
+            ({ counterpartyEmail: _email, ...counterparty }) => counterparty
+          )
+        }
+      : {}),
+    ...(transactions ? { transactions } : {}),
+    ...(transactionCandidates ? { transactionCandidates } : {}),
+    ...(pendingTransfers ? { pendingTransfers } : {}),
+    ...(pendingTransferCandidates ? { pendingTransferCandidates } : {})
+  };
+}
+
+export function toSafeToolSummary(
+  result: RuntimeToolResult
+): SafeToolSummary {
+  const displayData = getToolDisplayData(result);
+
+  return {
+    toolName: result.toolName,
+    summary: displayData.summary,
+    metadata: sanitizeToolResultMetadata(displayData.metadata)
   };
 }
 

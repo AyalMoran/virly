@@ -22,7 +22,8 @@ export async function getAccountBalance(
     summary: `Your Virly account available balance is ${user.balance.toFixed(2)}.`,
     metadata: {
       recordCount: 1,
-      accountLabel: "Virly account"
+      accountLabel: "Virly account",
+      amount: user.balance
     }
   });
 }

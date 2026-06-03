@@ -16,7 +16,6 @@ import {
     type CounterpartyReferenceResolution,
     type ExtractTransferDraftInput,
     type ResolveCounterpartyReferenceInput,
-    type ToolResultMetadata,
     type TransferDraftExtraction
 } from "./state.js";
 
@@ -620,52 +619,9 @@ function buildTransferDraftPrompt(input: ExtractTransferDraftInput)
     ].join("\n");
 }
 
-function sanitizeMetadata(metadata: ToolResultMetadata)
-{
-    const {
-        counterpartyEmail : _counterpartyEmail,
-        counterparties,
-        counterpartyCandidates,
-        transactions,
-        transactionCandidates,
-        pendingTransfers,
-        pendingTransferCandidates,
-        ...safeMetadata
-    } = metadata;
-
-    return {
-        ...safeMetadata,
-        ...(counterparties ? {
-            counterparties : counterparties.map(
-                ({counterpartyEmail : _email, ...counterparty}) => counterparty)
-        }
-                           : {}),
-        ...(counterpartyCandidates ? {
-            counterpartyCandidates : counterpartyCandidates.map(
-                ({counterpartyEmail : _email, ...counterparty}) => counterparty)
-        }
-                                   : {}),
-        ...(transactions ? {transactions} : {}),
-        ...(transactionCandidates ? {transactionCandidates} : {}),
-        ...(pendingTransfers ? {pendingTransfers} : {}),
-        ...(pendingTransferCandidates ? {pendingTransferCandidates} : {})
-    };
-}
-
 function buildResponsePrompt(input: ComposeAssistantResponseInput)
 {
     const personality = getAssistantPersonality(input.assistantId);
-    const toolSummaries =
-        input.toolResults.map((result) => ({
-                                  toolName : result.toolName,
-                                  summary : result.summary,
-                                  metadata : sanitizeMetadata(result.metadata)
-                              }));
-    const recentMessages =
-        sanitizeMessagesForLlm(input.messages)
-            .slice(-6)
-            .map((message) =>
-                     ({role : message.role, content : message.content}));
 
     return [
         assistantSystemPolicy,
@@ -684,13 +640,14 @@ function buildResponsePrompt(input: ComposeAssistantResponseInput)
         `Selected assistant id: ${input.assistantId}`,
         `Intent: ${input.intent}`,
         `Refusal reason: ${input.refusalReason ?? "none"}`,
-        `Resolved counterparty: ${
-            input.resolvedCounterparty?.maskedLabel ?? "none"}`,
-        `Transfer draft: ${JSON.stringify(input.transferDraft ?? null)}`,
-        `Confirmation: ${JSON.stringify(input.confirmation ?? null)}`,
+        `Safe resolved references: ${
+            JSON.stringify(input.safeResolvedReferences)}`,
+        `Required response facts: ${
+            JSON.stringify(input.requiredResponseFacts)}`,
         `Fallback message to preserve meaning: ${input.fallbackMessage}`,
-        `Recent messages: ${JSON.stringify(recentMessages)}`,
-        `Tool summaries: ${JSON.stringify(toolSummaries)}`
+        `Safe conversation summary: ${
+            JSON.stringify(input.safeConversationSummary)}`,
+        `Safe tool summaries: ${JSON.stringify(input.safeToolSummaries)}`
     ].join("\n");
 }
 
