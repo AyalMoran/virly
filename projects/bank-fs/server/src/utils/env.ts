@@ -9,6 +9,11 @@ type StringOptions = {
   aliases?: string[];
 };
 
+type BooleanOptions = {
+  defaultValue: boolean;
+  aliases?: string[];
+};
+
 function getRawEnv(name: string, aliases: string[] = []) {
   for (const currentName of [name, ...aliases]) {
     const value = process.env[currentName];
@@ -43,6 +48,26 @@ export function getOptionalStringEnv(name: string, options: StringOptions = {}) 
   }
 
   return result.value;
+}
+
+export function getBooleanEnv(name: string, options: BooleanOptions) {
+  const result = getRawEnv(name, options.aliases);
+
+  if (result.value === undefined) {
+    return options.defaultValue;
+  }
+
+  const value = result.value.trim().toLowerCase();
+
+  if (["1", "true", "yes", "on"].includes(value)) {
+    return true;
+  }
+
+  if (["0", "false", "no", "off"].includes(value)) {
+    return false;
+  }
+
+  throw new Error(`${result.name} must be a boolean.`);
 }
 
 export function getIntEnv(name: string, options: IntOptions) {

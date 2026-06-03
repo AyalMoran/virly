@@ -2,23 +2,26 @@ import { Types } from "mongoose";
 import { Transaction } from "../../models/Transaction.js";
 import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, ToolContext } from "../state.js";
+import { normalizeCounterpartyEmail } from "./counterpartyHelpers.js";
 
-export async function getTotalSentToCounterparty(
+export async function getTotalReceivedFromCounterparty(
   context: ToolContext
 ): Promise<RuntimeToolResult> {
   const counterparty = context.resolvedCounterparty;
   if (!counterparty) {
     return createToolResult({
-      toolName: "getTotalSentToCounterparty",
+      toolName: "getTotalReceivedFromCounterparty",
       status: "empty",
       data: null,
-      summary: "I need a specific recipient before I can total sent money.",
+      summary:
+        "I need a specific counterparty before I can total received money.",
       metadata: {
         recordCount: 0
       }
     });
   }
 
+  const counterpartyEmail = normalizeCounterpartyEmail(counterparty.email);
   const totals = await Transaction.aggregate<{
     total: number;
     count: number;
@@ -26,8 +29,8 @@ export async function getTotalSentToCounterparty(
     {
       $match: {
         ownerId: new Types.ObjectId(context.userId),
-        counterpartyEmail: counterparty.email,
-        type: "debit"
+        counterpartyEmail,
+        type: "credit"
       }
     },
     {
@@ -40,9 +43,10 @@ export async function getTotalSentToCounterparty(
   ]);
   const total = totals[0]?.total ?? 0;
   const count = totals[0]?.count ?? 0;
+  const userLabel = counterparty.userLabel ?? counterparty.email;
 
   return createToolResult({
-    toolName: "getTotalSentToCounterparty",
+    toolName: "getTotalReceivedFromCounterparty",
     status: count > 0 ? "ok" : "empty",
     data: {
       total,
@@ -50,26 +54,26 @@ export async function getTotalSentToCounterparty(
     },
     summary:
       count > 0
-        ? `You have sent ${total.toFixed(2)} in total to ${counterparty.maskedLabel}.`
-        : `No sent transactions were found with ${counterparty.maskedLabel}.`,
+        ? `${counterparty.maskedLabel} has sent you ${total.toFixed(2)} in total.`
+        : `No received transactions were found from ${counterparty.maskedLabel}.`,
     userSummary:
       count > 0
-        ? `You have sent ${total.toFixed(2)} in total to ${counterparty.userLabel ?? counterparty.email}.`
-        : `No sent transactions were found with ${counterparty.userLabel ?? counterparty.email}.`,
+        ? `${userLabel} has sent you ${total.toFixed(2)} in total.`
+        : `No received transactions were found from ${userLabel}.`,
     metadata: {
       recordCount: count,
       amount: total,
-      counterpartyEmail: counterparty.email,
+      counterpartyEmail,
       maskedLabel: counterparty.maskedLabel
     },
     memoryUpdates: {
       counterparties: [
         {
-          counterpartyId: counterparty.email.toLowerCase(),
-          emailFullForBackendOnly: counterparty.email.toLowerCase(),
+          counterpartyId: counterpartyEmail,
+          emailFullForBackendOnly: counterpartyEmail,
           emailMasked: counterparty.maskedLabel,
           displayName: counterparty.displayName ?? counterparty.maskedLabel,
-          relation: "sent_to",
+          relation: "received_from",
           source: "transaction"
         }
       ],
@@ -77,17 +81,18 @@ export async function getTotalSentToCounterparty(
         count > 0
           ? [
               {
-                id: `sent:${counterparty.email.toLowerCase()}`,
-                counterpartyEmail: counterparty.email.toLowerCase(),
-                direction: "sent",
+                id: `received:${counterpartyEmail}`,
+                counterpartyEmail,
+                direction: "received",
                 amount: total,
                 currency: "ILS",
-                sourceToolName: "getTotalSentToCounterparty",
+                sourceToolName: "getTotalReceivedFromCounterparty",
                 aliases: [
                   "that amount",
                   "that total",
-                  "the total I sent",
-                  `total sent to ${counterparty.maskedLabel}`
+                  "the total he sent me",
+                  "the total they sent me",
+                  `total received from ${counterparty.maskedLabel}`
                 ]
               }
             ]

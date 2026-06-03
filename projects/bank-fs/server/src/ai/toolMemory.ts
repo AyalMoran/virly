@@ -127,5 +127,23 @@ export function applyToolMemoryUpdates(
     });
   }
 
+  for (const total of updates.totals ?? []) {
+    nextMemory.entities = pushEntity(nextMemory.entities ?? [], {
+      id: `total:${total.id}`,
+      type: "total",
+      turnIntroduced: turn,
+      turnLastReferenced: turn,
+      source: "tool_result",
+      confidence: "high",
+      displayName: total.aliases[0] ?? `${total.direction} total`,
+      counterpartyEmail: total.counterpartyEmail,
+      direction: total.direction,
+      sourceToolName: total.sourceToolName,
+      amount: total.amount,
+      currency: total.currency,
+      aliases: total.aliases
+    });
+  }
+
   return nextMemory;
 }

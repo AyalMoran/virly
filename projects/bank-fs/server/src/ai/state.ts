@@ -18,6 +18,8 @@ export const assistantIntentValues = [
   "last_sent_counterparty",
   "counterparty_transactions",
   "counterparty_total_sent",
+  "counterparty_total_received",
+  "counterparty_net_total",
   "verified_recipients",
   "recipient_profile",
   "transfer_prepare",
@@ -44,6 +46,8 @@ export const assistantToolNames = [
   "getLastSentCounterparty",
   "getTransactionsWithCounterparty",
   "getTotalSentToCounterparty",
+  "getTotalReceivedFromCounterparty",
+  "getNetWithCounterparty",
   "getVerifiedRecipients",
   "getTransferLimits",
   "getRecentSentCounterparties",
@@ -77,6 +81,56 @@ export type AiToolContext = {
 };
 
 export type AiToolStatus = "ok" | "empty" | "error";
+
+export type AiGraphFailureClass =
+  | "classifier_failed"
+  | "draft_schema_failed"
+  | "draft_partial_recovered"
+  | "resolver_failed"
+  | "deterministic_fallback_used"
+  | "contextual_amount_unresolved"
+  | "clarification_started"
+  | "clarification_resolved";
+
+export type AiGraphDebugEventType =
+  | "failure"
+  | "fallback"
+  | "clarification"
+  | "node_transition"
+  | "snapshot";
+
+type AiGraphDebugValue =
+  | string
+  | number
+  | boolean
+  | null
+  | AiGraphDebugValue[]
+  | { [key: string]: AiGraphDebugValue };
+
+export type AiGraphDebugEvent = {
+  type: AiGraphDebugEventType;
+  nodeName: string;
+  createdAt: string;
+  failureClass?: AiGraphFailureClass;
+  schemaName?: string;
+  failedField?: string;
+  rawValueType?: string;
+  fallbackUsed?: boolean;
+  fallbackReason?: string;
+  details?: Record<string, AiGraphDebugValue>;
+  snapshot?: Record<string, AiGraphDebugValue>;
+};
+
+export type AiGraphDebugEventInput = Omit<
+  AiGraphDebugEvent,
+  "createdAt"
+> & {
+  createdAt?: string;
+};
+
+export type AiDiagnosticsRecorder = (
+  event: AiGraphDebugEventInput
+) => void;
 
 export type AiToolMemoryUpdate = {
   counterparties?: Array<{
@@ -112,6 +166,15 @@ export type AiToolMemoryUpdate = {
     label: string;
     from: string;
     to: string;
+  }>;
+  totals?: Array<{
+    id: string;
+    counterpartyEmail?: string;
+    direction: "sent" | "received" | "net";
+    amount: number;
+    currency: "ILS";
+    sourceToolName: AssistantToolName;
+    aliases: string[];
   }>;
 };
 
@@ -191,6 +254,9 @@ export type ToolResultMetadata = {
     expiresAt: string;
   }>;
   amount?: number;
+  sentAmount?: number;
+  receivedAmount?: number;
+  netAmount?: number;
 };
 
 export type ToolDisplayData = {
@@ -271,6 +337,25 @@ export type TransferDraft = {
   missingFields?: Array<"recipient" | "amount" | "currency" | "reason">;
 };
 
+export type TransferDraftExtraction = TransferDraft & {
+  debugEvents?: AiGraphDebugEventInput[];
+};
+
+export type ResolvedAmountRef = {
+  amount: number;
+  currency: "ILS";
+  source:
+    | "literal_user_message"
+    | "last_pending_transfer"
+    | "last_sent_transaction"
+    | "last_received_transaction"
+    | "last_answer_total_sent"
+    | "last_answer_total_received"
+    | "clarification_reply";
+  confidence: "low" | "medium" | "high";
+  explanation: string;
+};
+
 export type ClassifyAssistantIntentInput = {
   userMessage: string;
   messages: ChatMessage[];
@@ -295,6 +380,7 @@ export type ConversationEntityType =
   | "transfer_draft"
   | "date_range"
   | "amount"
+  | "total"
   | "currency";
 
 export type ConversationEntity = {
@@ -309,6 +395,9 @@ export type ConversationEntity = {
   userId?: string;
   transactionId?: string;
   pendingTransferId?: string;
+  counterpartyEmail?: string;
+  direction?: "sent" | "received" | "both" | "net";
+  sourceToolName?: AssistantToolName;
   amount?: number;
   currency?: string;
   expiresAt?: string;
@@ -329,12 +418,14 @@ export type ConversationAnswerFrame = {
   primaryEntities: string[];
   secondaryEntities: string[];
   queryContext?: {
+    counterpartyEmail?: string;
     dateRange?: {
       from: string;
       to: string;
       label?: string;
     };
     direction?: "sent" | "received" | "both";
+    amountRole?: "literal" | "total" | "last_transaction";
     amountRange?: {
       min?: number;
       max?: number;
@@ -514,7 +605,7 @@ export type ComposeAssistantResponseInput = {
 
 export type AssistantLlmProvider = {
   classifyIntent(input: ClassifyAssistantIntentInput): Promise<IntentClassification>;
-  extractTransferDraft(input: ExtractTransferDraftInput): Promise<TransferDraft>;
+  extractTransferDraft(input: ExtractTransferDraftInput): Promise<TransferDraftExtraction>;
   resolveCounterpartyReference(
     input: ResolveCounterpartyReferenceInput
   ): Promise<CounterpartyReferenceResolution>;
@@ -562,6 +653,7 @@ export type AssistantGraphState = {
   clarificationMessage?: string;
   refusalReason?: string;
   responseMessage?: string;
+  debugTrace?: AiGraphDebugEvent[];
 };
 
 export type ToolContext = {
@@ -600,6 +692,7 @@ export type AuditLogInput = {
   toolsRequested: string[];
   toolsExecuted: string[];
   refusalReason?: string;
+  diagnostics?: AiGraphDebugEvent[];
 };
 
 export type AuditLogger = (input: AuditLogInput) => Promise<void>;
@@ -646,6 +739,28 @@ export type PrepareTransferConfirmationResult =
 export type TransferPreparationService = (
   input: PrepareTransferConfirmationInput
 ) => Promise<PrepareTransferConfirmationResult>;
+
+export type AmountResolutionInput = {
+  userId: string;
+  conversationId: string;
+  transferDraft: TransferDraft;
+  resolvedCounterparty?: CounterpartyRef;
+  counterpartyMemory: CounterpartyMemory;
+};
+
+export type AmountResolutionResult =
+  | {
+      status: "resolved";
+      amount: ResolvedAmountRef;
+    }
+  | {
+      status: "unresolved";
+      reason: string;
+    };
+
+export type AmountResolutionService = (
+  input: AmountResolutionInput
+) => Promise<AmountResolutionResult>;
 
 export type ModifyPendingTransferConfirmationInput = {
   userId: string;

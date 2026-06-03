@@ -37,6 +37,8 @@ export function buildToolInput(
     case "getTransferQuote":
     case "getTransactionsWithCounterparty":
     case "getTotalSentToCounterparty":
+    case "getTotalReceivedFromCounterparty":
+    case "getNetWithCounterparty":
     case "getCounterpartySummary":
     case "getCounterpartyActivityTimeline":
     case "getTransactionReceipt":
