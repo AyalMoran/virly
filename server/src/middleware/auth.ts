@@ -16,7 +16,7 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   if (!token) {
     return res.status(401).json({ message: "Authentication required." });
   }
-
+  
   try {
     const payload = jwt.verify(token, config.jwtSecret) as jwt.JwtPayload;
     if (!payload.userId) {
