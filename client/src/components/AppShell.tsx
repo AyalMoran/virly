@@ -16,7 +16,7 @@ import { UserProfileSidebar } from "./ui/menu";
 
 const navItems = [
   { to: "/dashboard", label: "Dashboard", icon: <LayoutDashboard /> },
-  { to: "/transfer", label: "Send money", icon: <Send /> },
+  { to: "/transfer", label: "Transfer", icon: <Send /> },
   { to: "/transactions", label: "Transactions", icon: <CreditCard /> },
   { to: "/settings", label: "Settings", icon: <Settings />, isSeparator: true }
 ];
