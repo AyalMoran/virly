@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sendVerificationEmailWithSender } from "./services/email.service.js";
+import { config } from "./config.js";
+
 
 const email = "user@example.com";
 const verificationUrl = "https://api.example.com/api/auth/verify?token=abc123";
@@ -11,6 +13,8 @@ type CapturedEmailPayload = {
   text: string;
   html: string;
 };
+
+
 
 test("missing Resend sender logs verification link and reports undelivered", async (t) => {
   const logs: unknown[][] = [];
@@ -42,7 +46,7 @@ test("successful Resend delivery reports delivered and sends verification payloa
   assert.equal(sentPayloads.length, 1);
   const sentPayload = sentPayloads[0];
   assert.ok(sentPayload);
-  assert.equal(sentPayload.from, "Virly <verify@example.com>");
+  assert.equal(sentPayload.from, config.email.from);
   assert.equal(sentPayload.to, email);
   assert.equal(sentPayload.subject, "Verify your Virly account");
   assert.match(sentPayload.text, /expires in 10 minutes/);

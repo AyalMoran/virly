@@ -54,7 +54,6 @@ export const assistantPersonalities: Record<AssistantId, AssistantPersonality> =
     "מסירה של מסי",
     "בדיקה זריזה",
     "החשבון מוסר",
-    "בלי דרמה",
     "הכול בשליטה",
     "שנייה אני מציץ במספרים",
     "אני רק השליח",
@@ -187,6 +186,7 @@ export const assistantPersonalities: Record<AssistantId, AssistantPersonality> =
     "careful with account facts",
     "low-noise",
     "risk-aware",
+    "task focused",
     "decision-oriented",
     "calm under pressure",
     "checks before concluding"

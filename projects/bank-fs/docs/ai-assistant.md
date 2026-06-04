@@ -12,7 +12,7 @@ backend-authoritative decisions.
 
 ## Structure
 
-- `server/src/routes/ai.routes.ts` exposes `POST /api/ai/chat` and `POST /api/ai/confirmations/:id` behind cookie auth and CSRF checks.
+- `server/src/routes/ai.routes.ts` exposes `POST /api/ai/chat`, `POST /api/ai/chat/stream`, and `POST /api/ai/confirmations/:id` behind cookie auth and CSRF checks.
 - `server/src/ai/graph.ts` owns the LangGraph flow and is the source of truth for node order.
 - `server/src/ai/state.ts` owns the shared TypeScript contracts for graph state, intents, tool names, LLM provider methods, transfer drafts, and confirmations.
 - `server/src/ai/llm.ts` adapts `@langchain/openai` `ChatOpenAI` with Zod structured output for classification, transfer draft extraction, counterparty reference resolution, and final wording.
@@ -34,14 +34,16 @@ Current graph order in `server/src/ai/graph.ts`:
 START
   -> loadAuthenticatedContext
   -> loadConversationContext
+  -> resolveClarificationReply
   -> normalizeUserMessage
   -> classifyIntent
   -> extractRequestSlots
   -> extractTransferDraft
   -> resolveCounterpartyReference
+  -> resolveContextualAmounts
+  -> routeReadOnlyTools
   -> prepareTransferConfirmation
   -> modifyPendingTransferConfirmation
-  -> routeReadOnlyTools
   -> composeResponse
   -> saveConversation
   -> END
@@ -103,16 +105,29 @@ Supported intents:
 - `transaction_summary`
 - `transaction_count`
 - `transaction_detail`
+- `transaction_stats`
+- `cashflow_summary`
 - `counterparty_lookup`
+- `recent_sent_counterparties`
+- `recent_received_counterparties`
+- `counterparty_summary`
+- `counterparty_activity_timeline`
 - `last_sent_counterparty`
 - `counterparty_transactions`
 - `counterparty_total_sent`
+- `counterparty_total_received`
+- `counterparty_net_total`
 - `transfer_prepare`
 - `transfer_modify_pending`
 - `transfer_cancel_pending`
 - `pending_confirmation_status`
 - `verified_recipients`
+- `recipient_profile`
 - `transfer_limits`
+- `transfer_eligibility`
+- `transfer_quote`
+- `daily_transfer_usage`
+- `pending_ai_transfers`
 - `transfer_status`
 - `general_help`
 - `unsafe_request`
@@ -147,8 +162,12 @@ Important intent distinction:
 ### `resolveCounterpartyReference`
 
 - Runs for:
+  - `counterparty_summary`
+  - `counterparty_activity_timeline`
   - `counterparty_transactions`
   - `counterparty_total_sent`
+  - `counterparty_total_received`
+  - `counterparty_net_total`
   - `transfer_prepare` when no explicit `recipientEmail` exists
   - `transfer_modify_pending` only when the modification includes a new recipient reference
 - Uses LLM structured output as a parser/ranker over already-known counterparties.
@@ -230,6 +249,155 @@ Important intent distinction:
   - tools executed
   - refusal reason
 - Do not log raw prompts, secrets, cookies, full transaction documents, or full account data.
+
+## Subgraph Boundaries
+
+The graph is easier to reason about if you treat it as five deterministic
+subgraphs with strict handoff rules.
+
+### 1. Auth And Persistence Boundary
+
+- `loadAuthenticatedContext` trusts only backend auth middleware.
+- `loadConversationContext` and `saveConversation` persist bounded context only.
+- `conversationId` is a storage key, not an authorization claim.
+
+### 2. Parsing And Intent Boundary
+
+- `normalizeUserMessage`, `classifyIntent`, `extractRequestSlots`, and
+  `extractTransferDraft` may parse language, wording, and user intent.
+- These nodes may produce structured hints, but they do not authorize tools,
+  recipient ownership, balances, or transfer execution.
+
+### 3. Reference And Read-Only Fact Boundary
+
+- `resolveCounterpartyReference` and read-only tools are the only path that can
+  turn free-form references into backend-scoped account facts.
+- Tool execution is allowlisted by `router.ts` and validated again in the graph.
+- Read-only tools may update bounded conversation memory, but they must not
+  mutate account or transfer state.
+
+### 4. Transfer Draft And Confirmation Boundary
+
+- `prepareTransferConfirmation` and `modifyPendingTransferConfirmation` are the
+  only graph nodes that can create pending confirmation state.
+- They validate authenticated sender scope, recipient identity, amount, balance,
+  expiry, and pending-confirmation ownership through backend services.
+- They may create or supersede `AiPendingTransfer` records, but they never
+  execute the transfer itself.
+
+### 5. Response And Streaming Boundary
+
+- `composeResponse` may reword already-decided backend state.
+- `/api/ai/chat/stream` may emit progress phases, but not partial account facts
+  or transfer execution claims.
+- Final user-visible messages are hydrated from sanitized LLM-facing labels back
+  to backend-known user-visible labels before returning to the client.
+
+## Label Safety Rules
+
+The assistant uses two parallel label surfaces on purpose.
+
+- LLM-safe labels:
+  masked emails and masked labels such as `a***@example.com`
+- User-visible labels:
+  full emails and full display labels such as `Alex Example (alex@example.com)`
+
+Rules:
+
+- Tool summaries and responder inputs sent to the LLM use masked labels only.
+- Backend memory may keep full backend-only email fields where deterministic
+  resolution needs them.
+- Final `/api/ai/chat` and `/api/ai/chat/stream` result payloads may show full
+  emails only after backend-controlled hydration.
+- Audit diagnostics must keep masked or metadata-only values.
+- New tools must define their LLM-safe and user-visible labels explicitly; do
+  not reuse user-visible labels inside LLM-facing summaries by accident.
+
+## Contextual Amount Resolution Rules
+
+`amountReferenceText` exists so the backend can preserve phrases without
+inventing amounts too early.
+
+Supported scopes today:
+
+- latest received transaction with the resolved counterparty
+- latest sent transaction with the resolved counterparty
+- previous read-only total answer from conversation memory
+- latest pending confirmation amount for pending-modification flows
+
+Rules:
+
+- If the backend can resolve the amount deterministically, it fills
+  `transferDraft.amount` before transfer preparation.
+- If the backend cannot resolve the scope safely, it asks for clarification and
+  does not create a pending confirmation.
+- Bare `same amount` is treated as ambiguous when more than one safe source is
+  plausible.
+- Unsupported currencies are clarified before preparation; they are not
+  converted silently.
+
+## Clarification Resume Flow
+
+Clarification is explicit state, not a best-effort chat guess.
+
+1. A node detects missing or ambiguous information.
+2. The graph stores a `clarification` object in conversation memory with:
+   reason, message, expected reply type, optional options, and optional
+   `resumeIntent` plus `resumeDraft`.
+3. A later reply such as `the second one`, `that one`, or
+   `the previous answer total` is interpreted against the saved clarification
+   first.
+4. Once the clarification resolves, the graph clears the saved clarification and
+   resumes the intended safe flow.
+
+Rules:
+
+- Clarification replies do not bypass auth, tool allowlists, or transfer
+  validation.
+- Resume data is bounded and structured; it is not raw hidden prompt state.
+- If the reply still does not resolve the ambiguity, the graph asks again
+  without running unsafe downstream steps.
+
+## Scenario Matrix
+
+These are the main scenarios the current graph and eval harness are expected to
+cover.
+
+### Read-Only
+
+- `who did I send money to today?`
+- `מי העביר לי היום?`
+- `how much did he send me?`
+- `what is my net with him?`
+- `show activity with him`
+- `Tell me more about the second one`
+
+### Transfer Preparation
+
+- `send him 50`
+- `send him that amount`
+- `send him the same amount he sent me`
+- `תעביר לו 50`
+
+### Pending Confirmation
+
+- `Actually make it 70`
+- `same recipient but 70`
+- `send it to Sarah instead`
+- `use the same amount as before`
+- `yes`
+- `confirm it`
+- `deny it`
+
+Expected invariants:
+
+- Read-only questions may query facts but never mutate balances or transfers.
+- Transfer preparation may create a pending confirmation card only after backend
+  validation.
+- Pending-transfer modification may create a new card and supersede the old one,
+  but never execute money movement.
+- Chat text such as `yes`, `confirm it`, or `deny it` never executes a
+  transfer.
 
 ## LLM Schemas
 
@@ -488,6 +656,31 @@ Transfer-modification response:
 }
 ```
 
+### Chat Stream
+
+`POST /api/ai/chat/stream`
+
+This endpoint follows the same backend safety flow as `POST /api/ai/chat`, but
+streams progress-only status events before a final `result` event.
+
+Current phase labels:
+
+- `accepted`
+- `understanding_request`
+- `resolving_context`
+- `checking_account_facts`
+- `preparing_confirmation`
+- `composing_response`
+- `completed`
+
+Rules:
+
+- Status events must not contain raw tool payloads, account balances, or
+  transfer execution claims.
+- The final `result` event uses the same payload shape as `POST /api/ai/chat`.
+- Streaming is a transport optimization only; it must not bypass any backend
+  confirmation or authorization boundary.
+
 ### Confirmation
 
 `POST /api/ai/confirmations/:id`
@@ -579,10 +772,11 @@ Example: "What is my balance?" -> `balance_inquiry` ->
 2. Classifier returns `transfer_prepare`.
 3. Transfer draft extractor parses recipient reference/email, amount, and reason.
 4. Resolver resolves contextual recipients when no explicit email exists.
-5. Transfer preparation service validates sender, recipient, amount, balance, and personal details.
-6. If valid, an `AiPendingTransfer` is created and returned as `confirmation`.
-7. Chat UI renders the confirmation card.
-8. No transfer is executed yet.
+5. Contextual amount resolver fills a deterministic amount only when backend-safe sources exist.
+6. Transfer preparation service validates sender, recipient, amount, balance, and personal details.
+7. If valid, an `AiPendingTransfer` is created and returned as `confirmation`.
+8. Chat UI renders the confirmation card.
+9. No transfer is executed yet.
 
 ### Pending Transfer Modification
 
@@ -676,6 +870,31 @@ Run AI safety tests:
 ```bash
 npm run test --workspace server
 ```
+
+Run focused AI assistant tests:
+
+```bash
+npx tsx --test src/ai/tests/aiSafety.test.ts
+```
+
+Run deterministic eval fixtures:
+
+```bash
+./scripts/ai-eval-chat.sh deterministic
+```
+
+Optional guarded eval modes:
+
+```bash
+VIRLY_AI_EVAL_ENABLE_LLM_DEV=true ./scripts/ai-eval-chat.sh llm-dev
+VIRLY_AI_EVAL_ENABLE_MONGO=true VIRLY_AI_EVAL_MONGO_URI='mongodb://...' ./scripts/ai-eval-chat.sh seeded-mongo
+```
+
+Notes:
+
+- `llm-dev` also requires a working `OPENAI_API_KEY` and `VIRLY_AI_MODEL`.
+- `seeded-mongo` is intentionally blocked unless a dedicated eval database URI
+  is provided; it must not silently reuse the default development database.
 
 Validate OpenAPI syntax:
 

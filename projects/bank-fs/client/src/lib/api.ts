@@ -4,6 +4,8 @@ import type {
   AiConfirmationResponse,
   AiChatRequest,
   AiChatResponse,
+  AiChatStreamEvent,
+  AiChatStreamStatusEvent,
   ApiErrorBody,
   AuthSuccessResponse,
   LoginRequest,
@@ -62,7 +64,7 @@ function isUnsafeMethod(method: string | undefined) {
   return ["POST", "PUT", "PATCH", "DELETE"].includes(method?.toUpperCase() ?? "GET");
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+function buildHeaders(options: RequestInit = {}) {
   const headers = new Headers(options.headers);
   headers.set("Accept", "application/json");
 
@@ -76,6 +78,12 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
       headers.set("X-CSRF-Token", decodeURIComponent(csrfToken));
     }
   }
+
+  return headers;
+}
+
+async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const headers = buildHeaders(options);
 
   const response = await fetch(`${API_BASE_URL}${path}`, {
     ...options,
@@ -100,6 +108,96 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   }
 
   return body as T;
+}
+
+function parseSseEventBlock(block: string): AiChatStreamEvent | null {
+  const lines = block.split("\n").map((line) => line.trim()).filter(Boolean);
+  const dataLine = lines.find((line) => line.startsWith("data: "));
+  if (!dataLine) {
+    return null;
+  }
+
+  return JSON.parse(dataLine.slice("data: ".length)) as AiChatStreamEvent;
+}
+
+async function requestEventStream(
+  path: string,
+  options: RequestInit,
+  handlers: {
+    onStatus?: (event: AiChatStreamStatusEvent) => void;
+  } = {}
+) {
+  const headers = buildHeaders(options);
+  headers.set("Accept", "text/event-stream");
+
+  const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    credentials: "include",
+    headers
+  });
+
+  if (!response.ok) {
+    const text = await response.text();
+    const body = text ? JSON.parse(text) : {};
+
+    if (response.status === 401) {
+      cachedCsrfToken = null;
+      onUnauthorized?.();
+    }
+
+    throw new ApiError(response.status, body);
+  }
+
+  if (!response.body) {
+    throw new Error("Streaming is not supported in this browser session.");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let finalResult: AiChatResponse | null = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) {
+      break;
+    }
+
+    buffer += decoder.decode(value, { stream: true });
+    const blocks = buffer.split(/\n\n/);
+    buffer = blocks.pop() ?? "";
+
+    for (const block of blocks) {
+      const event = parseSseEventBlock(block);
+      if (!event) {
+        continue;
+      }
+
+      if (event.type === "status") {
+        handlers.onStatus?.(event);
+        continue;
+      }
+
+      if (event.type === "result") {
+        finalResult = event.result;
+        continue;
+      }
+
+      if (event.type === "error") {
+        throw new Error(event.message || "Streaming request failed.");
+      }
+    }
+  }
+
+  if (!finalResult) {
+    throw new Error("Streaming response ended before the final assistant result.");
+  }
+
+  return finalResult;
+}
+
+export function supportsAiChatStreaming() {
+  return typeof ReadableStream !== "undefined" && typeof TextDecoder !== "undefined";
 }
 
 export const api = {
@@ -208,6 +306,25 @@ export const api = {
         ...(payload.assistantId ? { assistantId: payload.assistantId } : {})
       })
     });
+  },
+  aiChatStream(
+    payload: AiChatRequest,
+    handlers: {
+      onStatus?: (event: AiChatStreamStatusEvent) => void;
+    } = {}
+  ) {
+    return requestEventStream(
+      "/api/ai/chat/stream",
+      {
+        method: "POST",
+        body: JSON.stringify({
+          message: payload.message.trim(),
+          ...(payload.conversationId ? { conversationId: payload.conversationId } : {}),
+          ...(payload.assistantId ? { assistantId: payload.assistantId } : {})
+        })
+      },
+      handlers
+    );
   },
   aiConfirmation(id: string, action: AiConfirmationAction, version: number) {
     const idempotencyKey =

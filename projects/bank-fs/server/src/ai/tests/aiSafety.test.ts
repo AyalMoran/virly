@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import http from "node:http";
 import { app } from "../../app.js";
@@ -10,7 +11,7 @@ import {
   classifyAmountReference,
   resolveContextualAmount
 } from "../amountResolution.js";
-import { AssistantId } from "../assistants.js";
+import { AssistantId, assistantIds } from "../assistants.js";
 import {
   createEmptyCounterpartyMemory,
   rememberCounterparty,
@@ -26,16 +27,32 @@ import {
 import { createToolResult } from "../toolResults.js";
 import {
   AssistantLlmProvider,
+  assistantIntentValues,
+  assistantToolNames,
+  aiStreamErrorEventTypeValues,
+  aiStreamPhases,
+  aiStreamResultEventTypeValues,
+  aiStreamStatusEventTypeValues,
   AssistantToolExecutors,
   AmountResolutionService,
   AuditLogInput,
   ChatMessage,
+  clarificationReasonValues,
+  clarificationReplyTypeValues,
+  confirmationActionMethodValues,
+  confirmationActionValues,
+  confirmationResponseStatusValues,
+  confirmationSupersededErrorValues,
   ConversationContext,
   ConversationSaveInput,
   ConversationStore,
   CounterpartyMemory,
   RunAssistantResult,
   ToolContext,
+  transferConfirmationCurrencyValues,
+  transferConfirmationStatusValues,
+  transferConfirmationTypeValues,
+  transferWarningCodeValues,
   TransferModificationService,
   TransferPreparationService
 } from "../state.js";
@@ -55,6 +72,167 @@ import {
   normalizeTransferDraftOutput,
   sanitizeMessagesForLlm
 } from "../llm.js";
+import { runAiEvalFixtures } from "../evals/runner.js";
+import { buildSeededMongoEvalSeedData } from "../evals/seededMongo.js";
+import type { AiEvalFixtureFile } from "../evals/types.js";
+
+function extractOpenApiEnumValues(schemaName: string) {
+  const openApiText = readFileSync(
+    new URL("../../../../openapi.yaml", import.meta.url),
+    "utf8"
+  );
+  const schemaPattern = new RegExp(
+    `\\n\\s{4}${schemaName}:\\n\\s+type:\\s+string\\n\\s+enum:\\n((?:\\s+- .+\\n)+)`
+  );
+  const match = openApiText.match(schemaPattern);
+
+  if (!match?.[1]) {
+    throw new Error(`Could not extract OpenAPI enum for ${schemaName}.`);
+  }
+
+  return match[1]
+    .trim()
+    .split("\n")
+    .map((line) => line.trim().replace(/^- /, ""));
+}
+
+function extractOpenApiPropertyEnumValues(
+  schemaName: string,
+  propertyName: string
+) {
+  const openApiText = readFileSync(
+    new URL("../../../../openapi.yaml", import.meta.url),
+    "utf8"
+  );
+  const propertyPattern = new RegExp(
+    `\\n\\s{4}${schemaName}:\\n[\\s\\S]*?\\n\\s{8}${propertyName}:\\n\\s{10}type:\\s+string\\n\\s{10}enum:\\n((?:\\s{12}- .+\\n)+)`
+  );
+  const match = openApiText.match(propertyPattern);
+
+  if (!match?.[1]) {
+    throw new Error(
+      `Could not extract OpenAPI enum for ${schemaName}.${propertyName}.`
+    );
+  }
+
+  return match[1]
+    .trim()
+    .split("\n")
+    .map((line) => line.trim().replace(/^- /, ""));
+}
+
+function extractOpenApiNestedEnumValues(
+  schemaName: string,
+  propertyPath: string[]
+) {
+  const openApiText = readFileSync(
+    new URL("../../../../openapi.yaml", import.meta.url),
+    "utf8"
+  );
+  const pathPattern = propertyPath
+    .map((segment) => `\\n\\s+${segment}:`)
+    .join("[\\s\\S]*?");
+  const pattern = new RegExp(
+    `\\n\\s{4}${schemaName}:\\n[\\s\\S]*?${pathPattern}[\\s\\S]*?\\n\\s+enum:\\n((?:\\s+- .+\\n)+)`
+  );
+  const match = openApiText.match(pattern);
+
+  if (!match?.[1]) {
+    throw new Error(
+      `Could not extract nested OpenAPI enum for ${schemaName}.${propertyPath.join(".")}.`
+    );
+  }
+
+  return match[1]
+    .trim()
+    .split("\n")
+    .map((line) => line.trim().replace(/^- /, ""));
+}
+
+function extractOpenApiOneOfPropertyEnumValues(
+  schemaName: string,
+  propertyName: string
+) {
+  const openApiText = readFileSync(
+    new URL("../../../../openapi.yaml", import.meta.url),
+    "utf8"
+  );
+  const schemaPattern = new RegExp(
+    `\\n\\s{4}${schemaName}:\\n([\\s\\S]*?)(?=\\n\\s{4}[A-Z]|$)`
+  );
+  const schemaMatch = openApiText.match(schemaPattern);
+
+  if (!schemaMatch?.[1]) {
+    throw new Error(`Could not find OpenAPI schema ${schemaName}.`);
+  }
+
+  const propertyPattern = new RegExp(
+    `\\n\\s+${propertyName}:\\n\\s+type:\\s+string\\n\\s+enum:\\n((?:\\s+- .+\\n)+)`,
+    "g"
+  );
+  const values: string[] = [];
+  const matches = schemaMatch[1].matchAll(propertyPattern);
+
+  for (const match of matches) {
+    const block = match[1];
+    if (!block) {
+      continue;
+    }
+    for (const line of block.trim().split("\n")) {
+      values.push(line.trim().replace(/^- /, ""));
+    }
+  }
+
+  if (values.length === 0) {
+    throw new Error(
+      `Could not extract OpenAPI oneOf property enum for ${schemaName}.${propertyName}.`
+    );
+  }
+
+  return values;
+}
+
+function extractClientTypeUnionValues(typeName: string) {
+  const clientTypesText = readFileSync(
+    new URL("../../../../client/src/lib/types.ts", import.meta.url),
+    "utf8"
+  );
+  const multilinePattern = new RegExp(
+    `export type ${typeName} =\\n((?:\\s+\\| \\".+\\";?\\n)+)`,
+    "m"
+  );
+  const inlinePattern = new RegExp(
+    `export type ${typeName} = ((?:\\"[^\\"]+\\"(?: \\| )?)+);`,
+    "m"
+  );
+  const multilineMatch = clientTypesText.match(multilinePattern);
+  const inlineMatch = clientTypesText.match(inlinePattern);
+
+  if (multilineMatch?.[1]) {
+    return multilineMatch[1]
+      .trim()
+      .split("\n")
+      .map((line) =>
+        line
+          .trim()
+          .replace(/^\| /, "")
+          .replace(/^"|"$/g, "")
+          .replace(/";$/, "")
+      );
+  }
+
+  if (inlineMatch?.[1]) {
+    return inlineMatch[1]
+      .split(" | ")
+      .map((value) => value.replace(/^"|"$/g, ""));
+  }
+
+  if (!multilineMatch?.[1] && !inlineMatch?.[1]) {
+    throw new Error(`Could not extract client type union for ${typeName}.`);
+  }
+
+  throw new Error(`Could not extract client type union for ${typeName}.`);
+}
 
 function fakeResult(input: {
   toolName: Parameters<typeof createToolResult>[0]["toolName"];
@@ -787,6 +965,7 @@ function createFakePhaseFourTransferTools(
             label: "1. 50.00 ILS to Alex Example (alex@example.com)",
             recipientLabel: "Alex Example (alex@example.com)",
             recipientMaskedLabel: "Alex Example (a***@example.com)",
+            recipientEmailMasked: "a***@example.com",
             amount: 50,
             currency: "ILS",
             status: "pending",
@@ -1117,6 +1296,395 @@ test("read-only route map includes planned phase one tool routes", () => {
   ]);
 });
 
+test("phase 13 deterministic eval fixtures pass against graph", async () => {
+  const summary = await runAiEvalFixtures({ mode: "deterministic" });
+
+  assert.equal(summary.totalFixtures, 4);
+  assert.equal(summary.failedTurns.length, 0);
+});
+
+test("phase 13 llm-dev eval mode fails clearly when no configured provider is available", async () => {
+  await assert.rejects(
+    () => runAiEvalFixtures({ mode: "llm-dev" }),
+    /Configured LLM eval mode requires VIRLY_AI_EVAL_ENABLE_LLM_DEV=true|Configured LLM eval mode requires OPENAI_API_KEY and VIRLY_AI_MODEL/i
+  );
+});
+
+test("phase 13 llm-dev eval mode can run with an injected configured provider", async () => {
+  const previous = process.env.VIRLY_AI_EVAL_ENABLE_LLM_DEV;
+  process.env.VIRLY_AI_EVAL_ENABLE_LLM_DEV = "true";
+
+  const fixture: AiEvalFixtureFile = {
+    suiteName: "llm-dev-test",
+    scenarios: [
+      {
+        id: "balance-inquiry",
+        description: "Minimal read-only llm-dev happy path",
+        toolPreset: "default",
+        turns: [
+          {
+            userMessage: "what is my balance?",
+            expectedIntent: "balance_inquiry",
+            expectedToolCalls: ["getUserAccounts", "getAccountBalance"]
+          }
+        ]
+      }
+    ]
+  };
+
+  const fakeConfiguredProvider: AssistantLlmProvider = {
+    async classifyIntent() {
+      return { intent: "balance_inquiry" };
+    },
+    async extractTransferDraft() {
+      return {};
+    },
+    async resolveCounterpartyReference() {
+      return { kind: "none", confidence: "low" };
+    },
+    async composeResponse(input) {
+      return input.fallbackMessage;
+    }
+  };
+
+  try {
+    const summary = await runAiEvalFixtures({
+      mode: "llm-dev",
+      fixtures: [fixture],
+      createConfiguredProvider: () => fakeConfiguredProvider
+    });
+
+    assert.equal(summary.mode, "llm-dev");
+    assert.equal(summary.totalFixtures, 1);
+    assert.equal(summary.totalScenarios, 1);
+    assert.equal(summary.totalTurns, 1);
+    assert.equal(summary.failedTurns.length, 0);
+  } finally {
+    if (previous == null) {
+      delete process.env.VIRLY_AI_EVAL_ENABLE_LLM_DEV;
+    } else {
+      process.env.VIRLY_AI_EVAL_ENABLE_LLM_DEV = previous;
+    }
+  }
+});
+
+test("phase 13 seeded-mongo eval mode fails closed without explicit dedicated db opt-in", async () => {
+  await assert.rejects(
+    () => runAiEvalFixtures({ mode: "seeded-mongo" }),
+    /Seeded Mongo eval mode requires VIRLY_AI_EVAL_ENABLE_MONGO=true|Seeded Mongo eval mode requires VIRLY_AI_EVAL_MONGO_URI/i
+  );
+});
+
+test("phase 13 seeded-mongo seed data matches current fixture expectations", () => {
+  const seedData = buildSeededMongoEvalSeedData();
+  const transactionsByCounterparty = new Map<string, typeof seedData.transactions>();
+
+  for (const transaction of seedData.transactions) {
+    const current = transactionsByCounterparty.get(transaction.counterpartyEmail) ?? [];
+    current.push(transaction);
+    transactionsByCounterparty.set(transaction.counterpartyEmail, current);
+  }
+
+  assert.equal(seedData.users.some((user) => user.email === "ai-eval-owner@example.com"), true);
+  assert.equal(seedData.personalDetails.some((detail) => detail.firstName === "Daniel"), true);
+
+  const alexTotalReceived = (transactionsByCounterparty.get("alex@example.com") ?? [])
+    .filter((transaction) => transaction.type === "credit")
+    .reduce((total, transaction) => total + transaction.amount, 0);
+  assert.equal(alexTotalReceived, 35);
+
+  const danielDirections = (transactionsByCounterparty.get("daniel@example.com") ?? []).map(
+    (transaction) => transaction.type
+  );
+  assert.deepEqual(danielDirections.sort(), ["credit", "debit"]);
+
+  const sarahTransactions = transactionsByCounterparty.get("sarah@example.com") ?? [];
+  assert.equal(sarahTransactions.length > 0, true);
+  assert.equal(sarahTransactions[0]?.type, "credit");
+});
+
+test("openapi assistant intent enum stays in sync with state contracts", () => {
+  assert.deepEqual(extractOpenApiEnumValues("AssistantIntent"), [
+    ...assistantIntentValues
+  ]);
+});
+
+test("openapi ai tool enum stays in sync with state contracts", () => {
+  assert.deepEqual(extractOpenApiEnumValues("AiToolName"), [
+    ...assistantToolNames
+  ]);
+});
+
+test("openapi clarification reason enum stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractOpenApiPropertyEnumValues("AiClarificationRequest", "reason"),
+    [...clarificationReasonValues]
+  );
+});
+
+test("openapi clarification expectedReplyType enum stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractOpenApiPropertyEnumValues(
+      "AiClarificationRequest",
+      "expectedReplyType"
+    ),
+    [...clarificationReplyTypeValues]
+  );
+});
+
+test("openapi ai chat request assistantId enum stays in sync with assistant ids", () => {
+  assert.deepEqual(
+    extractOpenApiPropertyEnumValues("AiChatRequest", "assistantId"),
+    [...assistantIds]
+  );
+});
+
+test(
+  "openapi ai chat response assistantId enum stays in sync with assistant ids",
+  () => {
+    assert.deepEqual(
+      extractOpenApiPropertyEnumValues("AiChatResponse", "assistantId"),
+      [...assistantIds]
+    );
+  }
+);
+
+test("openapi stream status event type stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractOpenApiPropertyEnumValues("AiChatStreamStatusEvent", "type"),
+    [...aiStreamStatusEventTypeValues]
+  );
+});
+
+test("openapi stream status phase stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractOpenApiPropertyEnumValues("AiChatStreamStatusEvent", "phase"),
+    [...aiStreamPhases]
+  );
+});
+
+test("openapi stream result event type stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractOpenApiPropertyEnumValues("AiChatStreamResultEvent", "type"),
+    [...aiStreamResultEventTypeValues]
+  );
+});
+
+test("openapi stream error event type stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractOpenApiPropertyEnumValues("AiChatStreamErrorEvent", "type"),
+    [...aiStreamErrorEventTypeValues]
+  );
+});
+
+test("openapi ai tool status enum stays in sync with client contract", () => {
+  assert.deepEqual(
+    extractOpenApiEnumValues("AiToolStatus"),
+    extractClientTypeUnionValues("AiToolStatus")
+  );
+});
+
+test("openapi transfer confirmation type enum stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractOpenApiPropertyEnumValues("AiTransferConfirmation", "type"),
+    [...transferConfirmationTypeValues]
+  );
+});
+
+test("openapi transfer confirmation status enum stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractOpenApiPropertyEnumValues("AiTransferConfirmation", "status"),
+    [...transferConfirmationStatusValues]
+  );
+});
+
+test("openapi transfer confirmation currency enum stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractOpenApiPropertyEnumValues("AiTransferConfirmation", "currency"),
+    [...transferConfirmationCurrencyValues]
+  );
+});
+
+test(
+  "openapi transfer confirmation warning code enum stays in sync with state contracts",
+  () => {
+    assert.deepEqual(
+      extractOpenApiNestedEnumValues("AiTransferConfirmation", [
+        "warnings",
+        "items",
+        "properties",
+        "code"
+      ]),
+      [...transferWarningCodeValues]
+    );
+  }
+);
+
+test(
+  "openapi confirmation action method enum stays in sync with state contracts",
+  () => {
+    assert.deepEqual(
+      extractOpenApiPropertyEnumValues("AiConfirmationActionDescriptor", "method"),
+      [...confirmationActionMethodValues]
+    );
+  }
+);
+
+test("openapi confirmation action enum stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractOpenApiPropertyEnumValues("AiConfirmationRequest", "action"),
+    [...confirmationActionValues]
+  );
+});
+
+test(
+  "openapi confirmation response status values stay in sync with state contracts",
+  () => {
+    assert.deepEqual(
+      extractOpenApiOneOfPropertyEnumValues("AiConfirmationResponse", "status"),
+      [...confirmationResponseStatusValues]
+    );
+  }
+);
+
+test(
+  "openapi superseded confirmation error enum stays in sync with state contracts",
+  () => {
+    assert.deepEqual(
+      extractOpenApiPropertyEnumValues("AiSupersededConfirmationError", "error"),
+      [...confirmationSupersededErrorValues]
+    );
+  }
+);
+
+test("client assistant intent union stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractClientTypeUnionValues("AssistantIntent"),
+    [...assistantIntentValues]
+  );
+});
+
+test("client assistant id union stays in sync with assistant ids", () => {
+  assert.deepEqual(
+    extractClientTypeUnionValues("AssistantId"),
+    [...assistantIds]
+  );
+});
+
+test("client ai tool union stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractClientTypeUnionValues("AiToolName"),
+    [...assistantToolNames]
+  );
+});
+
+test("client clarification reason union stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractClientTypeUnionValues("AiClarificationReason"),
+    [...clarificationReasonValues]
+  );
+});
+
+test(
+  "client clarification expectedReplyType union stays in sync with state contracts",
+  () => {
+    assert.deepEqual(
+      extractClientTypeUnionValues("AiClarificationExpectedReplyType"),
+      [...clarificationReplyTypeValues]
+    );
+  }
+);
+
+test("client ai stream phase union stays in sync with backend stream phases", () => {
+  assert.deepEqual(
+    extractClientTypeUnionValues("AiChatStreamPhase"),
+    [...aiStreamPhases]
+  );
+});
+
+test("client stream status event type stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractClientTypeUnionValues("AiChatStreamStatusEventType"),
+    [...aiStreamStatusEventTypeValues]
+  );
+});
+
+test("client stream result event type stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractClientTypeUnionValues("AiChatStreamResultEventType"),
+    [...aiStreamResultEventTypeValues]
+  );
+});
+
+test("client stream error event type stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractClientTypeUnionValues("AiChatStreamErrorEventType"),
+    [...aiStreamErrorEventTypeValues]
+  );
+});
+
+test("client transfer confirmation type union stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractClientTypeUnionValues("AiTransferConfirmationType"),
+    [...transferConfirmationTypeValues]
+  );
+});
+
+test("client transfer confirmation status union stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractClientTypeUnionValues("AiTransferConfirmationStatus"),
+    [...transferConfirmationStatusValues]
+  );
+});
+
+test("client transfer confirmation currency union stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractClientTypeUnionValues("AiTransferConfirmationCurrency"),
+    [...transferConfirmationCurrencyValues]
+  );
+});
+
+test("client transfer warning code union stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractClientTypeUnionValues("AiTransferWarningCode"),
+    [...transferWarningCodeValues]
+  );
+});
+
+test("client confirmation method union stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractClientTypeUnionValues("AiConfirmationMethod"),
+    [...confirmationActionMethodValues]
+  );
+});
+
+test("client confirmation action union stays in sync with state contracts", () => {
+  assert.deepEqual(
+    extractClientTypeUnionValues("AiConfirmationAction"),
+    [...confirmationActionValues]
+  );
+});
+
+test(
+  "client confirmation response status union stays in sync with state contracts",
+  () => {
+    assert.deepEqual(
+      extractClientTypeUnionValues("AiConfirmationResponseStatus"),
+      [...confirmationResponseStatusValues]
+    );
+  }
+);
+
+test(
+  "client superseded confirmation error union stays in sync with state contracts",
+  () => {
+    assert.deepEqual(
+      extractClientTypeUnionValues("AiSupersededConfirmationErrorCode"),
+      [...confirmationSupersededErrorValues]
+    );
+  }
+);
+
 test("every configured read-only route uses an allowlisted tool name", () => {
   for (const toolNames of Object.values(intentToReadOnlyTools)) {
     for (const toolName of toolNames) {
@@ -1276,6 +1844,58 @@ test("hebrew recent counterparty requests route to phase two tools", async () =>
       userId: "507f1f77bcf86cd799439011",
       conversationId: "test-hebrew-recent-received-counterparties",
       message: "מי שלח לי כסף לאחרונה?"
+    },
+    { tools: createFakePhaseTwoCounterpartyTools(receivedExecuted) }
+  );
+
+  assert.equal(sentResult.intent, "recent_sent_counterparties");
+  assert.deepEqual(sentExecuted, ["getRecentSentCounterparties"]);
+  assert.equal(receivedResult.intent, "recent_received_counterparties");
+  assert.deepEqual(receivedExecuted, ["getRecentReceivedCounterparties"]);
+});
+
+test("phase 12 read-only today phrasing routes recent counterparty questions", async () => {
+  const sentExecuted: string[] = [];
+  const sentResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-today-sent-counterparties",
+      message: "who did I send money to today?"
+    },
+    { tools: createFakePhaseTwoCounterpartyTools(sentExecuted) }
+  );
+  const receivedExecuted: string[] = [];
+  const receivedResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-today-received-counterparties",
+      message: "who sent me money today?"
+    },
+    { tools: createFakePhaseTwoCounterpartyTools(receivedExecuted) }
+  );
+
+  assert.equal(sentResult.intent, "recent_sent_counterparties");
+  assert.deepEqual(sentExecuted, ["getRecentSentCounterparties"]);
+  assert.equal(receivedResult.intent, "recent_received_counterparties");
+  assert.deepEqual(receivedExecuted, ["getRecentReceivedCounterparties"]);
+});
+
+test("phase 12 hebrew today phrasing routes recent counterparty questions", async () => {
+  const sentExecuted: string[] = [];
+  const sentResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-hebrew-today-sent-counterparties",
+      message: "למי העברתי היום?"
+    },
+    { tools: createFakePhaseTwoCounterpartyTools(sentExecuted) }
+  );
+  const receivedExecuted: string[] = [];
+  const receivedResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-hebrew-today-received-counterparties",
+      message: "מי העביר לי היום?"
     },
     { tools: createFakePhaseTwoCounterpartyTools(receivedExecuted) }
   );
@@ -2176,6 +2796,126 @@ test("hebrew total-sent follow-up is read-only and calls total counterparty tool
   assert.ok(executed.includes("getTotalSentToCounterparty:alex@example.com"));
 });
 
+test("phase 12 hebrew read-only follow-ups resolve sent and received totals from memory", async () => {
+  const sentExecuted: string[] = [];
+  const sentConversationStore = createFakeConversationStore({
+    messages: [],
+    memory: createMemoryWithCounterparties(["alex@example.com"])
+  });
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent(input) {
+      return {
+        intent:
+          input.userMessage === "כמה שלחתי לו?"
+            ? "counterparty_total_sent"
+            : "counterparty_total_received"
+      };
+    },
+    async resolveCounterpartyReference() {
+      return { kind: "last_counterparty", confidence: "high" };
+    }
+  });
+  const sentResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-hebrew-phase-12-total-sent",
+      message: "כמה שלחתי לו?"
+    },
+    {
+      tools: createFakeTools(sentExecuted),
+      conversationStore: sentConversationStore,
+      llmProvider
+    }
+  );
+  const receivedExecuted: string[] = [];
+  const receivedConversationStore = createFakeConversationStore({
+    messages: [],
+    memory: createMemoryWithCounterparties(["alex@example.com"])
+  });
+  const receivedResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-hebrew-phase-12-total-received",
+      message: "כמה הוא שלח לי?"
+    },
+    {
+      tools: createFakeTools(receivedExecuted),
+      conversationStore: receivedConversationStore,
+      llmProvider
+    }
+  );
+
+  assert.equal(sentResult.intent, "counterparty_total_sent");
+  assert.deepEqual(sentResult.toolCalls, ["getTotalSentToCounterparty"]);
+  assert.ok(sentExecuted.includes("getTotalSentToCounterparty:alex@example.com"));
+  assert.equal(receivedResult.intent, "counterparty_total_received");
+  assert.deepEqual(receivedResult.toolCalls, ["getTotalReceivedFromCounterparty"]);
+  assert.ok(
+    receivedExecuted.includes(
+      "getTotalReceivedFromCounterparty:alex@example.com"
+    )
+  );
+});
+
+test("phase 12 read-only phrasing resolves net and activity follow-ups from memory", async () => {
+  const netExecuted: string[] = [];
+  const netConversationStore = createFakeConversationStore({
+    messages: [],
+    memory: createMemoryWithCounterparties(["alex@example.com"])
+  });
+  const netResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-phase-12-net-with-him",
+      message: "what is my net with him?"
+    },
+    {
+      tools: createFakeTools(netExecuted),
+      conversationStore: netConversationStore
+    }
+  );
+  const activityExecuted: string[] = [];
+  const activityConversationStore = createFakeConversationStore({
+    messages: [],
+    memory: createMemoryWithCounterparties(["alex@example.com"])
+  });
+  const activityLlmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "counterparty_activity_timeline" };
+    },
+    async resolveCounterpartyReference() {
+      return { kind: "last_counterparty", confidence: "high" };
+    }
+  });
+  const activityResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-phase-12-activity-with-him",
+      message: "show activity with him"
+    },
+    {
+      tools: createFakePhaseTwoCounterpartyTools(activityExecuted),
+      conversationStore: activityConversationStore,
+      llmProvider: activityLlmProvider
+    }
+  );
+
+  assert.equal(netResult.intent, "counterparty_net_total");
+  assert.deepEqual(netResult.toolCalls, ["getNetWithCounterparty"]);
+  assert.ok(netExecuted.includes("getNetWithCounterparty:alex@example.com"));
+  assert.equal(activityResult.intent, "counterparty_activity_timeline");
+  assert.deepEqual(activityResult.toolCalls, [
+    "resolveCounterpartyCandidates",
+    "getCounterpartyActivityTimeline"
+  ]);
+  assert.ok(activityExecuted.includes("resolveCounterpartyCandidates"));
+  assert.ok(
+    activityExecuted.includes(
+      "getCounterpartyActivityTimeline:daniel@example.com"
+    )
+  );
+});
+
 test("full email follow-up resolves from remembered counterparty context", async () => {
   const executed: string[] = [];
   const conversationStore = createFakeConversationStore({
@@ -2399,6 +3139,14 @@ test("llm responder input includes deterministic recipient date and status facts
     "resolveTransactionReference",
     "getTransactionReceipt"
   ]);
+  assert.ok(
+    requiredResponseFacts.some(
+      (fact) =>
+        fact.kind === "currency" &&
+        fact.source === "getTransactionReceipt.currency" &&
+        fact.value === "ILS"
+    )
+  );
   assert.ok(
     requiredResponseFacts.some(
       (fact) =>
@@ -2722,11 +3470,27 @@ test("amount reference classifier maps directional references", () => {
     "last_received_transaction"
   );
   assert.equal(
+    classifyAmountReference("what he sent me"),
+    "last_received_transaction"
+  );
+  assert.equal(
+    classifyAmountReference("מה שהוא שלח לי"),
+    "last_received_transaction"
+  );
+  assert.equal(
     classifyAmountReference("what I sent him last time"),
     "last_sent_transaction"
   );
   assert.equal(
+    classifyAmountReference("מה ששלחתי לו"),
+    "last_sent_transaction"
+  );
+  assert.equal(
     classifyAmountReference("אותה כמות"),
+    "last_pending_transfer"
+  );
+  assert.equal(
+    classifyAmountReference("same as before"),
     "last_pending_transfer"
   );
   assert.equal(classifyAmountReference("that amount"), "last_answer_total");
@@ -3501,6 +4265,14 @@ test("llm responder input includes pending confirmation memory facts", async () 
   assert.ok(
     requiredResponseFacts.some(
       (fact) =>
+        fact.kind === "currency" &&
+        fact.source === "confirmation.currency" &&
+        fact.value === "ILS"
+    )
+  );
+  assert.ok(
+    requiredResponseFacts.some(
+      (fact) =>
         fact.kind === "amount" &&
         fact.source === "confirmation.amount" &&
         fact.value === "50.00"
@@ -3698,6 +4470,73 @@ test("llm response post-check rejects contradictory transaction status and date 
   );
 });
 
+test("llm response post-check rejects contradictory transaction currency facts", async () => {
+  const auditLogs: AuditLogInput[] = [];
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore();
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent(input) {
+      return {
+        intent: /second one/i.test(input.userMessage)
+          ? "transaction_detail"
+          : "transaction_search"
+      };
+    },
+    async composeResponse() {
+      return "Transaction details for tx-2: received 200.00 USD with Sarah Example (sarah@example.com).";
+    }
+  });
+
+  await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-response-post-check-transaction-currency",
+      message: "Show transfers over 100 from last week"
+    },
+    {
+      tools: createFakePhaseThreeTransactionTools(executed),
+      conversationStore,
+      llmProvider
+    }
+  );
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-response-post-check-transaction-currency",
+      requestId: "request-response-post-check-transaction-currency",
+      message: "Tell me more about the second one"
+    },
+    {
+      tools: createFakePhaseThreeTransactionTools(executed),
+      conversationStore,
+      llmProvider,
+      auditLogger: async (input) => {
+        auditLogs.push(input);
+      }
+    }
+  );
+  const diagnostics = auditLogs.at(-1)?.diagnostics ?? [];
+
+  assert.equal(result.intent, "transaction_detail");
+  assert.deepEqual(result.toolCalls, [
+    "resolveTransactionReference",
+    "getTransactionReceipt"
+  ]);
+  assert.match(
+    result.message,
+    /Transaction details for tx-2: received 200\.00 ILS with Sarah Example \(sarah@example\.com\)\./
+  );
+  assert.ok(
+    diagnostics.some(
+      (event) =>
+        event.nodeName === "composeResponse" &&
+        event.fallbackReason ===
+          "response_post_check_failed:contradicting_required_currency_fact"
+    )
+  );
+});
+
 test("llm response post-check rejects contradictory pending-transfer recipient facts", async () => {
   const auditLogs: AuditLogInput[] = [];
   const executed: string[] = [];
@@ -3739,6 +4578,50 @@ test("llm response post-check rejects contradictory pending-transfer recipient f
         event.nodeName === "composeResponse" &&
         event.fallbackReason ===
           "response_post_check_failed:contradicting_required_recipient_fact"
+    )
+  );
+});
+
+test("llm response hydration replaces bare masked pending-transfer recipients", async () => {
+  const auditLogs: AuditLogInput[] = [];
+  const executed: string[] = [];
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "pending_ai_transfers" };
+    },
+    async composeResponse() {
+      return "Pending transfer confirmations in this conversation: 1. 50.00 ILS to a***@example.com.";
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-response-hydration-pending-recipient",
+      requestId: "request-response-hydration-pending-recipient",
+      message: "Do I have pending confirmations?"
+    },
+    {
+      tools: createFakePhaseFourTransferTools(executed),
+      llmProvider,
+      auditLogger: async (input) => {
+        auditLogs.push(input);
+      }
+    }
+  );
+  const diagnostics = auditLogs[0].diagnostics ?? [];
+
+  assert.equal(result.intent, "pending_ai_transfers");
+  assert.deepEqual(result.toolCalls, ["getPendingAiTransfers"]);
+  assert.equal(
+    result.message,
+    "Pending transfer confirmations in this conversation: 1. 50.00 ILS to Alex Example (alex@example.com)."
+  );
+  assert.ok(
+    !diagnostics.some(
+      (event) =>
+        event.nodeName === "composeResponse" &&
+        event.fallbackReason?.startsWith("response_post_check_failed:")
     )
   );
 });
@@ -3803,6 +4686,130 @@ test("llm response post-check rejects contradictory pending confirmation memory 
   );
 });
 
+test("llm response hydration replaces bare masked pending confirmation recipients", async () => {
+  const auditLogs: AuditLogInput[] = [];
+  const expiresAt = "2026-05-24T12:00:00.000Z";
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "pending_confirmation_status" };
+    },
+    async composeResponse() {
+      return "Your pending transfer to a***@example.com for 50.00 ILS is pending until 2026-05-24T12:00:00.000Z.";
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-response-hydration-pending-memory-recipient",
+      requestId: "request-response-hydration-pending-memory-recipient",
+      message: "what is pending?"
+    },
+    {
+      tools: createFakeTools([]),
+      llmProvider,
+      auditLogger: async (input) => {
+        auditLogs.push(input);
+      },
+      conversationStore: createFakeConversationStore({
+        messages: [],
+        memory: {
+          ...createEmptyCounterpartyMemory(),
+          pendingConfirmation: {
+            confirmationId: "pending-transfer-1",
+            type: "transfer",
+            status: "pending",
+            createdAt: "2026-05-24T11:50:00.000Z",
+            expiresAt,
+            recipientEmail: "alex@example.com",
+            recipientFirstName: "Alex",
+            recipientLastName: "Example",
+            amount: 50,
+            currency: "ILS",
+            turnCreated: 1,
+            version: 1
+          },
+          mode: "transfer_confirmation_pending"
+        }
+      })
+    }
+  );
+  const diagnostics = auditLogs[0].diagnostics ?? [];
+
+  assert.equal(result.intent, "pending_confirmation_status");
+  assert.equal(
+    result.message,
+    "Your pending transfer to Alex Example (alex@example.com) for 50.00 ILS is pending until 2026-05-24T12:00:00.000Z."
+  );
+  assert.ok(
+    !diagnostics.some(
+      (event) =>
+        event.nodeName === "composeResponse" &&
+        event.fallbackReason?.startsWith("response_post_check_failed:")
+    )
+  );
+});
+
+test("llm response post-check rejects contradictory pending confirmation currency facts", async () => {
+  const auditLogs: AuditLogInput[] = [];
+  const expiresAt = "2026-05-24T12:00:00.000Z";
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "pending_confirmation_status" };
+    },
+    async composeResponse() {
+      return "Your pending transfer to alex@example.com for 50.00 USD is pending until 2026-05-24T12:00:00.000Z.";
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-response-post-check-pending-memory-currency",
+      requestId: "request-response-post-check-pending-memory-currency",
+      message: "what is pending?"
+    },
+    {
+      tools: createFakeTools([]),
+      llmProvider,
+      auditLogger: async (input) => {
+        auditLogs.push(input);
+      },
+      conversationStore: createFakeConversationStore({
+        messages: [],
+        memory: {
+          ...createEmptyCounterpartyMemory(),
+          pendingConfirmation: {
+            confirmationId: "pending-transfer-1",
+            type: "transfer",
+            status: "pending",
+            createdAt: "2026-05-24T11:50:00.000Z",
+            expiresAt,
+            recipientEmail: "alex@example.com",
+            amount: 50,
+            currency: "ILS",
+            turnCreated: 1,
+            version: 1
+          },
+          mode: "transfer_confirmation_pending"
+        }
+      })
+    }
+  );
+  const diagnostics = auditLogs[0].diagnostics ?? [];
+
+  assert.equal(result.intent, "pending_confirmation_status");
+  assert.match(result.message, /cannot confirm a transfer from chat text/i);
+  assert.ok(
+    diagnostics.some(
+      (event) =>
+        event.nodeName === "composeResponse" &&
+        event.fallbackReason ===
+          "response_post_check_failed:contradicting_required_currency_fact"
+    )
+  );
+});
+
 test("pending transfer amount modification creates new confirmation and supersedes old", async () => {
   const modifications: Array<Parameters<TransferModificationService>[0]> = [];
   const conversationStore = createFakeConversationStore({
@@ -3853,6 +4860,64 @@ test("pending transfer amount modification creates new confirmation and supersed
   );
 });
 
+test("pending transfer modification keeps the same recipient when the user says same recipient but 70", async () => {
+  const modifications: Array<Parameters<TransferModificationService>[0]> = [];
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory: {
+      ...createEmptyCounterpartyMemory(),
+      pendingConfirmation: {
+        confirmationId: "pending-transfer-1",
+        type: "transfer",
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        recipientEmail: "alex@example.com",
+        amount: 50,
+        currency: "ILS",
+        turnCreated: 1,
+        version: 1
+      },
+      mode: "transfer_confirmation_pending"
+    }
+  });
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "transfer_modify_pending" };
+    },
+    async extractTransferDraft() {
+      return {
+        recipientReference: "same recipient",
+        amount: 70,
+        currency: "ILS",
+        currencyMentioned: false,
+        currencySupported: true
+      };
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-modify-pending-same-recipient-70",
+      message: "same recipient but 70"
+    },
+    {
+      tools: createFakeTools([]),
+      conversationStore,
+      llmProvider,
+      transferModificationService:
+        createFakeTransferModificationService(modifications)
+    }
+  );
+
+  assert.equal(result.intent, "transfer_modify_pending");
+  assert.equal(result.confirmation?.recipientEmail, "alex@example.com");
+  assert.equal(result.confirmation?.amount, 70);
+  assert.equal(modifications[0].modificationDraft.amount, 70);
+  assert.equal(modifications[0].resolvedCounterparty?.email, "alex@example.com");
+});
+
 test("hebrew pending transfer amount modification returns hebrew new-card wording", async () => {
   const conversationStore = createFakeConversationStore({
     messages: [],
@@ -3893,6 +4958,260 @@ test("hebrew pending transfer amount modification returns hebrew new-card wordin
     result.message,
     "עדכנתי את ההעברה הממתינה. צריך לבדוק ולאשר את כרטיס האישור החדש לפני שמשהו נשלח."
   );
+});
+
+test("pending transfer modification can reuse the same amount as before", async () => {
+  const modifications: Array<Parameters<TransferModificationService>[0]> = [];
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory: {
+      ...createEmptyCounterpartyMemory(),
+      pendingConfirmation: {
+        confirmationId: "pending-transfer-1",
+        type: "transfer",
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        recipientEmail: "alex@example.com",
+        amount: 50,
+        currency: "ILS",
+        turnCreated: 1,
+        version: 1
+      },
+      mode: "transfer_confirmation_pending"
+    }
+  });
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "transfer_modify_pending" };
+    },
+    async extractTransferDraft() {
+      return {
+        amountReferenceText: "same as before"
+      };
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-modify-pending-same-amount-before",
+      message: "use the same amount as before"
+    },
+    {
+      tools: createFakeTools([]),
+      conversationStore,
+      llmProvider,
+      transferModificationService:
+        createFakeTransferModificationService(modifications)
+    }
+  );
+
+  assert.equal(result.intent, "transfer_modify_pending");
+  assert.equal(result.confirmation?.recipientEmail, "alex@example.com");
+  assert.equal(result.confirmation?.amount, 50);
+  assert.equal(modifications[0].modificationDraft.amount, 50);
+  assert.equal(
+    modifications[0].modificationDraft.amountReferenceText,
+    "same as before"
+  );
+  assert.equal(result.supersededConfirmationId, "pending-transfer-1");
+});
+
+test("pending transfer modification can change recipient when the user says send it to Sarah instead", async () => {
+  const modifications: Array<Parameters<TransferModificationService>[0]> = [];
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory: {
+      ...createEmptyCounterpartyMemory(),
+      pendingConfirmation: {
+        confirmationId: "pending-transfer-1",
+        type: "transfer",
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        recipientEmail: "alex@example.com",
+        amount: 50,
+        currency: "ILS",
+        turnCreated: 1,
+        version: 1
+      },
+      mode: "transfer_confirmation_pending"
+    }
+  });
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "transfer_modify_pending" };
+    },
+    async extractTransferDraft() {
+      return {
+        recipientReference: "Sarah"
+      };
+    }
+  });
+  const tools: AssistantToolExecutors = {
+    ...createFakeTools(executed),
+    async resolveCounterpartyCandidates() {
+      executed.push("resolveCounterpartyCandidates");
+      return fakeResult({
+        toolName: "resolveCounterpartyCandidates",
+        data: {
+          kind: "counterparty",
+          status: "resolved",
+          counterparty: {
+            email: "sarah@example.com",
+            maskedLabel: "s***@example.com",
+            userLabel: "Sarah Example (sarah@example.com)",
+            displayName: "Sarah Example"
+          },
+          candidates: [
+            {
+              id: "sarah@example.com",
+              label: "Sarah Example (sarah@example.com)",
+              value: "sarah@example.com"
+            }
+          ]
+        },
+        summary: "Resolved counterparty: Sarah Example (s***@example.com).",
+        userSummary: "Resolved counterparty: Sarah Example (sarah@example.com).",
+        metadata: {
+          recordCount: 1,
+          resolutionStatus: "resolved",
+          counterpartyEmail: "sarah@example.com",
+          maskedLabel: "s***@example.com",
+          displayName: "Sarah Example"
+        }
+      });
+    }
+  };
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-modify-pending-change-recipient",
+      message: "send it to Sarah instead"
+    },
+    {
+      tools,
+      conversationStore,
+      llmProvider,
+      transferModificationService:
+        createFakeTransferModificationService(modifications)
+    }
+  );
+
+  assert.equal(result.intent, "transfer_modify_pending");
+  assert.deepEqual(result.toolCalls, ["resolveCounterpartyCandidates"]);
+  assert.equal(result.confirmation?.recipientEmail, "sarah@example.com");
+  assert.equal(result.confirmation?.amount, 50);
+  assert.equal(modifications[0].resolvedCounterparty?.email, "sarah@example.com");
+  assert.equal(modifications[0].activePendingTransferId, "pending-transfer-1");
+  assert.deepEqual(executed, ["resolveCounterpartyCandidates"]);
+});
+
+test("ambiguous pending transfer recipient replacement asks for clarification before modification", async () => {
+  const modifications: Array<Parameters<TransferModificationService>[0]> = [];
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory: {
+      ...createEmptyCounterpartyMemory(),
+      pendingConfirmation: {
+        confirmationId: "pending-transfer-1",
+        type: "transfer",
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        recipientEmail: "alex@example.com",
+        amount: 50,
+        currency: "ILS",
+        turnCreated: 1,
+        version: 1
+      },
+      mode: "transfer_confirmation_pending"
+    }
+  });
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "transfer_modify_pending" };
+    },
+    async extractTransferDraft() {
+      return {
+        recipientReference: "Sarah"
+      };
+    }
+  });
+  const tools: AssistantToolExecutors = {
+    ...createFakeTools(executed),
+    async resolveCounterpartyCandidates() {
+      executed.push("resolveCounterpartyCandidates");
+      return fakeResult({
+        toolName: "resolveCounterpartyCandidates",
+        data: {
+          kind: "counterparty",
+          status: "ambiguous",
+          candidates: [
+            {
+              id: "sarah.a@example.com",
+              label: "Sarah A (sarah.a@example.com)",
+              value: "sarah.a@example.com"
+            },
+            {
+              id: "sarah.b@example.com",
+              label: "Sarah B (sarah.b@example.com)",
+              value: "sarah.b@example.com"
+            }
+          ]
+        },
+        summary:
+          "I found multiple possible counterparties: Sarah A (s***@example.com); Sarah B (s***@example.com).",
+        userSummary:
+          "I found multiple possible counterparties: Sarah A (sarah.a@example.com); Sarah B (sarah.b@example.com).",
+        metadata: {
+          recordCount: 2,
+          resolutionStatus: "ambiguous",
+          counterpartyCandidates: [
+            {
+              counterpartyEmail: "sarah.a@example.com",
+              maskedLabel: "s***@example.com",
+              displayName: "Sarah A",
+              confidence: "high"
+            },
+            {
+              counterpartyEmail: "sarah.b@example.com",
+              maskedLabel: "s***@example.com",
+              displayName: "Sarah B",
+              confidence: "high"
+            }
+          ]
+        }
+      });
+    }
+  };
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-modify-pending-ambiguous-recipient",
+      message: "send it to Sarah instead"
+    },
+    {
+      tools,
+      conversationStore,
+      llmProvider,
+      transferModificationService:
+        createFakeTransferModificationService(modifications)
+    }
+  );
+
+  assert.equal(result.intent, "transfer_modify_pending");
+  assert.deepEqual(result.toolCalls, ["resolveCounterpartyCandidates"]);
+  assert.equal(result.confirmation, undefined);
+  assert.equal(modifications.length, 0);
+  assert.equal(result.clarification?.expectedReplyType, "recipient");
+  assert.match(result.message, /multiple matching counterparties/i);
+  assert.deepEqual(executed, ["resolveCounterpartyCandidates"]);
 });
 
 test("failed pending transfer modification does not create replacement confirmation", async () => {
@@ -4215,6 +5534,35 @@ test("assistant refuses to reveal system prompt", async () => {
   assert.deepEqual(result.toolCalls, []);
 });
 
+test("assistant graph progress reports ordered streaming-safe phases", async () => {
+  const seenPhases: string[] = [];
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-progress-phases",
+      message: "What is my balance?"
+    },
+    {
+      tools: createFakeTools([]),
+      onProgress: ({ phase }) => {
+        seenPhases.push(phase);
+      }
+    }
+  );
+
+  assert.equal(result.intent, "balance_inquiry");
+  assert.deepEqual(
+    [...new Set(seenPhases)],
+    [
+      "understanding_request",
+      "resolving_context",
+      "checking_account_facts",
+      "composing_response"
+    ]
+  );
+});
+
 test("missing authentication fails safely on the chat endpoint", async () => {
   const server = await new Promise<http.Server>((resolve) => {
     const listeningServer = app.listen(0, () => resolve(listeningServer));
@@ -4251,6 +5599,42 @@ test("missing authentication fails safely on the chat endpoint", async () => {
   }
 });
 
+test("missing authentication fails safely on the chat stream endpoint", async () => {
+  const server = await new Promise<http.Server>((resolve) => {
+    const listeningServer = app.listen(0, () => resolve(listeningServer));
+  });
+
+  try {
+    const address = server.address();
+    assert.notEqual(address, null);
+    assert.notEqual(typeof address, "string");
+
+    if (!address || typeof address === "string") {
+      throw new Error("Expected local HTTP server address.");
+    }
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/ai/chat/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ message: "What is my balance?" })
+    });
+    const body = (await response.json()) as { message: string };
+
+    assert.equal(response.status, 401);
+    assert.equal(body.message, "Authentication required.");
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      });
+    });
+  }
+});
+
 test("chat endpoint rejects an invalid assistant id", async () => {
   const server = await new Promise<http.Server>((resolve) => {
     const listeningServer = app.listen(0, () => resolve(listeningServer));
@@ -4265,6 +5649,46 @@ test("chat endpoint rejects an invalid assistant id", async () => {
       throw new Error("Expected local HTTP server address.");
     }
     const response = await fetch(`http://127.0.0.1:${address.port}/api/ai/chat`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        ...createAuthHeaders()
+      },
+      body: JSON.stringify({
+        message: "What is my balance?",
+        assistantId: "not-real"
+      })
+    });
+
+    assert.equal(response.status, 400);
+  } finally {
+    await new Promise<void>((resolve, reject) => {
+      server.close((error) => {
+        if (error) {
+          reject(error);
+          return;
+        }
+
+        resolve();
+      });
+    });
+  }
+});
+
+test("chat stream endpoint rejects an invalid assistant id", async () => {
+  const server = await new Promise<http.Server>((resolve) => {
+    const listeningServer = app.listen(0, () => resolve(listeningServer));
+  });
+
+  try {
+    const address = server.address();
+    assert.notEqual(address, null);
+    assert.notEqual(typeof address, "string");
+
+    if (!address || typeof address === "string") {
+      throw new Error("Expected local HTTP server address.");
+    }
+    const response = await fetch(`http://127.0.0.1:${address.port}/api/ai/chat/stream`, {
       method: "POST",
       headers: {
         "Content-Type": "application/json",

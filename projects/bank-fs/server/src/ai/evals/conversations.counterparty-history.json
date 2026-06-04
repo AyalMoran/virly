@@ -1,0 +1,63 @@
+{
+  "suiteName": "counterparty-history",
+  "scenarios": [
+    {
+      "id": "received-total-follow-up",
+      "description": "A read-only follow-up resolves a remembered counterparty and uses the received-total tool.",
+      "toolPreset": "default",
+      "setup": {
+        "rememberedCounterparties": ["alex@example.com"]
+      },
+      "turns": [
+        {
+          "userMessage": "how much did he send me?",
+          "expectedIntent": "counterparty_total_received",
+          "expectedToolCalls": ["getTotalReceivedFromCounterparty"],
+          "mustInclude": ["35.00 in total"],
+          "mustNotInclude": ["multiple matching counterparties"]
+        }
+      ]
+    },
+    {
+      "id": "named-activity-timeline",
+      "description": "Named counterparty activity requests resolve through the phase two timeline tool path.",
+      "toolPreset": "phase_two_counterparty",
+      "turns": [
+        {
+          "userMessage": "show activity with Daniel",
+          "expectedIntent": "counterparty_activity_timeline",
+          "expectedToolCalls": [
+            "resolveCounterpartyCandidates",
+            "getCounterpartyActivityTimeline"
+          ],
+          "mustInclude": ["Recent activity with Daniel Example"],
+          "mustNotInclude": ["not available yet"]
+        }
+      ]
+    },
+    {
+      "id": "transaction-detail-follow-up",
+      "description": "A transaction search follow-up can resolve an ordinal transaction reference from prior conversation memory.",
+      "toolPreset": "phase_three_transactions",
+      "turns": [
+        {
+          "userMessage": "Show transfers over 100 from last week",
+          "expectedIntent": "transaction_search",
+          "expectedToolCalls": ["searchTransactions"],
+          "mustInclude": ["Transactions matching sent, over 100.00 ILS, last week"],
+          "mustNotInclude": ["not available yet"]
+        },
+        {
+          "userMessage": "Tell me more about the second one",
+          "expectedIntent": "transaction_detail",
+          "expectedToolCalls": [
+            "resolveTransactionReference",
+            "getTransactionReceipt"
+          ],
+          "mustInclude": ["Transaction details for tx-2"],
+          "mustNotInclude": ["multiple matching transactions"]
+        }
+      ]
+    }
+  ]
+}

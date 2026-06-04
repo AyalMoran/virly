@@ -38,11 +38,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/features/auth/AuthProvider";
-import { api, ApiError } from "@/lib/api";
+import { api, ApiError, supportsAiChatStreaming } from "@/lib/api";
 import { formatCurrency } from "@/lib/format";
 import type {
   AiConfirmationAction,
   AiClarificationRequest,
+  AiChatResponse,
+  AiChatStreamPhase,
   AiTransferConfirmation,
   AssistantId
 } from "@/lib/types";
@@ -52,7 +54,7 @@ import { cn } from "@/lib/utils";
 
 
 import oshriAvatar from "@/assets/agents/oshri.jpeg";
-import chayaAvatar from "@/assets/agents/chaya.png";
+import chayaAvatar from "@/assets/agents/chaya.jpeg";
 import yehudaAvatar from "@/assets/agents/yehuda.jpeg";
 import yohaiDanielAvatar from "@/assets/agents/yohai-daniel.png";
 
@@ -79,6 +81,27 @@ type ChatMessage = {
   confirmationStatus?: "pending" | "confirming" | "denying" | "confirmed" | "denied" | "superseded" | "failed";
 };
 
+function getStreamPhaseLabel(phase: AiChatStreamPhase | null) {
+  switch (phase) {
+    case "accepted":
+      return "Starting secure assistant flow";
+    case "understanding_request":
+      return "Understanding your request";
+    case "resolving_context":
+      return "Resolving context";
+    case "checking_account_facts":
+      return "Checking account facts";
+    case "preparing_confirmation":
+      return "Preparing confirmation";
+    case "composing_response":
+      return "Composing response";
+    case "completed":
+      return "Completed";
+    default:
+      return "Working";
+  }
+}
+
 const AI_AGENTS: Agent[] = [
   {
     id: "oshri",
@@ -94,7 +117,7 @@ const AI_AGENTS: Agent[] = [
     id: "chaya",
     name: "Chaya",
     role: "שפע, סדר ובשורות טובות",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=128&q=80",
+    avatar: chayaAvatar,
     status: "online",
     icon: HeartHandshake,
     gradient: "from-amber-500/20 to-lime-500/20",
@@ -423,6 +446,7 @@ export function FloatingChatWidget() {
   const [conversationId, setConversationId] = useState<string>();
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
   const [isSending, setIsSending] = useState(false);
+  const [streamPhase, setStreamPhase] = useState<AiChatStreamPhase | null>(null);
   const widgetId = useId();
   const chatEndRef = useRef<HTMLDivElement>(null);
   const messageInputRef = useRef<HTMLTextAreaElement>(null);
@@ -483,14 +507,10 @@ export function FloatingChatWidget() {
     setMessage("");
     resizeChatTextarea(messageInputRef.current);
     setIsSending(true);
+    setStreamPhase("accepted");
+    const useStreaming = supportsAiChatStreaming();
 
-    try {
-      const response = await api.aiChat({
-        message: trimmedMessage,
-        conversationId,
-        assistantId: requestAssistantId,
-      });
-
+    const appendAssistantResponse = (response: AiChatResponse) => {
       setConversationId(response.conversationId);
       setChatMessages((messages) => [
         ...messages.map((chatMessage) =>
@@ -509,6 +529,29 @@ export function FloatingChatWidget() {
           confirmationStatus: response.confirmation ? "pending" : undefined,
         },
       ]);
+    };
+
+    try {
+      const response = useStreaming
+        ? await api.aiChatStream(
+            {
+              message: trimmedMessage,
+              conversationId,
+              assistantId: requestAssistantId,
+            },
+            {
+              onStatus: ({ phase }) => {
+                setStreamPhase(phase);
+              },
+            },
+          )
+        : await api.aiChat({
+            message: trimmedMessage,
+            conversationId,
+            assistantId: requestAssistantId,
+          });
+
+      appendAssistantResponse(response);
     } catch (error) {
       const errorMessage =
         error instanceof ApiError
@@ -526,6 +569,7 @@ export function FloatingChatWidget() {
       ]);
     } finally {
       setIsSending(false);
+      setStreamPhase(null);
     }
   }
 
@@ -810,11 +854,14 @@ export function FloatingChatWidget() {
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex flex-col gap-1">
-                    <div className="flex w-16 items-center justify-center gap-1 rounded-2xl rounded-tl-none border border-border/20 bg-muted/50 px-4 py-3 shadow-sm backdrop-blur-sm">
+                    <div className="flex items-center justify-center gap-1 rounded-2xl rounded-tl-none border border-border/20 bg-muted/50 px-4 py-3 shadow-sm backdrop-blur-sm">
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-foreground/40 [animation-delay:-0.3s]" />
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-foreground/40 [animation-delay:-0.15s]" />
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-foreground/40" />
                     </div>
+                    <span className="pl-2 text-[11px] text-muted-foreground">
+                      {getStreamPhaseLabel(streamPhase)}
+                    </span>
                   </div>
                 </motion.div>
               )}

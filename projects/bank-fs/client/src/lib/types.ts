@@ -130,6 +130,8 @@ export type AssistantIntent =
   | "last_sent_counterparty"
   | "counterparty_transactions"
   | "counterparty_total_sent"
+  | "counterparty_total_received"
+  | "counterparty_net_total"
   | "verified_recipients"
   | "recipient_profile"
   | "transfer_prepare"
@@ -153,6 +155,8 @@ export type AiToolName =
   | "getLastSentCounterparty"
   | "getTransactionsWithCounterparty"
   | "getTotalSentToCounterparty"
+  | "getTotalReceivedFromCounterparty"
+  | "getNetWithCounterparty"
   | "getVerifiedRecipients"
   | "getTransferLimits"
   | "getRecentSentCounterparties"
@@ -176,8 +180,8 @@ export type AiToolName =
 export type AiToolStatus = "ok" | "empty" | "error";
 
 export type AiClarificationReason =
-  | "ambiguous_recipient"
   | "missing_recipient"
+  | "ambiguous_recipient"
   | "missing_amount"
   | "ambiguous_amount"
   | "unsupported_currency"
@@ -190,6 +194,7 @@ export type AiClarificationReason =
 export type AiClarificationExpectedReplyType =
   | "recipient"
   | "amount"
+  | "amount_scope"
   | "currency"
   | "date_range"
   | "transaction"
@@ -220,16 +225,40 @@ export type AiChatRequest = {
   assistantId?: AssistantId;
 };
 
+export type AiChatStreamPhase =
+  | "accepted"
+  | "understanding_request"
+  | "resolving_context"
+  | "checking_account_facts"
+  | "preparing_confirmation"
+  | "composing_response"
+  | "completed";
+
+export type AiChatStreamStatusEventType = "status";
+export type AiChatStreamResultEventType = "result";
+export type AiChatStreamErrorEventType = "error";
+
+export type AiTransferConfirmationType = "transfer";
+export type AiTransferConfirmationStatus = "pending";
+export type AiTransferConfirmationCurrency = "ILS";
+export type AiTransferWarningCode =
+  | "MISSING_RECIPIENT_NAME"
+  | "NEW_RECIPIENT"
+  | "HIGH_AMOUNT"
+  | "NEAR_DAILY_LIMIT"
+  | "CURRENCY_ASSUMED";
+export type AiConfirmationMethod = "POST";
+
 export type AiTransferConfirmation = {
   id: string;
   version: number;
-  type: "transfer";
-  status: "pending";
+  type: AiTransferConfirmationType;
+  status: AiTransferConfirmationStatus;
   recipientEmail: string;
   recipientFirstName: string | null;
   recipientLastName: string | null;
   amount: number;
-  currency: "ILS";
+  currency: AiTransferConfirmationCurrency;
   recipient?: {
     email: string;
     firstName: string | null;
@@ -239,17 +268,17 @@ export type AiTransferConfirmation = {
   };
   amountDetails?: {
     value: number;
-    currency: "ILS";
+    currency: AiTransferConfirmationCurrency;
     formatted: string;
   };
   reason: string | null;
   warnings?: Array<{
-    code: string;
+    code: AiTransferWarningCode;
     message: string;
   }>;
   expiresAt: string;
   confirmAction?: {
-    method: "POST";
+    method: AiConfirmationMethod;
     path: string;
     body: {
       action: "confirm";
@@ -257,7 +286,7 @@ export type AiTransferConfirmation = {
     };
   };
   denyAction?: {
-    method: "POST";
+    method: AiConfirmationMethod;
     path: string;
     body: {
       action: "deny";
@@ -279,15 +308,44 @@ export type AiChatResponse = {
   supersededConfirmationId?: string;
 };
 
+export type AiChatStreamStatusEvent = {
+  type: AiChatStreamStatusEventType;
+  phase: AiChatStreamPhase;
+  conversationId: string;
+  assistantId: AssistantId;
+};
+
+export type AiChatStreamResultEvent = {
+  type: AiChatStreamResultEventType;
+  conversationId: string;
+  assistantId: AssistantId;
+  result: AiChatResponse;
+};
+
+export type AiChatStreamErrorEvent = {
+  type: AiChatStreamErrorEventType;
+  message: string;
+};
+
+export type AiChatStreamEvent =
+  | AiChatStreamStatusEvent
+  | AiChatStreamResultEvent
+  | AiChatStreamErrorEvent;
+
+export type AiConfirmationResponseStatus = "confirmed" | "denied";
+export type AiConfirmationConfirmedStatus = "confirmed";
+export type AiConfirmationDeniedStatus = "denied";
+export type AiSupersededConfirmationErrorCode = "confirmation_superseded";
+
 export type AiConfirmationResponse =
   | {
-      status: "confirmed";
+      status: AiConfirmationConfirmedStatus;
       message: string;
       newBalance: number;
       transaction: Transaction;
     }
   | {
-      status: "denied";
+      status: AiConfirmationDeniedStatus;
       message: string;
     };
 
