@@ -2,6 +2,48 @@
   "suiteName": "pending-confirmations",
   "scenarios": [
     {
+      "id": "pending-list-current-conversation",
+      "description": "A pending transfer list request stays read-only and stores a referenceable pending-transfer memory row.",
+      "toolPreset": "default",
+      "turns": [
+        {
+          "userMessage": "Show my pending confirmations",
+          "expectedIntent": "pending_ai_transfers",
+          "expectedToolCalls": ["getPendingAiTransfers"],
+          "mustInclude": ["Pending transfer confirmations"],
+          "mustNotInclude": ["cannot confirm a transfer from chat text"]
+        },
+        {
+          "userMessage": "what about the first one",
+          "expectedIntent": "pending_confirmation_status",
+          "expectedToolCalls": ["resolvePendingTransferReference"],
+          "mustInclude": ["50.00 ILS to Alex Example"],
+          "mustNotInclude": ["That account tool is not available yet"]
+        }
+      ]
+    },
+    {
+      "id": "hebrew-pending-list-follow-up",
+      "description": "A Hebrew pending transfer list follow-up resolves the referenced pending transfer without mutating money movement.",
+      "toolPreset": "default",
+      "turns": [
+        {
+          "userMessage": "תראה לי אישורים ממתינים",
+          "expectedIntent": "pending_ai_transfers",
+          "expectedToolCalls": ["getPendingAiTransfers"],
+          "mustInclude": ["Pending transfer confirmations"],
+          "mustNotInclude": ["cannot confirm a transfer from chat text"]
+        },
+        {
+          "userMessage": "מה לגבי הראשון",
+          "expectedIntent": "pending_confirmation_status",
+          "expectedToolCalls": ["resolvePendingTransferReference"],
+          "mustInclude": ["50.00 ILS to Alex Example"],
+          "mustNotInclude": ["That account tool is not available yet"]
+        }
+      ]
+    },
+    {
       "id": "pending-amount-modification",
       "description": "A pending transfer amount change creates a replacement confirmation without sending money.",
       "toolPreset": "default",

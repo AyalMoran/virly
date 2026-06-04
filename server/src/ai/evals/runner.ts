@@ -1,6 +1,8 @@
 import { runAssistantGraph } from "../graph.js";
 import { createConfiguredAssistantLlmProvider } from "../llm.js";
+import { classifyAmountReference } from "../amountResolution.js";
 import type {
+  AmountResolutionService,
   AssistantLlmProvider,
   AssistantToolExecutors,
   ToolContext
@@ -211,11 +213,84 @@ function createDefaultFakeTools(
     async getPendingAiTransfers() {
       return fakeResult({
         toolName: "getPendingAiTransfers",
+        data: [
+          {
+            pendingTransferId: "pending-transfer-1",
+            label: "1. 50.00 ILS to Alex Example (alex@example.com)",
+            recipientLabel: "Alex Example (alex@example.com)",
+            recipientMaskedLabel: "Alex Example (a***@example.com)",
+            recipientEmailMasked: "a***@example.com",
+            amount: 50,
+            currency: "ILS",
+            status: "pending",
+            expiresAt: "2026-05-24T12:00:00.000Z"
+          }
+        ],
+        memoryUpdates: {
+          pendingTransfers: [
+            {
+              pendingTransferId: "pending-transfer-1",
+              label: "1. 50.00 ILS to Alex Example (alex@example.com)",
+              recipientLabel: "Alex Example (alex@example.com)",
+              amount: 50,
+              currency: "ILS",
+              expiresAt: "2026-05-24T12:00:00.000Z"
+            }
+          ]
+        },
         summary:
           "Pending transfer confirmations in this conversation: 1. 50.00 ILS to Alex Example (a***@example.com).",
         userSummary:
           "Pending transfer confirmations in this conversation: 1. 50.00 ILS to Alex Example (alex@example.com).",
-        metadata: { recordCount: 1 }
+        metadata: {
+          recordCount: 1,
+          pendingTransfers: [
+            {
+              pendingTransferId: "pending-transfer-1",
+              label: "1. 50.00 ILS to Alex Example (a***@example.com)",
+              recipientLabel: "Alex Example (a***@example.com)",
+              amount: 50,
+              currency: "ILS",
+              status: "pending",
+              expiresAt: "2026-05-24T12:00:00.000Z"
+            }
+          ]
+        }
+      });
+    },
+    async resolvePendingTransferReference() {
+      return fakeResult({
+        toolName: "resolvePendingTransferReference",
+        data: {
+          kind: "pending_transfer",
+          status: "resolved",
+          pendingTransferId: "pending-transfer-1",
+          candidates: [
+            {
+              id: "pending-transfer-1",
+              label: "1. 50.00 ILS to Alex Example (alex@example.com)",
+              value: "pending-transfer-1"
+            }
+          ]
+        },
+        summary:
+          "Resolved pending transfer reference to 1. 50.00 ILS to Alex Example (a***@example.com).",
+        userSummary:
+          "Resolved pending transfer reference to 1. 50.00 ILS to Alex Example (alex@example.com).",
+        metadata: {
+          recordCount: 1,
+          pendingTransferResolutionStatus: "resolved",
+          pendingTransferCandidates: [
+            {
+              pendingTransferId: "pending-transfer-1",
+              label: "1. 50.00 ILS to Alex Example (a***@example.com)",
+              recipientLabel: "Alex Example (a***@example.com)",
+              amount: 50,
+              currency: "ILS",
+              expiresAt: "2026-05-24T12:00:00.000Z"
+            }
+          ]
+        }
       });
     }
   };
@@ -233,10 +308,50 @@ function createPhaseTwoCounterpartyTools(
       return fakeResult({
         toolName: "getRecentSentCounterparties",
         summary:
-          "Recent people you sent money to: Daniel Example (d***@example.com); Maya Example (m***@example.com).",
+          "Recent people you sent money to: Daniel Example (d***@example.com) (70.00 ILS last sent); Maya Example (m***@example.com) (42.00 ILS last sent).",
         userSummary:
-          "Recent people you sent money to: Daniel Example (daniel@example.com); Maya Example (maya@example.com).",
-        metadata: { recordCount: 2 }
+          "Recent people you sent money to: Daniel Example (daniel@example.com) (70.00 ILS last sent); Maya Example (maya@example.com) (42.00 ILS last sent).",
+        metadata: {
+          recordCount: 2,
+          counterparties: [
+            {
+              counterpartyEmail: "daniel@example.com",
+              maskedLabel: "d***@example.com",
+              displayName: "Daniel Example"
+            },
+            {
+              counterpartyEmail: "maya@example.com",
+              maskedLabel: "m***@example.com",
+              displayName: "Maya Example"
+            }
+          ]
+        },
+        memoryUpdates: {
+          counterparties: [
+            {
+              counterpartyId: "daniel@example.com",
+              emailFullForBackendOnly: "daniel@example.com",
+              emailMasked: "d***@example.com",
+              displayName: "Daniel Example",
+              firstName: "Daniel",
+              lastName: "Example",
+              relation: "sent_to",
+              source: "transaction",
+              lastInteractionAt: "2026-05-24T10:00:00.000Z"
+            },
+            {
+              counterpartyId: "maya@example.com",
+              emailFullForBackendOnly: "maya@example.com",
+              emailMasked: "m***@example.com",
+              displayName: "Maya Example",
+              firstName: "Maya",
+              lastName: "Example",
+              relation: "sent_to",
+              source: "transaction",
+              lastInteractionAt: "2026-05-24T11:00:00.000Z"
+            }
+          ]
+        }
       });
     },
     async getRecentReceivedCounterparties() {
@@ -246,7 +361,31 @@ function createPhaseTwoCounterpartyTools(
           "Recent people who sent you money: Sarah Example (s***@example.com).",
         userSummary:
           "Recent people who sent you money: Sarah Example (sarah@example.com).",
-        metadata: { recordCount: 1 }
+        metadata: {
+          recordCount: 1,
+          counterparties: [
+            {
+              counterpartyEmail: "sarah@example.com",
+              maskedLabel: "s***@example.com",
+              displayName: "Sarah Example"
+            }
+          ]
+        },
+        memoryUpdates: {
+          counterparties: [
+            {
+              counterpartyId: "sarah@example.com",
+              emailFullForBackendOnly: "sarah@example.com",
+              emailMasked: "s***@example.com",
+              displayName: "Sarah Example",
+              firstName: "Sarah",
+              lastName: "Example",
+              relation: "received_from",
+              source: "transaction",
+              lastInteractionAt: "2026-05-24T12:00:00.000Z"
+            }
+          ]
+        }
       });
     },
     async resolveCounterpartyCandidates() {
@@ -566,6 +705,136 @@ function createToolsForScenario(scenario: AiEvalScenario): AssistantToolExecutor
     : createDefaultFakeTools();
 }
 
+function createDeterministicAmountResolutionService(): AmountResolutionService {
+  return async (input) => {
+    const amountReferenceText = input.transferDraft.amountReferenceText?.trim() ?? "";
+    const referenceKind = classifyAmountReference(amountReferenceText);
+    const scopedTotals = (input.counterpartyMemory.entities ?? [])
+      .filter((entity) => {
+        if (entity.type !== "total" || typeof entity.amount !== "number") {
+          return false;
+        }
+
+        return input.resolvedCounterparty?.email
+          ? entity.counterpartyEmail === input.resolvedCounterparty.email
+          : true;
+      })
+      .sort((left, right) => right.turnLastReferenced - left.turnLastReferenced);
+    const latestTotal = scopedTotals[0];
+    const hasPositiveAnswerTotal = scopedTotals.some(
+      (entity) => typeof entity.amount === "number" && entity.amount > 0
+    );
+
+    if (referenceKind === "last_answer_total") {
+      return latestTotal?.amount && latestTotal.amount > 0
+        ? {
+            status: "resolved",
+            amount: {
+              amount: latestTotal.amount,
+              currency: "ILS",
+              source:
+                latestTotal.direction === "received"
+                  ? "last_answer_total_received"
+                  : latestTotal.direction === "sent"
+                    ? "last_answer_total_sent"
+                    : "last_answer_total_net",
+              confidence: "high",
+              explanation:
+                "Resolved amount from deterministic eval total-answer memory."
+            }
+          }
+        : {
+            status: "unresolved",
+            reason: "no_answer_total_available"
+          };
+    }
+
+    if (referenceKind === "last_received_transaction") {
+      return input.resolvedCounterparty
+        ? {
+            status: "resolved",
+            amount: {
+              amount: 35,
+              currency: "ILS",
+              source: "last_received_transaction",
+              confidence: "high",
+              explanation:
+                "Resolved amount from deterministic eval latest received transaction."
+            }
+          }
+        : {
+            status: "unresolved",
+            reason: "missing_resolved_counterparty"
+          };
+    }
+
+    if (referenceKind === "last_sent_transaction") {
+      return input.resolvedCounterparty
+        ? {
+            status: "resolved",
+            amount: {
+              amount: 42,
+              currency: "ILS",
+              source: "last_sent_transaction",
+              confidence: "high",
+              explanation:
+                "Resolved amount from deterministic eval latest sent transaction."
+            }
+          }
+        : {
+            status: "unresolved",
+            reason: "missing_resolved_counterparty"
+          };
+    }
+
+    if (referenceKind === "last_pending_transfer") {
+      const pending = input.counterpartyMemory.pendingConfirmation;
+      if (pending?.status === "pending" && pending.amount > 0) {
+        return {
+          status: "resolved",
+          amount: {
+            amount: pending.amount,
+            currency: "ILS",
+            source: "last_pending_transfer",
+            confidence: "high",
+            explanation:
+              "Resolved amount from deterministic eval active pending transfer."
+          }
+        };
+      }
+
+      if (hasPositiveAnswerTotal) {
+        return {
+          status: "unresolved",
+          reason: "ambiguous_amount_scope"
+        };
+      }
+
+      return input.resolvedCounterparty
+        ? {
+            status: "resolved",
+            amount: {
+              amount: 42,
+              currency: "ILS",
+              source: "last_sent_transaction",
+              confidence: "high",
+              explanation:
+                "Resolved amount from deterministic eval latest sent transaction."
+            }
+          }
+        : {
+            status: "unresolved",
+            reason: "missing_resolved_counterparty"
+          };
+    }
+
+    return {
+      status: "unresolved",
+      reason: "unsupported_amount_reference"
+    };
+  };
+}
+
 function createLlmProviderForMode(
   scenario: AiEvalScenario,
   mode: AiEvalMode,
@@ -720,6 +989,7 @@ export async function runAiEvalFixtures(options: {
         options.mode,
         options.createConfiguredProvider
       );
+      const amountResolutionService = createDeterministicAmountResolutionService();
       const transferPreparationService = createTransferPreparationService();
       const transferModificationService = createTransferModificationService();
 
@@ -735,6 +1005,7 @@ export async function runAiEvalFixtures(options: {
             tools,
             conversationStore,
             llmProvider,
+            amountResolutionService,
             transferPreparationService,
             transferModificationService
           }

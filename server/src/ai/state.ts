@@ -393,6 +393,61 @@ export type RequestSlots = {
   } | null;
 };
 
+export type AiUserRequest = {
+  intent: AssistantIntent;
+  language: "he" | "en" | "mixed" | "unknown";
+  operation:
+    | "read"
+    | "prepare_transfer"
+    | "modify_pending_transfer"
+    | "clarify"
+    | "help"
+    | "unsafe";
+  counterpartyRef?: {
+    rawText: string;
+    kind:
+      | "explicit_email"
+      | "visible_label"
+      | "name"
+      | "pronoun"
+      | "ordinal"
+      | "last_counterparty"
+      | "current_pending_recipient";
+    email?: string | null;
+    query?: string | null;
+    ordinal?: number | null;
+  };
+  amountRef?: {
+    rawText: string;
+    kind:
+      | "literal"
+      | "same_as_last_transfer"
+      | "same_as_last_sent_to_counterparty"
+      | "same_as_last_received_from_counterparty"
+      | "same_as_previous_answer_total"
+      | "same_as_pending_transfer"
+      | "unknown";
+    value?: number | null;
+    currency?: CurrencySlotValue | null;
+  };
+  dateRangeRef?: {
+    rawText: string;
+    kind:
+      | "today"
+      | "yesterday"
+      | "this_week"
+      | "last_week"
+      | "this_month"
+      | "last_month"
+      | "relative"
+      | "unknown";
+    resolvedFrom?: string | null;
+    resolvedTo?: string | null;
+  };
+  direction?: "sent" | "received" | "both" | null;
+  reason?: string | null;
+};
+
 export type TransferDraft = {
   recipientReference?: string | null;
   recipientEmail?: string | null;
@@ -734,6 +789,7 @@ export type AssistantGraphState = {
   selectedAccountId?: string;
   normalizedMessage?: NormalizedUserMessage;
   requestSlots?: RequestSlots;
+  userRequest?: AiUserRequest;
   resolvedCounterparty?: CounterpartyRef;
   transferDraft?: TransferDraft;
   confirmation?: TransferConfirmation;
@@ -757,6 +813,7 @@ export type ToolContext = {
   counterpartyMemory?: CounterpartyMemory;
   clarification?: ClarificationRequest | null;
   requestSlots?: RequestSlots;
+  userRequest?: AiUserRequest;
   currentTurn?: number;
   resolvedDateRange?: {
     from: Date;

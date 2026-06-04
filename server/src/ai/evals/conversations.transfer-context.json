@@ -47,6 +47,40 @@
           "mustNotInclude": ["I need a valid positive amount"]
         }
       ]
+    },
+    {
+      "id": "amount-scope-clarification-resume",
+      "description": "A contextual same-amount transfer can ask an amount-scope clarification and resume with the previous answer total.",
+      "toolPreset": "default",
+      "setup": {
+        "rememberedCounterparties": ["alex@example.com"]
+      },
+      "turns": [
+        {
+          "userMessage": "how much did he send me?",
+          "expectedIntent": "counterparty_total_received",
+          "expectedToolCalls": ["getTotalReceivedFromCounterparty"],
+          "mustInclude": ["35.00 in total"],
+          "mustNotInclude": ["multiple matching counterparties"]
+        },
+        {
+          "userMessage": "send him the same amount",
+          "expectedIntent": "transfer_prepare",
+          "mustAskClarification": true,
+          "mustInclude": ["last amount"],
+          "mustNotInclude": ["review the transfer details"]
+        },
+        {
+          "userMessage": "previous answer total",
+          "expectedIntent": "transfer_prepare",
+          "expectedConfirmation": {
+            "recipientEmail": "alex@example.com",
+            "amount": 35
+          },
+          "mustInclude": ["review the transfer details"],
+          "mustNotInclude": ["I need a valid positive amount"]
+        }
+      ]
     }
   ]
 }

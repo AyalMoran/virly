@@ -172,6 +172,10 @@ export function classifyAssistantIntentDeterministic(
     return { intent: "counterparty_transactions" };
   }
 
+  if (isPendingTransferReferenceFollowUp(message, context)) {
+    return { intent: "pending_confirmation_status" };
+  }
+
   if (
     /\b(tell me more|more details|details|receipt|show|open)\b.*\b(the\s+)?(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th|one|transaction|transfer|payment)\b/i.test(normalized) ||
     /\b(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th)\s+(one|transaction|transfer|payment)\b/i.test(normalized) ||
@@ -239,7 +243,7 @@ export function classifyAssistantIntentDeterministic(
     /\b(send|transfer|pay|move|wire|return|give)\b.*\b(\$|usd|dollar|dollars|nis|shekel|shekels|money|[0-9])/i.test(normalized) ||
     /\b(send|transfer|pay|move|wire|return|give)\b.*\b(same amount|same as before|same as last time|what\s+(?:he|she|they)\s+sent\s+me|what\s+i\s+sent\s+(?:him|her|them)|(?:that|this)\s+(?:amount|total|net)|the\s+(?:last|previous)\s+(?:amount|total|net))\b/i.test(normalized) ||
     /\b(send|transfer|pay|move|wire|return|give)\b.*\b(to|for)\b/i.test(normalized) ||
-    /(תעביר|תשלח|שלח|תחזיר|תן).*?(\d+|כסף|שקל|שח|ש״ח|דולר|אירו|לו|לה|אליו|אליה|אותה כמות|אותו סכום|כמו קודם|כמו פעם שעברה|מה שהוא שלח לי|מה שהיא שלחה לי|מה ששלחתי לו|מה ששלחתי לה|הסכום הזה|הסכום ההוא|הסכום האחרון|הסה"כ הזה|הסך הזה|הנטו הזה)/.test(message)
+    /(תעביר|נעביר|אעביר|תשלח|שלח|תחזיר|תן).*?(\d+|כסף|שקל|שח|ש״ח|דולר|אירו|לו|לה|אליו|אליה|אותה כמות|אותו סכום|כמו קודם|כמו פעם שעברה|מה שהוא שלח לי|מה שהיא שלחה לי|מה ששלחתי לו|מה ששלחתי לה|הסכום הזה|הסכום ההוא|הסכום האחרון|הסה"כ הזה|הסך הזה|הנטו הזה)/.test(message)
   ) {
     return { intent: "transfer_prepare" };
   }
@@ -294,6 +298,59 @@ function normalizeClassification(
   }
 
   return classification;
+}
+
+function hasRecentPendingTransferReferenceContext(
+  context?: Pick<ClassifyAssistantIntentInput, "counterpartyMemory">
+) {
+  const memory = context?.counterpartyMemory;
+
+  return Boolean(
+    memory?.clarification?.expectedReplyType === "pending_transfer" ||
+      memory?.answerFrames?.at(-1)?.intent === "pending_ai_transfers" ||
+      memory?.pendingConfirmation?.status === "pending"
+  );
+}
+
+function isPendingTransferReferenceFollowUp(
+  message: string,
+  context?: Pick<ClassifyAssistantIntentInput, "counterpartyMemory">
+) {
+  const normalized = message.toLowerCase();
+  const hasOrdinal =
+    /\b(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th)\b/i.test(
+      normalized
+    ) ||
+    /(הראשון|הראשונה|השני|השנייה|השלישי|השלישית|הרביעי|הרביעית|החמישי|החמישית)/.test(
+      message
+    );
+  const asksForDetails =
+    /\b(what about|tell me more|more details|details|show|open)\b/i.test(
+      normalized
+    ) ||
+    /(תראה|פרטים|ספר|מה לגבי|מה עם)/.test(message);
+  const mentionsPendingTransfer =
+    /\b(pending|confirmation|confirmations)\b/i.test(
+      normalized
+    ) ||
+    /(ממתינה|ממתינות|אישור)/.test(message);
+  const explicitlyTransaction =
+    /\b(transaction|receipt)\b/i.test(normalized) || /(עסקה|קבלה)/.test(message);
+  const bareOrdinalSelection =
+    /^\s*(?:the\s+)?(?:first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th)\s+(?:one|transfer|payment|confirmation)\s*$/i.test(
+      normalized
+    ) ||
+    /^\s*(?:את\s+)?(?:הראשון|הראשונה|השני|השנייה|השלישי|השלישית|הרביעי|הרביעית|החמישי|החמישית)\s*$/.test(
+      message
+    );
+
+  return (
+    hasOrdinal &&
+    !explicitlyTransaction &&
+    (mentionsPendingTransfer ||
+      (hasRecentPendingTransferReferenceContext(context) &&
+        (asksForDetails || bareOrdinalSelection)))
+  );
 }
 
 export async function classifyAssistantIntent(

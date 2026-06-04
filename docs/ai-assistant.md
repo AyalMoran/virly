@@ -170,9 +170,15 @@ Important intent distinction:
   - `counterparty_net_total`
   - `transfer_prepare` when no explicit `recipientEmail` exists
   - `transfer_modify_pending` only when the modification includes a new recipient reference
+  - `pending_confirmation_status` only when the message is an ordinal or detail
+    reference to pending-transfer memory
 - Uses LLM structured output as a parser/ranker over already-known counterparties.
 - The backend validates resolver output against bounded conversation memory.
 - Deterministic fallback handles simple English references such as "this person" and ordinals.
+- Pending-transfer ordinal follow-ups such as "what about the first one" or
+  `מה לגבי הראשון` are read-only status/reference questions. They may run the
+  allowlisted `resolvePendingTransferReference` tool only when recent
+  conversation memory points to pending confirmations.
 - For read-only counterparty intents, unresolved references become a clarification response and no tools run.
 - For `transfer_prepare`, unresolved references continue to `prepareTransferConfirmation`, which asks a transfer-specific missing-recipient question.
 - Clarification state is persisted so replies like "the second one" can be interpreted against the latest clarification rather than free-form chat text in a later phase.
@@ -371,6 +377,8 @@ cover.
 - `what is my net with him?`
 - `show activity with him`
 - `Tell me more about the second one`
+- after listing pending confirmations: `what about the first one`
+- after a Hebrew pending list: `מה לגבי הראשון`
 
 ### Transfer Preparation
 
@@ -378,6 +386,7 @@ cover.
 - `send him that amount`
 - `send him the same amount he sent me`
 - `תעביר לו 50`
+- `בוא נעביר לו שוב את אותה כמות`
 
 ### Pending Confirmation
 
@@ -398,6 +407,20 @@ Expected invariants:
   but never execute money movement.
 - Chat text such as `yes`, `confirm it`, or `deny it` never executes a
   transfer.
+- Pending-list ordinal follow-ups run only read-only resolution and must not
+  modify, confirm, deny, or supersede a pending transfer.
+
+Deterministic eval coverage includes a mixed Hebrew/English success chain:
+
+1. Ask who the user sent money to today.
+2. Prepare a transfer to the referenced recipient for the same latest sent
+   amount.
+3. Ask how much that recipient sent back.
+4. Prepare a second transfer for that received amount.
+
+The deterministic fixture uses fake backend-shaped memory and an eval-only
+amount resolver. Seeded Mongo or live LLM evals are still required to verify the
+same chain against real persisted transaction rows or a configured model.
 
 ## LLM Schemas
 
@@ -895,6 +918,18 @@ Notes:
 - `llm-dev` also requires a working `OPENAI_API_KEY` and `VIRLY_AI_MODEL`.
 - `seeded-mongo` is intentionally blocked unless a dedicated eval database URI
   is provided; it must not silently reuse the default development database.
+- The deterministic eval mode covers current fixture behavior, including
+  pending-confirmation ordinal follow-ups and the Hebrew/English transfer
+  success chain. It does not prove seeded database behavior or live model
+  extraction quality.
+
+Guarded eval environment variables:
+
+- `VIRLY_AI_EVAL_ENABLE_LLM_DEV=true`
+- `VIRLY_AI_EVAL_ENABLE_MONGO=true`
+- `VIRLY_AI_EVAL_MONGO_URI`
+- `OPENAI_API_KEY`
+- `VIRLY_AI_MODEL`
 
 Validate OpenAPI syntax:
 

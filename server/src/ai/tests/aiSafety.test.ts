@@ -72,6 +72,11 @@ import {
   normalizeTransferDraftOutput,
   sanitizeMessagesForLlm
 } from "../llm.js";
+import {
+  buildAiUserRequest,
+  extractRequestSlots,
+  normalizeUserMessage
+} from "../messageNormalization.js";
 import { runAiEvalFixtures } from "../evals/runner.js";
 import { buildSeededMongoEvalSeedData } from "../evals/seededMongo.js";
 import type { AiEvalFixtureFile } from "../evals/types.js";
@@ -1020,8 +1025,10 @@ function createFakePhaseFourTransferTools(
             }
           ]
         },
-        summary: "Resolved pending transfer reference.",
-        userSummary: "Resolved pending transfer reference.",
+        summary:
+          "Resolved pending transfer reference to 1. 50.00 ILS to Alex Example (a***@example.com).",
+        userSummary:
+          "Resolved pending transfer reference to 1. 50.00 ILS to Alex Example (alex@example.com).",
         metadata: {
           recordCount: 1,
           pendingTransferResolutionStatus: "resolved",
@@ -1693,6 +1700,77 @@ test("every configured read-only route uses an allowlisted tool name", () => {
   }
 });
 
+test("phase 3 user request captures read-only received-total pronouns", () => {
+  const normalizedMessage = normalizeUserMessage("how much did he send me?");
+  const requestSlots = extractRequestSlots(
+    normalizedMessage.originalText,
+    "counterparty_total_received"
+  );
+  const userRequest = buildAiUserRequest(normalizedMessage, requestSlots);
+
+  assert.equal(userRequest.intent, "counterparty_total_received");
+  assert.equal(userRequest.language, "en");
+  assert.equal(userRequest.operation, "read");
+  assert.equal(userRequest.direction, "received");
+  assert.equal(userRequest.counterpartyRef?.kind, "pronoun");
+  assert.equal(userRequest.counterpartyRef?.rawText.toLowerCase(), "he");
+});
+
+test("phase 3 user request captures contextual transfer amount references", () => {
+  const normalizedMessage = normalizeUserMessage(
+    "send him the same amount he sent me"
+  );
+  const requestSlots = extractRequestSlots(
+    normalizedMessage.originalText,
+    "transfer_prepare"
+  );
+  const userRequest = buildAiUserRequest(normalizedMessage, requestSlots);
+
+  assert.equal(userRequest.intent, "transfer_prepare");
+  assert.equal(userRequest.operation, "prepare_transfer");
+  assert.equal(userRequest.counterpartyRef?.kind, "pronoun");
+  assert.equal(userRequest.counterpartyRef?.rawText.toLowerCase(), "him");
+  assert.equal(
+    userRequest.amountRef?.kind,
+    "same_as_last_received_from_counterparty"
+  );
+  assert.equal(userRequest.amountRef?.value, null);
+});
+
+test("graph passes phase 3 user request to read-only tools without public response changes", async () => {
+  const seenRequests: Array<NonNullable<ToolContext["userRequest"]>> = [];
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-phase-three-user-request-tool-context",
+      message: "show my recent transactions"
+    },
+    {
+      tools: {
+        async getRecentTransactions(context: ToolContext) {
+          if (context.userRequest) {
+            seenRequests.push(context.userRequest);
+          }
+
+          return fakeResult({
+            toolName: "getRecentTransactions",
+            summary: "No recent transactions found.",
+            status: "empty",
+            metadata: { recordCount: 0 }
+          });
+        }
+      }
+    }
+  );
+
+  assert.equal(result.intent, "recent_transactions");
+  assert.deepEqual(result.toolCalls, ["getRecentTransactions"]);
+  assert.equal(seenRequests.length, 1);
+  assert.equal(seenRequests[0].intent, "recent_transactions");
+  assert.equal(seenRequests[0].operation, "read");
+  assert.equal("userRequest" in result, false);
+});
+
 test("planned but unimplemented tools fail closed in graph execution", async () => {
   const executed: string[] = [];
   const llmProvider = createFakeLlmProvider({
@@ -2319,6 +2397,89 @@ test("pending confirmation status remains non-mutating and executes no tools", a
   assert.deepEqual(result.toolCalls, []);
   assert.deepEqual(executed, []);
   assert.match(result.message, /use its Confirm or Deny button/i);
+});
+
+test("pending transfer list follow-up resolves ordinal read-only", async () => {
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore();
+  const tools = createFakePhaseFourTransferTools(executed);
+
+  const listResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-pending-list-follow-up",
+      message: "Show my pending confirmations"
+    },
+    {
+      tools,
+      conversationStore
+    }
+  );
+  const followUpResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-pending-list-follow-up",
+      message: "what about the first one"
+    },
+    {
+      tools,
+      conversationStore
+    }
+  );
+
+  assert.equal(listResult.intent, "pending_ai_transfers");
+  assert.deepEqual(listResult.toolCalls, ["getPendingAiTransfers"]);
+  assert.equal(followUpResult.intent, "pending_confirmation_status");
+  assert.deepEqual(followUpResult.toolCalls, ["resolvePendingTransferReference"]);
+  assert.deepEqual(executed, [
+    "getPendingAiTransfers:current_conversation",
+    "resolvePendingTransferReference"
+  ]);
+  assert.match(followUpResult.message, /50\.00 ILS to Alex Example/);
+  assert.match(followUpResult.message, /alex@example\.com/);
+  assert.doesNotMatch(followUpResult.message, /a\*\*\*@example\.com/);
+  assert.equal(followUpResult.confirmation, undefined);
+});
+
+test("hebrew pending transfer list follow-up resolves ordinal read-only", async () => {
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore();
+  const tools = createFakePhaseFourTransferTools(executed);
+
+  const listResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-hebrew-pending-list-follow-up",
+      message: "תראה לי אישורים ממתינים"
+    },
+    {
+      tools,
+      conversationStore
+    }
+  );
+  const followUpResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-hebrew-pending-list-follow-up",
+      message: "מה לגבי הראשון"
+    },
+    {
+      tools,
+      conversationStore
+    }
+  );
+
+  assert.equal(listResult.intent, "pending_ai_transfers");
+  assert.deepEqual(listResult.toolCalls, ["getPendingAiTransfers"]);
+  assert.equal(followUpResult.intent, "pending_confirmation_status");
+  assert.deepEqual(followUpResult.toolCalls, ["resolvePendingTransferReference"]);
+  assert.deepEqual(executed, [
+    "getPendingAiTransfers:current_conversation",
+    "resolvePendingTransferReference"
+  ]);
+  assert.match(followUpResult.message, /50\.00 ILS to Alex Example/);
+  assert.match(followUpResult.message, /alex@example\.com/);
+  assert.equal(followUpResult.confirmation, undefined);
 });
 
 test("pending transfer reference resolves ordinal from clarification options", async () => {
@@ -5359,6 +5520,62 @@ test("hebrew transfer request resolves לו from last counterparty and returns c
     result.message,
     "Please review the transfer details and use the confirmation buttons before I send anything."
   );
+});
+
+test("hebrew same amount transfer can reuse recent sent counterparty memory", async () => {
+  const executed: string[] = [];
+  const transferPreparations: Array<Parameters<TransferPreparationService>[0]> = [];
+  const conversationStore = createFakeConversationStore();
+  const amountResolutionService: AmountResolutionService = async (input) => {
+    assert.equal(input.resolvedCounterparty?.email, "maya@example.com");
+    assert.equal(input.transferDraft.amountReferenceText, "אותה כמות");
+
+    return {
+      status: "resolved",
+      amount: {
+        amount: 25,
+        currency: "ILS",
+        source: "last_sent_transaction",
+        confidence: "high",
+        explanation: "Resolved from test latest sent transaction."
+      }
+    };
+  };
+
+  const firstResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-hebrew-same-amount-after-recent-sent",
+      message: "למי העברתי היום?"
+    },
+    {
+      tools: createFakePhaseTwoCounterpartyTools(executed),
+      conversationStore
+    }
+  );
+  const secondResult = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-hebrew-same-amount-after-recent-sent",
+      message: "בוא נעביר לו שוב את אותה כמות"
+    },
+    {
+      tools: createFakePhaseTwoCounterpartyTools(executed),
+      conversationStore,
+      amountResolutionService,
+      transferPreparationService:
+        createFakeTransferPreparationService(transferPreparations)
+    }
+  );
+
+  assert.equal(firstResult.intent, "recent_sent_counterparties");
+  assert.deepEqual(firstResult.toolCalls, ["getRecentSentCounterparties"]);
+  assert.equal(secondResult.intent, "transfer_prepare");
+  assert.equal(secondResult.confirmation?.recipientEmail, "maya@example.com");
+  assert.equal(secondResult.confirmation?.amount, 25);
+  assert.equal(transferPreparations[0].resolvedCounterparty?.email, "maya@example.com");
+  assert.equal(transferPreparations[0].draft.amountReferenceText, "אותה כמות");
+  assert.deepEqual(executed, ["getRecentSentCounterparties"]);
 });
 
 test("llm responder cannot reword missing transfer details as ready to transfer", async () => {

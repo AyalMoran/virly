@@ -19,6 +19,7 @@ export function buildToolInput(
         userId: state.userId!,
         conversationId: state.conversationId,
         message: state.normalizedMessage?.normalizedText ?? "",
+        userRequest: state.userRequest,
         currentTurn: state.currentTurn
       };
 
@@ -62,6 +63,7 @@ export function buildToolInput(
         counterpartyMemory: state.counterpartyMemory,
         clarification: state.counterpartyMemory.clarification ?? null,
         requestSlots: state.requestSlots,
+        userRequest: state.userRequest,
         currentTurn: state.currentTurn,
         resolvedDateRange: dateRange
           ? {
@@ -77,6 +79,7 @@ export function buildToolInput(
         userId: state.userId!,
         conversationId: state.conversationId,
         message: state.normalizedMessage?.normalizedText ?? "",
+        userRequest: state.userRequest,
         currentTurn: state.currentTurn
       };
   }

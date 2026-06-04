@@ -10,6 +10,7 @@ import {
   trimConversationMessages
 } from "./counterpartyMemory.js";
 import {
+  buildAiUserRequest,
   extractRequestSlots,
   normalizeUserMessage
 } from "./messageNormalization.js";
@@ -79,6 +80,7 @@ const AssistantStateAnnotation = Annotation.Root({
   selectedAccountId: Annotation<string | undefined>(),
   normalizedMessage: Annotation<AssistantGraphState["normalizedMessage"]>(),
   requestSlots: Annotation<AssistantGraphState["requestSlots"]>(),
+  userRequest: Annotation<AssistantGraphState["userRequest"]>(),
   resolvedCounterparty: Annotation<AssistantGraphState["resolvedCounterparty"]>(),
   transferDraft: Annotation<AssistantGraphState["transferDraft"]>(),
   confirmation: Annotation<AssistantGraphState["confirmation"]>(),
@@ -495,11 +497,17 @@ function buildIntentClassifier(llmProvider?: AssistantLlmProvider) {
 function extractRequestSlotsNode(
   state: AssistantGraphState
 ): Partial<AssistantGraphState> {
+  const normalizedMessage =
+    state.normalizedMessage ?? normalizeUserMessage(getUserMessage(state));
+  const requestSlots = extractRequestSlots(
+    getUserMessage(state),
+    state.detectedIntent ?? "unsupported"
+  );
+
   return {
-    requestSlots: extractRequestSlots(
-      getUserMessage(state),
-      state.detectedIntent ?? "unsupported"
-    )
+    normalizedMessage,
+    requestSlots,
+    userRequest: buildAiUserRequest(normalizedMessage, requestSlots)
   };
 }
 
@@ -963,7 +971,36 @@ function getRequestedToolNamesForState(
     requestedToolNames.push("resolveCounterpartyCandidates");
   }
 
+  if (
+    intent === "pending_confirmation_status" &&
+    shouldResolvePendingTransferReference(state)
+  ) {
+    requestedToolNames.push("resolvePendingTransferReference");
+  }
+
   return [...new Set(requestedToolNames)];
+}
+
+function shouldResolvePendingTransferReference(state: AssistantGraphState) {
+  const message = getUserMessage(state);
+  const normalized = message.toLowerCase();
+  const hasOrdinal =
+    /\b(first|second|third|fourth|fifth|1st|2nd|3rd|4th|5th)\b/i.test(
+      normalized
+    ) ||
+    /(הראשון|הראשונה|השני|השנייה|השלישי|השלישית|הרביעי|הרביעית|החמישי|החמישית)/.test(
+      message
+    );
+  const hasPendingContext =
+    state.counterpartyMemory.clarification?.expectedReplyType ===
+      "pending_transfer" ||
+    state.counterpartyMemory.answerFrames?.at(-1)?.intent ===
+      "pending_ai_transfers";
+  const explicitlyPending =
+    /\b(pending|confirmation|confirmations)\b/i.test(normalized) ||
+    /(ממתינה|ממתינות|אישור)/.test(message);
+
+  return hasOrdinal && (hasPendingContext || explicitlyPending);
 }
 
 /**
@@ -1665,6 +1702,12 @@ function composeDeterministicResponse(state: AssistantGraphState) {
     intent === "transfer_cancel_pending" ||
     intent === "pending_confirmation_status"
   ) {
+    if (intent === "pending_confirmation_status" && state.toolResults.length > 0) {
+      return state.toolResults
+        .map((result) => getUserVisibleSummary(result))
+        .join(" ");
+    }
+
     if (state.counterpartyMemory.pendingConfirmation?.status === "pending") {
       return "I cannot confirm a transfer from chat text. Please review the current confirmation card and use its Confirm or Deny button.";
     }

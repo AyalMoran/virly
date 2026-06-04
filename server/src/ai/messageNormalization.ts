@@ -1,4 +1,5 @@
 import type {
+  AiUserRequest,
   AssistantIntent,
   CurrencySlotValue,
   NormalizedUserMessage,
@@ -119,6 +120,212 @@ function extractCounterparty(message: string) {
   };
 }
 
+function getRequestOperation(intent: AssistantIntent): AiUserRequest["operation"] {
+  if (intent === "unsafe_request") {
+    return "unsafe";
+  }
+
+  if (intent === "transfer_prepare") {
+    return "prepare_transfer";
+  }
+
+  if (
+    intent === "transfer_modify_pending" ||
+    intent === "transfer_cancel_pending"
+  ) {
+    return "modify_pending_transfer";
+  }
+
+  if (intent === "general_help" || intent === "unsupported") {
+    return "help";
+  }
+
+  return "read";
+}
+
+function getRequestLanguage(
+  normalizedMessage: NormalizedUserMessage
+): AiUserRequest["language"] {
+  return normalizedMessage.detectedLanguages[0] ?? "unknown";
+}
+
+function buildCounterpartyRef(
+  normalizedMessage: NormalizedUserMessage,
+  slots: RequestSlots
+): AiUserRequest["counterpartyRef"] {
+  const explicitEmail = slots.counterparty?.explicitEmail;
+  if (explicitEmail) {
+    return {
+      rawText: explicitEmail,
+      kind: "explicit_email",
+      email: explicitEmail
+    };
+  }
+
+  if (slots.ordinalReference) {
+    return {
+      rawText: slots.ordinalReference.rawText,
+      kind: "ordinal",
+      ordinal: slots.ordinalReference.ordinal
+    };
+  }
+
+  const referenceText =
+    slots.counterparty?.referenceText ??
+    normalizedMessage.normalizedText.match(
+      /\b(he|him|she|her|they|them|this person|that person|same person|same recipient|last recipient)\b/i
+    )?.[0] ??
+    normalizedMessage.normalizedText.match(
+      /(לו|לה|אליו|אליה|איתו|איתה|אותו אחד|אותה אחת|הנמען הקודם|האדם הקודם)/
+    )?.[0];
+
+  if (referenceText) {
+    return {
+      rawText: referenceText,
+      kind: "pronoun",
+      query: referenceText
+    };
+  }
+
+  const explicitName = slots.counterparty?.explicitName;
+  if (explicitName) {
+    return {
+      rawText: explicitName,
+      kind: "name",
+      query: explicitName
+    };
+  }
+
+  if (slots.pendingTransferReference) {
+    return {
+      rawText: slots.pendingTransferReference.rawText,
+      kind: "current_pending_recipient"
+    };
+  }
+
+  return undefined;
+}
+
+function classifyAmountReferenceKind(
+  message: string
+): NonNullable<AiUserRequest["amountRef"]>["kind"] | null {
+  if (
+    /\b(same amount\s+(?:he|she|they)\s+sent\s+me|what\s+(?:he|she|they)\s+sent\s+me)\b/i.test(
+      message
+    ) ||
+    /(מה שהוא שלח לי|מה שהיא שלחה לי|מה שהם שלחו לי)/.test(message)
+  ) {
+    return "same_as_last_received_from_counterparty";
+  }
+
+  if (
+    /\b(same amount\s+i\s+sent\s+(?:him|her|them)|what\s+i\s+sent\s+(?:him|her|them))\b/i.test(
+      message
+    ) ||
+    /(מה ששלחתי לו|מה ששלחתי לה|מה ששלחתי להם)/.test(message)
+  ) {
+    return "same_as_last_sent_to_counterparty";
+  }
+
+  if (
+    /\b(that amount|this amount|that total|previous answer|answer total)\b/i.test(
+      message
+    ) ||
+    /(הסכום הזה|הסכום ההוא|הסה"כ|הסך|הנטו)/.test(message)
+  ) {
+    return "same_as_previous_answer_total";
+  }
+
+  if (
+    /\b(same amount(?:\s+again)?|same as before|same as last time)\b/i.test(
+      message
+    ) ||
+    /(אותה כמות|אותו סכום|כמו קודם|כמו פעם שעברה)/.test(message)
+  ) {
+    return "same_as_last_transfer";
+  }
+
+  return null;
+}
+
+function buildAmountRef(
+  normalizedMessage: NormalizedUserMessage,
+  slots: RequestSlots
+): AiUserRequest["amountRef"] {
+  const amount = slots.amount;
+  if (amount?.value) {
+    return {
+      rawText: amount.rawText ?? String(amount.value),
+      kind: "literal",
+      value: amount.value,
+      currency: amount.currency ?? null
+    };
+  }
+
+  const referenceKind = classifyAmountReferenceKind(
+    normalizedMessage.normalizedText
+  );
+  if (referenceKind) {
+    return {
+      rawText: normalizedMessage.normalizedText,
+      kind: referenceKind,
+      value: null,
+      currency: amount?.currency ?? null
+    };
+  }
+
+  return undefined;
+}
+
+function buildDateRangeRef(
+  normalizedMessage: NormalizedUserMessage,
+  slots: RequestSlots
+): AiUserRequest["dateRangeRef"] {
+  const rawText = slots.dateRange?.rawText ?? normalizedMessage.normalizedText;
+  const message = normalizedMessage.normalizedText.toLowerCase();
+  const kind =
+    /\btoday\b/i.test(message) || /היום/.test(normalizedMessage.normalizedText)
+      ? "today"
+      : /\byesterday\b/i.test(message) || /אתמול/.test(normalizedMessage.normalizedText)
+        ? "yesterday"
+        : /\blast\s+week\b/i.test(message) || /שבוע שעבר/.test(normalizedMessage.normalizedText)
+          ? "last_week"
+          : /\bthis\s+week\b/i.test(message) || /השבוע/.test(normalizedMessage.normalizedText)
+            ? "this_week"
+            : /\blast\s+month\b/i.test(message) || /חודש שעבר/.test(normalizedMessage.normalizedText)
+              ? "last_month"
+              : /\bthis\s+month\b/i.test(message) || /החודש/.test(normalizedMessage.normalizedText)
+                ? "this_month"
+                : normalizedMessage.containsDateExpression || slots.dateRange
+                  ? "relative"
+                  : null;
+
+  return kind
+    ? {
+        rawText,
+        kind,
+        resolvedFrom: slots.dateRange?.resolvedFrom ?? null,
+        resolvedTo: slots.dateRange?.resolvedTo ?? null
+      }
+    : undefined;
+}
+
+export function buildAiUserRequest(
+  normalizedMessage: NormalizedUserMessage,
+  slots: RequestSlots
+): AiUserRequest {
+  return {
+    intent: slots.intent,
+    language: getRequestLanguage(normalizedMessage),
+    operation: getRequestOperation(slots.intent),
+    counterpartyRef: buildCounterpartyRef(normalizedMessage, slots),
+    amountRef: buildAmountRef(normalizedMessage, slots),
+    dateRangeRef: buildDateRangeRef(normalizedMessage, slots),
+    direction: slots.transactionDirection ?? null,
+    reason: null
+  };
+}
+
 function extractOrdinalReference(message: string) {
   const normalized = message.toLowerCase();
   const ordinalMap: Array<[RegExp, number]> = [
@@ -160,8 +367,9 @@ export function extractRequestSlots(
     },
     transactionDirection:
       /\b(received|deposit|incoming)\b/i.test(message) ||
-      /\b(who|which person|which people)\b.*\b(sent|paid|transferred)\b.*\b(me|to me)\b/i.test(message) ||
-      /(קיבלתי|נכנס|ממי|מי.*?(שלח|העביר).*?(לי|אליי|אלי))/.test(message)
+      /\bhow\s+much\b.*\b(he|she|they|him|her|them)\b.*\b(send|sent|paid|transferred)\b.*\b(me|to me)\b/i.test(message) ||
+      /\b(who|which person|which people)\b.*\b(send|sent|paid|transferred)\b.*\b(me|to me)\b/i.test(message) ||
+      /(קיבלתי|נכנס|ממי|מי.*?(שלח|העביר).*?(לי|אליי|אלי)|כמה.*?(הוא|היא|הם|ממנו|ממנה|מהם).*?(שלח|שלחה|שלחו|העביר|העבירה|העבירו).*?(לי|אליי|אלי))/.test(message)
         ? "received"
         : /\b(sent|paid|transferred|to)\b/i.test(message) || /(שלחתי|העברתי|למי|אל)/.test(message)
           ? "sent"

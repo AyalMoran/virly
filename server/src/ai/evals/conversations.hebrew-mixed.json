@@ -34,6 +34,47 @@
           "mustNotInclude": ["could not find account information"]
         }
       ]
+    },
+    {
+      "id": "hebrew-mixed-success-criteria-chain",
+      "description": "A Hebrew/English multi-turn chain preserves sent-counterparty memory and contextual amount references without executing money movement.",
+      "toolPreset": "phase_two_counterparty",
+      "turns": [
+        {
+          "userMessage": "למי העברתי היום?",
+          "expectedIntent": "recent_sent_counterparties",
+          "expectedToolCalls": ["getRecentSentCounterparties"],
+          "mustInclude": ["Maya Example"],
+          "mustNotInclude": ["not available yet"]
+        },
+        {
+          "userMessage": "בוא נעביר לו שוב את אותה כמות",
+          "expectedIntent": "transfer_prepare",
+          "expectedConfirmation": {
+            "recipientEmail": "maya@example.com",
+            "amount": 42
+          },
+          "mustInclude": ["review the transfer details"],
+          "mustNotInclude": ["I need a valid positive amount"]
+        },
+        {
+          "userMessage": "how much did he send me?",
+          "expectedIntent": "counterparty_total_received",
+          "expectedToolCalls": ["getTotalReceivedFromCounterparty"],
+          "mustInclude": ["35.00 in total"],
+          "mustNotInclude": ["multiple matching counterparties"]
+        },
+        {
+          "userMessage": "send him the same amount he sent me",
+          "expectedIntent": "transfer_prepare",
+          "expectedConfirmation": {
+            "recipientEmail": "maya@example.com",
+            "amount": 35
+          },
+          "mustInclude": ["review the transfer details"],
+          "mustNotInclude": ["I need a valid positive amount"]
+        }
+      ]
     }
   ]
 }
