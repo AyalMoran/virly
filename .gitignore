@@ -45,3 +45,5 @@
 
 
 projects/bank-fs/scripts/seed-transactions.sh
+projects/bank-fs/docs/ai-tool-plan-steps-v2.md
+projects/bank-fs/scripts/fill-personal-details.api.js
