@@ -107,6 +107,11 @@ type GraphNode = (
   state: AssistantGraphState
 ) => Partial<AssistantGraphState> | Promise<Partial<AssistantGraphState>>;
 
+/**
+ * Function type: Progress helper function.
+ *
+ * @brief Maps a graph node name and state to a stream phase.
+ */
 function getProgressPhaseForNode(
   nodeName: string,
   state: AssistantGraphState
@@ -152,6 +157,11 @@ function getProgressPhaseForNode(
   return undefined;
 }
 
+/**
+ * Function type: Debug trace utility function.
+ *
+ * @brief Appends timestamped events to the graph trace.
+ */
 function appendDebugEvents(
   currentTrace: AiGraphDebugEvent[] | undefined,
   events: AiGraphDebugEventInput[]
@@ -166,6 +176,11 @@ function appendDebugEvents(
   ];
 }
 
+/**
+ * Function type: State merge utility function.
+ *
+ * @brief Merges state changes with debug events.
+ */
 function withDebugEvents(
   state: AssistantGraphState,
   changes: Partial<AssistantGraphState>,
@@ -177,10 +192,20 @@ function withDebugEvents(
   };
 }
 
+/**
+ * Function type: Error sanitization function.
+ *
+ * @brief Converts an unknown error into a safe reason.
+ */
 function sanitizeErrorReason(error: unknown) {
   return error instanceof Error ? `error:${error.name}` : typeof error;
 }
 
+/**
+ * Function type: Schema error extractor function.
+ *
+ * @brief Reads the first Zod issue-like entry.
+ */
 function getZodIssue(error: unknown) {
   if (!error || typeof error !== "object" || !("issues" in error)) {
     return undefined;
@@ -198,6 +223,11 @@ function getZodIssue(error: unknown) {
   };
 }
 
+/**
+ * Function type: Sanitization function.
+ *
+ * @brief Masks sensitive text before diagnostic storage.
+ */
 function sanitizeString(value: string) {
   return value.replace(
     /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,
@@ -205,6 +235,11 @@ function sanitizeString(value: string) {
   );
 }
 
+/**
+ * Function type: Debug snapshot builder function.
+ *
+ * @brief Builds a safe transfer draft snapshot.
+ */
 function sanitizeTransferDraftSnapshot(draft?: TransferDraft | null) {
   if (!draft) {
     return {
@@ -242,6 +277,11 @@ function sanitizeTransferDraftSnapshot(draft?: TransferDraft | null) {
   };
 }
 
+/**
+ * Function type: Debug snapshot builder function.
+ *
+ * @brief Builds a safe assistant state snapshot.
+ */
 function sanitizeStateSnapshot(state: AssistantGraphState) {
   return {
     intent: state.detectedIntent ?? null,
@@ -254,6 +294,11 @@ function sanitizeStateSnapshot(state: AssistantGraphState) {
   };
 }
 
+/**
+ * Function type: Debug event factory function.
+ *
+ * @brief Builds schema validation failure events.
+ */
 function buildSchemaFailureEvent(input: {
   nodeName: string;
   schemaName: string;
@@ -277,6 +322,11 @@ function buildSchemaFailureEvent(input: {
   };
 }
 
+/**
+ * Function type: LangGraph node wrapper function.
+ *
+ * @brief Adds progress callbacks and debug tracing.
+ */
 function withNodeTrace(
   nodeName: string,
   node: GraphNode,
@@ -322,6 +372,11 @@ function withNodeTrace(
   };
 }
 
+/**
+ * Function type: State lookup helper function.
+ *
+ * @brief Returns the newest user message.
+ */
 function getUserMessage(state: AssistantGraphState) {
   for (let index = state.messages.length - 1; index >= 0; index -= 1) {
     const message = state.messages[index];
@@ -333,6 +388,11 @@ function getUserMessage(state: AssistantGraphState) {
   return "";
 }
 
+/**
+ * Function type: LangGraph node function.
+ *
+ * @brief Blocks unauthenticated account-data requests.
+ */
 function loadAuthenticatedContext(
   state: AssistantGraphState
 ): Partial<AssistantGraphState> {
@@ -347,7 +407,17 @@ function loadAuthenticatedContext(
   return {};
 }
 
+/**
+ * Function type: LangGraph node factory function.
+ *
+ * @brief Creates the conversation loader node.
+ */
 function buildConversationLoader(conversationStore?: ConversationStore) {
+  /**
+   * Function type: LangGraph node function.
+   *
+   * @brief Loads persisted conversation context.
+   */
   return async function loadConversationContext(
     state: AssistantGraphState
   ): Promise<Partial<AssistantGraphState>> {
@@ -376,7 +446,17 @@ function buildConversationLoader(conversationStore?: ConversationStore) {
   };
 }
 
+/**
+ * Function type: LangGraph node factory function.
+ *
+ * @brief Creates the intent classifier node.
+ */
 function buildIntentClassifier(llmProvider?: AssistantLlmProvider) {
+  /**
+   * Function type: LangGraph node function.
+   *
+   * @brief Classifies the current user message intent.
+   */
   return async function classifyIntent(
     state: AssistantGraphState
   ): Promise<Partial<AssistantGraphState>> {
@@ -407,6 +487,11 @@ function buildIntentClassifier(llmProvider?: AssistantLlmProvider) {
   };
 }
 
+/**
+ * Function type: LangGraph node function.
+ *
+ * @brief Extracts deterministic slots from the message.
+ */
 function extractRequestSlotsNode(
   state: AssistantGraphState
 ): Partial<AssistantGraphState> {
@@ -418,6 +503,11 @@ function extractRequestSlotsNode(
   };
 }
 
+/**
+ * Function type: LangGraph node function.
+ *
+ * @brief Normalizes the message for downstream nodes.
+ */
 function normalizeMessageNode(
   state: AssistantGraphState
 ): Partial<AssistantGraphState> {
@@ -426,6 +516,11 @@ function normalizeMessageNode(
   };
 }
 
+/**
+ * Function type: Clarification extractor function.
+ *
+ * @brief Detects the selected prior amount scope.
+ */
 function getAmountScopeSelection(message: string) {
   const normalized = message.toLowerCase();
 
@@ -450,6 +545,11 @@ function getAmountScopeSelection(message: string) {
   return undefined;
 }
 
+/**
+ * Function type: LangGraph node function.
+ *
+ * @brief Resolves amount-scope clarification replies.
+ */
 function resolveClarificationReplyNode(
   state: AssistantGraphState
 ): Partial<AssistantGraphState> {
@@ -512,6 +612,11 @@ function resolveClarificationReplyNode(
   );
 }
 
+/**
+ * Function type: Draft merge helper function.
+ *
+ * @brief Applies extracted slots to a transfer draft.
+ */
 function applySlotDataToDraft(
   draft: TransferDraft,
   state: AssistantGraphState
@@ -552,6 +657,11 @@ function applySlotDataToDraft(
   };
 }
 
+/**
+ * Function type: Draft extractor function.
+ *
+ * @brief Extracts transfer data without the LLM.
+ */
 function extractTransferDraftDeterministic(
   message: string,
   intent: AssistantGraphState["detectedIntent"]
@@ -609,7 +719,17 @@ function extractTransferDraftDeterministic(
   };
 }
 
+/**
+ * Function type: LangGraph node factory function.
+ *
+ * @brief Creates the transfer draft extractor node.
+ */
 function buildTransferDraftExtractor(llmProvider?: AssistantLlmProvider) {
+  /**
+   * Function type: LangGraph node function.
+   *
+   * @brief Extracts transfer drafts for transfer intents.
+   */
   return async function extractTransferDraft(
     state: AssistantGraphState
   ): Promise<Partial<AssistantGraphState>> {
@@ -703,6 +823,11 @@ function buildTransferDraftExtractor(llmProvider?: AssistantLlmProvider) {
   };
 }
 
+/**
+ * Function type: Clarification builder function.
+ *
+ * @brief Builds clarification state and debug data.
+ */
 function buildClarificationRequest(
   state: AssistantGraphState,
   reason: NonNullable<AssistantGraphState["clarificationRequest"]>["reason"],
@@ -739,6 +864,11 @@ function buildClarificationRequest(
   );
 }
 
+/**
+ * Function type: Predicate function.
+ *
+ * @brief Checks whether the intent needs counterparty resolution.
+ */
 function needsCounterpartyResolution(state: AssistantGraphState) {
   return (
     state.detectedIntent === "counterparty_transactions" ||
@@ -753,12 +883,22 @@ function needsCounterpartyResolution(state: AssistantGraphState) {
   );
 }
 
+/**
+ * Function type: Predicate function.
+ *
+ * @brief Checks whether tools can resolve counterparty ambiguity.
+ */
 function canUseCounterpartyResolverTool(state: AssistantGraphState) {
   return getReadOnlyToolsForIntent(state.detectedIntent ?? "unsupported").includes(
     "resolveCounterpartyCandidates"
   );
 }
 
+/**
+ * Function type: Counterparty resolver function.
+ *
+ * @brief Resolves references to the pending recipient.
+ */
 function resolvePendingConfirmationRecipientReference(
   state: AssistantGraphState
 ): CounterpartyRef | undefined {
@@ -803,6 +943,11 @@ function resolvePendingConfirmationRecipientReference(
   };
 }
 
+/**
+ * Function type: Tool selection function.
+ *
+ * @brief Returns unique read-only tools requested by state.
+ */
 function getRequestedToolNamesForState(
   state: AssistantGraphState
 ): AssistantToolName[] {
@@ -821,7 +966,17 @@ function getRequestedToolNamesForState(
   return [...new Set(requestedToolNames)];
 }
 
+/**
+ * Function type: LangGraph node factory function.
+ *
+ * @brief Creates the counterparty resolver node.
+ */
 function buildCounterpartyResolver(llmProvider?: AssistantLlmProvider) {
+  /**
+   * Function type: LangGraph node function.
+   *
+   * @brief Resolves the current counterparty reference.
+   */
   return async function resolveCounterpartyReference(
     state: AssistantGraphState
   ): Promise<Partial<AssistantGraphState>> {
@@ -963,9 +1118,19 @@ function buildCounterpartyResolver(llmProvider?: AssistantLlmProvider) {
   };
 }
 
+/**
+ * Function type: LangGraph node factory function.
+ *
+ * @brief Creates the transfer confirmation node.
+ */
 function buildTransferConfirmationPreparer(
   transferPreparationService: TransferPreparationService
 ) {
+  /**
+   * Function type: LangGraph node function.
+   *
+   * @brief Prepares a transfer confirmation for review.
+   */
   return async function prepareTransferConfirmation(
     state: AssistantGraphState
   ): Promise<Partial<AssistantGraphState>> {
@@ -1046,9 +1211,19 @@ function buildTransferConfirmationPreparer(
   };
 }
 
+/**
+ * Function type: LangGraph node factory function.
+ *
+ * @brief Creates the contextual amount resolver node.
+ */
 function buildContextualAmountResolver(
   amountResolutionService: AmountResolutionService
 ) {
+  /**
+   * Function type: LangGraph node function.
+   *
+   * @brief Resolves relative transfer amount references.
+   */
   return async function resolveContextualAmounts(
     state: AssistantGraphState
   ): Promise<Partial<AssistantGraphState>> {
@@ -1152,14 +1327,29 @@ function buildContextualAmountResolver(
   };
 }
 
+/**
+ * Function type: State lookup helper function.
+ *
+ * @brief Returns the active pending confirmation id.
+ */
 function getActivePendingConfirmationId(state: AssistantGraphState) {
   const pending = state.counterpartyMemory.pendingConfirmation;
   return pending?.status === "pending" ? pending.confirmationId : undefined;
 }
 
+/**
+ * Function type: LangGraph node factory function.
+ *
+ * @brief Creates the pending transfer modifier node.
+ */
 function buildPendingTransferModifier(
   transferModificationService: TransferModificationService
 ) {
+  /**
+   * Function type: LangGraph node function.
+   *
+   * @brief Applies changes to a pending confirmation.
+   */
   return async function modifyPendingTransferConfirmation(
     state: AssistantGraphState
   ): Promise<Partial<AssistantGraphState>> {
@@ -1208,6 +1398,11 @@ function buildPendingTransferModifier(
   };
 }
 
+/**
+ * Function type: Data mapper function.
+ *
+ * @brief Converts resolved tool data into counterparty memory.
+ */
 function resolvedCounterpartyFromResolutionData(
   data: {
     kind: "counterparty";
@@ -1231,6 +1426,11 @@ function resolvedCounterpartyFromResolutionData(
   };
 }
 
+/**
+ * Function type: Clarification builder function.
+ *
+ * @brief Builds messages from unresolved tool data.
+ */
 function buildResolutionClarification(result: RuntimeToolResult) {
   const resolution = getResolutionResultData(result);
   if (!resolution || resolution.status === "resolved") {
@@ -1302,7 +1502,17 @@ function buildResolutionClarification(result: RuntimeToolResult) {
   };
 }
 
+/**
+ * Function type: LangGraph node factory function.
+ *
+ * @brief Creates the read-only tool router node.
+ */
 function buildToolRouter(tools: AssistantToolExecutors) {
+  /**
+   * Function type: LangGraph node function.
+   *
+   * @brief Executes allowed read-only account tools.
+   */
   return async function routeReadOnlyTools(
     state: AssistantGraphState
   ): Promise<Partial<AssistantGraphState>> {
@@ -1430,6 +1640,11 @@ function buildToolRouter(tools: AssistantToolExecutors) {
   };
 }
 
+/**
+ * Function type: Response composer function.
+ *
+ * @brief Builds a deterministic response without the LLM.
+ */
 function composeDeterministicResponse(state: AssistantGraphState) {
   if (state.clarificationMessage) {
     return state.clarificationMessage;
@@ -1488,6 +1703,11 @@ function composeDeterministicResponse(state: AssistantGraphState) {
     .join(" ");
 }
 
+/**
+ * Function type: Response hydration helper function.
+ *
+ * @brief Collects nested label replacements.
+ */
 function collectResponseLabelReplacements(
   value: unknown,
   replacements: Array<[from: string, to: string]> = []
@@ -1570,10 +1790,20 @@ function collectResponseLabelReplacements(
   return replacements;
 }
 
+/**
+ * Function type: Regex utility function.
+ *
+ * @brief Escapes text for use inside a regular expression.
+ */
 function escapeRegExp(value: string) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
+/**
+ * Function type: Response hydration function.
+ *
+ * @brief Replaces masked labels with user-visible labels.
+ */
 function hydrateUserVisibleResponse(
   message: string,
   state: AssistantGraphState
@@ -1640,6 +1870,11 @@ function hydrateUserVisibleResponse(
   );
 }
 
+/**
+ * Function type: Response validation function.
+ *
+ * @brief Detects unsafe completed-transfer claims.
+ */
 function hasUnsafeMoneyMovementClaim(message: string) {
   const normalized = message.toLowerCase();
 
@@ -1654,6 +1889,11 @@ function hasUnsafeMoneyMovementClaim(message: string) {
   );
 }
 
+/**
+ * Function type: Response validation function.
+ *
+ * @brief Detects known masked-label leaks.
+ */
 function hasMaskedLabelLeak(message: string, state: AssistantGraphState) {
   const knownMaskedLabels = new Set<string>();
   const activeConfirmation =
@@ -1729,10 +1969,20 @@ const requiredStatusValues = [
 const requiredCurrencyValues = ["ILS", "USD", "EUR"] as const;
 const emailPattern = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 
+/**
+ * Function type: Money utility function.
+ *
+ * @brief Converts decimal amounts into cents.
+ */
 function amountToCents(amount: number) {
   return Math.round(amount * 100);
 }
 
+/**
+ * Function type: LLM sanitization function.
+ *
+ * @brief Masks transfer draft fields before LLM use.
+ */
 function sanitizeTransferDraftForLlm(
   draft: AssistantGraphState["transferDraft"]
 ) {
@@ -1751,6 +2001,11 @@ function sanitizeTransferDraftForLlm(
   };
 }
 
+/**
+ * Function type: Label builder function.
+ *
+ * @brief Builds the user-visible recipient label.
+ */
 function buildUserVisibleRecipientLabel(input: {
   recipientEmail: string;
   recipientFirstName?: string | null;
@@ -1764,6 +2019,11 @@ function buildUserVisibleRecipientLabel(input: {
   return name ? `${name} (${input.recipientEmail})` : input.recipientEmail;
 }
 
+/**
+ * Function type: LLM sanitization function.
+ *
+ * @brief Masks confirmation details before LLM use.
+ */
 function sanitizeConfirmationForLlm(
   confirmation: AssistantGraphState["confirmation"] | PendingConfirmationMemory | null | undefined
 ) {
@@ -1801,10 +2061,20 @@ function sanitizeConfirmationForLlm(
   };
 }
 
+/**
+ * Function type: Email extractor function.
+ *
+ * @brief Extracts lowercase email addresses from text.
+ */
 function extractEmails(text: string) {
   return [...text.matchAll(emailPattern)].map((match) => match[0].toLowerCase());
 }
 
+/**
+ * Function type: Email extractor function.
+ *
+ * @brief Extracts an email address from a label.
+ */
 function getEmailFromLabel(label: string | undefined) {
   if (!label) {
     return undefined;
@@ -1813,6 +2083,11 @@ function getEmailFromLabel(label: string | undefined) {
   return extractEmails(label)[0];
 }
 
+/**
+ * Function type: Fact collection helper function.
+ *
+ * @brief Adds or replaces a required response fact.
+ */
 function addRequiredResponseFact(
   facts: Map<string, RequiredResponseFact>,
   fact: RequiredResponseFact,
@@ -1821,6 +2096,11 @@ function addRequiredResponseFact(
   facts.set(dedupeKey, fact);
 }
 
+/**
+ * Function type: Fact extractor function.
+ *
+ * @brief Recursively collects facts the response must preserve.
+ */
 function collectRequiredFactsFromData(
   value: unknown,
   source: string,
@@ -1934,6 +2214,11 @@ function collectRequiredFactsFromData(
   });
 }
 
+/**
+ * Function type: Fact builder function.
+ *
+ * @brief Builds facts the response must preserve.
+ */
 function buildRequiredResponseFacts(
   state: AssistantGraphState
 ): RequiredResponseFact[] {
@@ -2021,6 +2306,11 @@ function buildRequiredResponseFacts(
   return [...requiredFacts.values()];
 }
 
+/**
+ * Function type: Money extractor function.
+ *
+ * @brief Extracts numeric values from text as cents.
+ */
 function extractNumericCents(message: string) {
   const matches = message.match(/[-+]?\d[\d,]*(?:\.\d+)?/g) ?? [];
 
@@ -2030,6 +2320,11 @@ function extractNumericCents(message: string) {
     .map(amountToCents);
 }
 
+/**
+ * Function type: Response validation function.
+ *
+ * @brief Checks for missing required amount facts.
+ */
 function hasMissingRequiredAmountFact(
   message: string,
   requiredResponseFacts: RequiredResponseFact[]
@@ -2045,6 +2340,11 @@ function hasMissingRequiredAmountFact(
   return requiredAmounts.some((amount) => !responseAmounts.has(amount));
 }
 
+/**
+ * Function type: Response validation function.
+ *
+ * @brief Checks for contradicting recipient facts.
+ */
 function hasContradictingRequiredRecipientFact(
   message: string,
   requiredResponseFacts: RequiredResponseFact[]
@@ -2065,6 +2365,11 @@ function hasContradictingRequiredRecipientFact(
   return mentionedEmails.some((email) => !allowedEmails.has(email));
 }
 
+/**
+ * Function type: Response validation function.
+ *
+ * @brief Checks for contradicting status facts.
+ */
 function hasContradictingRequiredStatusFact(
   message: string,
   requiredResponseFacts: RequiredResponseFact[]
@@ -2092,6 +2397,11 @@ function hasContradictingRequiredStatusFact(
   return mentionedStatuses.some((status) => !allowedStatuses.has(status));
 }
 
+/**
+ * Function type: Response validation function.
+ *
+ * @brief Checks for contradicting date facts.
+ */
 function hasContradictingRequiredDateFact(
   message: string,
   requiredResponseFacts: RequiredResponseFact[]
@@ -2118,6 +2428,11 @@ function hasContradictingRequiredDateFact(
   );
 }
 
+/**
+ * Function type: Currency extractor function.
+ *
+ * @brief Detects mentioned currency codes or symbols.
+ */
 function detectMentionedCurrencies(message: string) {
   const mentioned = new Set<typeof requiredCurrencyValues[number]>();
   // TODO:  improve regex robustness
@@ -2134,6 +2449,11 @@ function detectMentionedCurrencies(message: string) {
   return [...mentioned];
 }
 
+/**
+ * Function type: Response validation function.
+ *
+ * @brief Checks for contradicting currency facts.
+ */
 function hasContradictingRequiredCurrencyFact(
   message: string,
   requiredResponseFacts: RequiredResponseFact[]
@@ -2158,6 +2478,11 @@ function hasContradictingRequiredCurrencyFact(
   return mentionedCurrencies.some((currency) => !allowedCurrencies.has(currency));
 }
 
+/**
+ * Function type: Response validation function.
+ *
+ * @brief Returns the first post-check failure reason.
+ */
 function getResponsePostCheckFailure(
   message: string,
   state: AssistantGraphState,
@@ -2194,7 +2519,17 @@ function getResponsePostCheckFailure(
   return undefined;
 }
 
+/**
+ * Function type: LangGraph node factory function.
+ *
+ * @brief Creates the response composer node.
+ */
 function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
+  /**
+   * Function type: LangGraph node function.
+   *
+   * @brief Composes the final checked assistant response.
+   */
   return async function composeResponse(
     state: AssistantGraphState
   ): Promise<Partial<AssistantGraphState>> {
@@ -2292,7 +2627,17 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
   };
 }
 
+/**
+ * Function type: LangGraph node factory function.
+ *
+ * @brief Creates the conversation saver node.
+ */
 function buildConversationSaver(conversationStore?: ConversationStore) {
+  /**
+   * Function type: Memory helper function.
+   *
+   * @brief Builds answer-frame context for amount references.
+   */
   function buildAnswerFrameQueryContext(state: AssistantGraphState) {
     const totalResult = [...state.toolResults].reverse().find((result) =>
       [
@@ -2321,6 +2666,11 @@ function buildConversationSaver(conversationStore?: ConversationStore) {
     };
   }
 
+  /**
+   * Function type: LangGraph node function.
+   *
+   * @brief Saves the response and updated memory.
+   */
   return async function saveConversation(
     state: AssistantGraphState
   ): Promise<Partial<AssistantGraphState>> {
@@ -2440,6 +2790,11 @@ function buildConversationSaver(conversationStore?: ConversationStore) {
   };
 }
 
+/**
+ * Function type: LangGraph builder function.
+ *
+ * @brief Builds and compiles the assistant workflow.
+ */
 function buildAssistantGraph(options: GraphOptions) {
   return new StateGraph(AssistantStateAnnotation)
     .addNode(
@@ -2572,6 +2927,11 @@ function buildAssistantGraph(options: GraphOptions) {
     .compile();
 }
 
+/**
+ * Function type: Public API function.
+ *
+ * @brief Runs the assistant graph and returns the result.
+ */
 export async function runAssistantGraph(
   input: RunAssistantInput,
   options: RunAssistantOptions = {}

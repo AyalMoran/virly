@@ -118,7 +118,7 @@ export function DashboardPage() {
       <motion.div variants={itemAnimation}>
         <PageHeader eyebrow="" title={`Hello, ${greetingName}`}>
           <Link className="button button-primary" to="/transfer">
-            Send money
+            Transfer Funds
           </Link>
         </PageHeader>
       </motion.div>

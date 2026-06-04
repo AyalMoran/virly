@@ -135,7 +135,7 @@ export function TransferPage() {
 
   return (
     <div className="page-stack">
-      <PageHeader eyebrow="" title="Send money" />
+      <PageHeader eyebrow="" title="Transfer" />
       <div className="transfer-layout figma-transfer-layout">
         <Card className="transfer-card figma-transfer-card">
           {step === "success" && result ? (
