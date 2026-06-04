@@ -1,0 +1,52 @@
+{
+  "suiteName": "transfer-context",
+  "scenarios": [
+    {
+      "id": "transfer-pronoun-amount",
+      "description": "Transfer preparation resolves a remembered recipient with a literal amount.",
+      "toolPreset": "default",
+      "setup": {
+        "rememberedCounterparties": ["alex@example.com"]
+      },
+      "turns": [
+        {
+          "userMessage": "send him 50",
+          "expectedIntent": "transfer_prepare",
+          "expectedConfirmation": {
+            "recipientEmail": "alex@example.com",
+            "amount": 50
+          },
+          "mustInclude": ["review the transfer details"],
+          "mustNotInclude": ["Confirm or Deny button"]
+        }
+      ]
+    },
+    {
+      "id": "transfer-from-previous-total-answer",
+      "description": "A transfer follow-up can reuse the previous read-only total answer from conversation memory.",
+      "toolPreset": "default",
+      "setup": {
+        "rememberedCounterparties": ["alex@example.com"]
+      },
+      "turns": [
+        {
+          "userMessage": "how much did he send me?",
+          "expectedIntent": "counterparty_total_received",
+          "expectedToolCalls": ["getTotalReceivedFromCounterparty"],
+          "mustInclude": ["35.00 in total"],
+          "mustNotInclude": ["multiple matching counterparties"]
+        },
+        {
+          "userMessage": "send him that amount",
+          "expectedIntent": "transfer_prepare",
+          "expectedConfirmation": {
+            "recipientEmail": "alex@example.com",
+            "amount": 35
+          },
+          "mustInclude": ["review the transfer details"],
+          "mustNotInclude": ["I need a valid positive amount"]
+        }
+      ]
+    }
+  ]
+}

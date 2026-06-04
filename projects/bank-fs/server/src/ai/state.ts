@@ -321,6 +321,10 @@ export type RequiredResponseFact = {
   value: string;
   numericValue: number;
 } | {
+  kind: "currency";
+  source: string;
+  value: CurrencyCode;
+} | {
   kind: "recipient";
   source: string;
   value: string;
@@ -519,37 +523,43 @@ export type PendingConfirmationMemory = {
   version: number;
 };
 
+export const clarificationReasonValues = [
+  "missing_recipient",
+  "ambiguous_recipient",
+  "missing_amount",
+  "ambiguous_amount",
+  "unsupported_currency",
+  "missing_date_range",
+  "ambiguous_reference",
+  "ambiguous_transaction",
+  "ambiguous_pending_transfer",
+  "unresolved_reference"
+] as const;
+
+export const clarificationReplyTypeValues = [
+  "recipient",
+  "amount",
+  "amount_scope",
+  "currency",
+  "date_range",
+  "transaction",
+  "pending_transfer",
+  "yes_no",
+  "option_selection",
+  "free_text"
+] as const;
+
 export type ClarificationRequest = {
-  reason:
-    | "missing_recipient"
-    | "ambiguous_recipient"
-    | "missing_amount"
-    | "ambiguous_amount"
-    | "unsupported_currency"
-    | "missing_date_range"
-    | "ambiguous_reference"
-    | "ambiguous_transaction"
-    | "ambiguous_pending_transfer"
-    | "unresolved_reference";
+  reason: (typeof clarificationReasonValues)[number];
   message: string;
   resumeIntent?: AssistantIntent;
   resumeDraft?: TransferDraft;
   options?: Array<{
-    id: string;
-    label: string;
-    value: string;
-  }>;
-  expectedReplyType:
-    | "recipient"
-    | "amount"
-    | "amount_scope"
-    | "currency"
-    | "date_range"
-    | "transaction"
-    | "pending_transfer"
-    | "yes_no"
-    | "option_selection"
-    | "free_text";
+      id: string;
+      label: string;
+      value: string;
+    }>;
+  expectedReplyType: (typeof clarificationReplyTypeValues)[number];
 };
 
 export type ConversationMode =
@@ -606,11 +616,31 @@ export type ExtractTransferDraftInput = {
   counterpartyMemory: CounterpartyMemory;
 };
 
+export const transferConfirmationTypeValues = ["transfer"] as const;
+export const transferConfirmationStatusValues = ["pending"] as const;
+export const transferConfirmationCurrencyValues = ["ILS"] as const;
+export const transferWarningCodeValues = [
+  "MISSING_RECIPIENT_NAME",
+  "NEW_RECIPIENT",
+  "HIGH_AMOUNT",
+  "NEAR_DAILY_LIMIT",
+  "CURRENCY_ASSUMED"
+] as const;
+export const confirmationActionMethodValues = ["POST"] as const;
+export const confirmationActionValues = ["confirm", "deny"] as const;
+export const confirmationResponseStatusValues = [
+  "confirmed",
+  "denied"
+] as const;
+export const confirmationSupersededErrorValues = [
+  "confirmation_superseded"
+] as const;
+
 export type TransferConfirmation = {
   id: string;
   version: number;
-  type: "transfer";
-  status: "pending";
+  type: (typeof transferConfirmationTypeValues)[number];
+  status: (typeof transferConfirmationStatusValues)[number];
   recipientEmail: string;
   recipientFirstName: string | null;
   recipientLastName: string | null;
@@ -630,29 +660,24 @@ export type TransferConfirmation = {
   };
   reason: string | null;
   warnings: Array<{
-    code:
-      | "MISSING_RECIPIENT_NAME"
-      | "NEW_RECIPIENT"
-      | "HIGH_AMOUNT"
-      | "NEAR_DAILY_LIMIT"
-      | "CURRENCY_ASSUMED";
+    code: (typeof transferWarningCodeValues)[number];
     message: string;
   }>;
   expiresAt: string;
   supersedesId?: string | null;
   confirmAction: {
-    method: "POST";
+    method: (typeof confirmationActionMethodValues)[number];
     path: string;
     body: {
-      action: "confirm";
+      action: (typeof confirmationActionValues)[0];
       version: number;
     };
   };
   denyAction: {
-    method: "POST";
+    method: (typeof confirmationActionMethodValues)[number];
     path: string;
     body: {
-      action: "deny";
+      action: (typeof confirmationActionValues)[1];
       version: number;
     };
   };
@@ -764,6 +789,31 @@ export type AuditLogInput = {
 
 export type AuditLogger = (input: AuditLogInput) => Promise<void>;
 
+export const aiStreamPhases = [
+  "accepted",
+  "understanding_request",
+  "resolving_context",
+  "checking_account_facts",
+  "preparing_confirmation",
+  "composing_response",
+  "completed"
+] as const;
+
+export type AiStreamPhase = (typeof aiStreamPhases)[number];
+
+export const aiStreamStatusEventTypeValues = ["status"] as const;
+export const aiStreamResultEventTypeValues = ["result"] as const;
+export const aiStreamErrorEventTypeValues = ["error"] as const;
+
+export type RunAssistantProgressEvent = {
+  phase: AiStreamPhase;
+  nodeName: string;
+};
+
+export type RunAssistantProgressHandler = (
+  event: RunAssistantProgressEvent
+) => void | Promise<void>;
+
 export type RunAssistantInput = {
   userId?: string;
   conversationId: string;
@@ -783,6 +833,17 @@ export type RunAssistantResult = {
   confirmation?: TransferConfirmation;
   supersededConfirmationId?: string;
   refusalReason?: string;
+};
+
+export type RunAssistantOptions = {
+  tools?: Partial<AssistantToolExecutors>;
+  llmProvider?: AssistantLlmProvider;
+  conversationStore?: ConversationStore;
+  amountResolutionService?: AmountResolutionService;
+  transferPreparationService?: TransferPreparationService;
+  transferModificationService?: TransferModificationService;
+  auditLogger?: AuditLogger;
+  onProgress?: RunAssistantProgressHandler;
 };
 
 export type PrepareTransferConfirmationInput = {

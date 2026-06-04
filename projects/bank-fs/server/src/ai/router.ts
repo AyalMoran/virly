@@ -78,6 +78,15 @@ export function classifyAssistantIntentDeterministic(
     context?.counterpartyMemory.pendingConfirmation?.status === "pending";
 
   if (
+    hasActivePending &&
+    (/\b(actually|instead|no,|change|modify|update|make it|make that|set it|add reason)\b/i.test(normalized) ||
+      /\b(send it|send that)\b.*\b(to|for)\b/i.test(normalized) ||
+      /(בעצם|תשנה|שנה|עדכן|במקום|לא,|סיבה)/.test(message))
+  ) {
+    return { intent: "transfer_modify_pending" };
+  }
+
+  if (
     /(^|\b)(yes|confirm|approve|send it|go ahead|do it)(\b|$)/i.test(normalized) ||
     /(?:^|\s)(כן|תאשר|יאללה|בצע)(?:\s|$|[.!?])/.test(message)
   ) {
@@ -89,18 +98,10 @@ export function classifyAssistantIntentDeterministic(
   }
 
   if (
-    hasActivePending &&
-    (/\b(actually|instead|no,|change|modify|update|make it|make that|set it|add reason)\b/i.test(normalized) ||
-      /\b(send it|send that)\b.*\b(to|for)\b/i.test(normalized) ||
-      /(בעצם|תשנה|שנה|עדכן|במקום|לא,|סיבה)/.test(message))
-  ) {
-    return { intent: "transfer_modify_pending" };
-  }
-
-  if (
     /\b(who|which people|which recipients)\b.*\b(sent|paid|transferred)\b.*\b(me|to me)\b/i.test(normalized) ||
     /\b(recent|latest|last)\b.*\b(people|recipients|counterparties)\b.*\b(sent|paid|transferred)\b.*\b(me|to me)\b/i.test(normalized) ||
-    /(מי).*?(שלח|העביר).*?(לי|אליי|אלי).*?(לאחרונה|השבוע|החודש)?/.test(message)
+    /\bwho\b.*\b(sent|paid|transferred)\b.*\b(me|to me)\b.*\b(today|yesterday)\b/i.test(normalized) ||
+    /(מי).*?(שלח|העביר).*?(לי|אליי|אלי).*?(לאחרונה|השבוע|החודש|היום|אתמול)?/.test(message)
   ) {
     return { intent: "recent_received_counterparties" };
   }
@@ -108,7 +109,8 @@ export function classifyAssistantIntentDeterministic(
   if (
     /\b(last|recent|latest|most recent)\s+\d*\s*(people|recipients|counterparties|payees)\b.*\b(i\s+)?(sent|paid|transferred)\b/i.test(normalized) ||
     /\b(who|which people|which recipients)\b.*\b(i\s+)?(sent|paid|transferred)\b.*\b(recently|latest|last)\b/i.test(normalized) ||
-    /(למי).*?(שלחתי|העברתי).*?(לאחרונה|אחרונים|אחרונות|האחרונים|האחרונות)/.test(message)
+    /\bwho\b.*\b(?:did\s+i\s+)?(send|sent|pay|paid|transfer|transferred)\b.*\b(to)\b.*\b(today|yesterday)\b/i.test(normalized) ||
+    /(למי).*?(שלחתי|העברתי).*?(לאחרונה|אחרונים|אחרונות|האחרונים|האחרונות|היום|אתמול)/.test(message)
   ) {
     return { intent: "recent_sent_counterparties" };
   }

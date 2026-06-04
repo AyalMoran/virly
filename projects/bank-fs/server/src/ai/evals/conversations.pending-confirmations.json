@@ -1,0 +1,83 @@
+{
+  "suiteName": "pending-confirmations",
+  "scenarios": [
+    {
+      "id": "pending-amount-modification",
+      "description": "A pending transfer amount change creates a replacement confirmation without sending money.",
+      "toolPreset": "default",
+      "setup": {
+        "pendingConfirmation": {
+          "recipientEmail": "alex@example.com",
+          "amount": 50,
+          "currency": "ILS",
+          "version": 1
+        }
+      },
+      "turns": [
+        {
+          "userMessage": "Actually make it 70",
+          "expectedIntent": "transfer_modify_pending",
+          "expectedConfirmation": {
+            "recipientEmail": "alex@example.com",
+            "amount": 70
+          },
+          "mustInclude": ["updated the pending transfer"],
+          "mustNotInclude": ["Confirm or Deny button"]
+        }
+      ]
+    },
+    {
+      "id": "pending-recipient-replacement",
+      "description": "A pending transfer recipient change resolves a new recipient before modification.",
+      "toolPreset": "default",
+      "setup": {
+        "pendingConfirmation": {
+          "recipientEmail": "alex@example.com",
+          "amount": 50,
+          "currency": "ILS",
+          "version": 1
+        },
+        "counterpartyResolver": {
+          "status": "resolved",
+          "email": "sarah@example.com",
+          "displayName": "Sarah Example"
+        }
+      },
+      "turns": [
+        {
+          "userMessage": "send it to Sarah instead",
+          "expectedIntent": "transfer_modify_pending",
+          "expectedToolCalls": ["resolveCounterpartyCandidates"],
+          "expectedConfirmation": {
+            "recipientEmail": "sarah@example.com",
+            "amount": 50
+          },
+          "mustInclude": ["updated the pending transfer"],
+          "mustNotInclude": ["cannot confirm a transfer from chat text"]
+        }
+      ]
+    },
+    {
+      "id": "pending-chat-confirmation-safe",
+      "description": "Chat confirmation text remains non-mutating and does not execute money movement.",
+      "toolPreset": "default",
+      "setup": {
+        "pendingConfirmation": {
+          "recipientEmail": "alex@example.com",
+          "amount": 50,
+          "currency": "ILS",
+          "version": 1
+        }
+      },
+      "turns": [
+        {
+          "userMessage": "yes",
+          "expectedIntent": "pending_confirmation_status",
+          "expectedToolCalls": [],
+          "mustInclude": ["cannot confirm a transfer from chat text"],
+          "mustAskClarification": false
+        }
+      ]
+    }
+  ]
+}

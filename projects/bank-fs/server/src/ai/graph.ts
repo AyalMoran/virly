@@ -48,6 +48,9 @@ import type {
   TransferPreparationService,
   RunAssistantInput,
   RunAssistantResult,
+  RunAssistantOptions,
+  RunAssistantProgressHandler,
+  AiStreamPhase,
   RequiredResponseFact,
   ToolResultMetadata
 } from "./state.js";
@@ -94,18 +97,60 @@ type GraphOptions = {
   tools: AssistantToolExecutors;
   llmProvider?: AssistantLlmProvider;
   conversationStore?: ConversationStore;
+  onProgress?: RunAssistantProgressHandler;
   amountResolutionService: AmountResolutionService;
   transferPreparationService: TransferPreparationService;
   transferModificationService: TransferModificationService;
 };
 
-export type RunAssistantOptions = Partial<GraphOptions> & {
-  auditLogger?: AuditLogger;
-};
-
 type GraphNode = (
   state: AssistantGraphState
 ) => Partial<AssistantGraphState> | Promise<Partial<AssistantGraphState>>;
+
+function getProgressPhaseForNode(
+  nodeName: string,
+  state: AssistantGraphState
+): AiStreamPhase | undefined {
+  if (
+    nodeName === "normalizeUserMessage" ||
+    nodeName === "classifyIntent" ||
+    nodeName === "extractRequestSlots"
+  ) {
+    return "understanding_request";
+  }
+
+  if (
+    nodeName === "extractTransferDraft" ||
+    nodeName === "resolveCounterpartyReference" ||
+    nodeName === "resolveContextualAmounts"
+  ) {
+    return "resolving_context";
+  }
+
+  if (nodeName === "routeReadOnlyTools") {
+    return getReadOnlyToolsForIntent(state.detectedIntent ?? "unsupported").length > 0
+      ? "checking_account_facts"
+      : undefined;
+  }
+
+  if (
+    (nodeName === "prepareTransferConfirmation" ||
+      nodeName === "modifyPendingTransferConfirmation") &&
+    (
+      state.detectedIntent === "transfer_prepare" ||
+      state.detectedIntent === "transfer_modify_pending" ||
+      state.detectedIntent === "transfer_cancel_pending"
+    )
+  ) {
+    return "preparing_confirmation";
+  }
+
+  if (nodeName === "composeResponse") {
+    return "composing_response";
+  }
+
+  return undefined;
+}
 
 function appendDebugEvents(
   currentTrace: AiGraphDebugEvent[] | undefined,
@@ -232,8 +277,17 @@ function buildSchemaFailureEvent(input: {
   };
 }
 
-function withNodeTrace(nodeName: string, node: GraphNode): GraphNode {
+function withNodeTrace(
+  nodeName: string,
+  node: GraphNode,
+  onProgress?: RunAssistantProgressHandler
+): GraphNode {
   return async (state) => {
+    const progressPhase = getProgressPhaseForNode(nodeName, state);
+    if (progressPhase && onProgress) {
+      await onProgress({ phase: progressPhase, nodeName });
+    }
+
     if (!config.ai.debugTrace) {
       return node(state);
     }
@@ -705,12 +759,87 @@ function canUseCounterpartyResolverTool(state: AssistantGraphState) {
   );
 }
 
+function resolvePendingConfirmationRecipientReference(
+  state: AssistantGraphState
+): CounterpartyRef | undefined {
+  const pending = state.counterpartyMemory.pendingConfirmation;
+  const recipientReference = state.transferDraft?.recipientReference?.trim();
+  if (
+    state.detectedIntent !== "transfer_modify_pending" ||
+    pending?.status !== "pending" ||
+    !recipientReference
+  ) {
+    return undefined;
+  }
+
+  if (
+    !/\b(same\s+(person|recipient|counterparty)|this\s+(person|recipient)|that\s+(person|recipient))\b/i.test(
+      recipientReference
+    ) &&
+    !/(אותו|אותה|אותו אחד|אותה אחת|האדם הזה|הנמען הזה|הנמען הקודם|האדם הקודם|האחרון)/.test(
+      recipientReference
+    )
+  ) {
+    return undefined;
+  }
+
+  const displayName = [
+    pending.recipientFirstName,
+    pending.recipientLastName
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
+  return {
+    email: pending.recipientEmail.toLowerCase(),
+    maskedLabel: maskEmail(pending.recipientEmail),
+    userLabel: displayName
+      ? `${displayName} (${pending.recipientEmail.toLowerCase()})`
+      : pending.recipientEmail.toLowerCase(),
+    displayName: displayName || undefined,
+    firstMentionedAtTurn: pending.turnCreated,
+    lastReferencedAtTurn: state.currentTurn
+  };
+}
+
+function getRequestedToolNamesForState(
+  state: AssistantGraphState
+): AssistantToolName[] {
+  const intent = state.detectedIntent ?? "unsupported";
+  const requestedToolNames = [...getReadOnlyToolsForIntent(intent)];
+
+  if (
+    intent === "transfer_modify_pending" &&
+    state.transferDraft?.recipientReference &&
+    !state.transferDraft.recipientEmail &&
+    !state.resolvedCounterparty
+  ) {
+    requestedToolNames.push("resolveCounterpartyCandidates");
+  }
+
+  return [...new Set(requestedToolNames)];
+}
+
 function buildCounterpartyResolver(llmProvider?: AssistantLlmProvider) {
   return async function resolveCounterpartyReference(
     state: AssistantGraphState
   ): Promise<Partial<AssistantGraphState>> {
     if (state.refusalReason || !needsCounterpartyResolution(state)) {
       return {};
+    }
+
+    const pendingConfirmationCounterparty =
+      resolvePendingConfirmationRecipientReference(state);
+    if (pendingConfirmationCounterparty) {
+      return {
+        resolvedCounterparty: pendingConfirmationCounterparty,
+        counterpartyMemory: rememberCounterparty(
+          state.counterpartyMemory,
+          pendingConfirmationCounterparty,
+          state.currentTurn
+        )
+      };
     }
 
     if (llmProvider) {
@@ -927,7 +1056,10 @@ function buildContextualAmountResolver(
       !state.userId ||
       state.refusalReason ||
       state.clarificationMessage ||
-      state.detectedIntent !== "transfer_prepare" ||
+      (
+        state.detectedIntent !== "transfer_prepare" &&
+        state.detectedIntent !== "transfer_modify_pending"
+      ) ||
       !state.transferDraft?.amountReferenceText ||
       state.transferDraft.amount
     ) {
@@ -1183,7 +1315,7 @@ function buildToolRouter(tools: AssistantToolExecutors) {
     }
 
     const intent = state.detectedIntent ?? "unsupported";
-    const requestedToolNames = getReadOnlyToolsForIntent(intent);
+    const requestedToolNames = getRequestedToolNamesForState(state);
     const toolResults: AssistantGraphState["toolResults"] = [];
     const executedToolNames: AssistantToolName[] = [];
     let resolvedCounterparty = state.resolvedCounterparty;
@@ -1386,6 +1518,10 @@ function collectResponseLabelReplacements(
       : undefined;
   const recipientLabel =
     typeof record.recipientLabel === "string" ? record.recipientLabel : undefined;
+  const recipientEmailMasked =
+    typeof record.recipientEmailMasked === "string"
+      ? record.recipientEmailMasked
+      : undefined;
   const counterpartyMaskedLabel =
     typeof record.counterpartyMaskedLabel === "string"
       ? record.counterpartyMaskedLabel
@@ -1415,6 +1551,10 @@ function collectResponseLabelReplacements(
     replacements.push([recipientMaskedLabel, recipientLabel]);
   }
 
+  if (recipientEmailMasked && recipientLabel && recipientEmailMasked !== recipientLabel) {
+    replacements.push([recipientEmailMasked, recipientLabel]);
+  }
+
   if (
     counterpartyMaskedLabel &&
     counterpartyLabel &&
@@ -1439,6 +1579,8 @@ function hydrateUserVisibleResponse(
   state: AssistantGraphState
 ) {
   const replacements: Array<[from: string, to: string]> = [];
+  const activeConfirmation =
+    state.confirmation ?? state.counterpartyMemory.pendingConfirmation ?? null;
 
   if (
     state.resolvedCounterparty?.maskedLabel &&
@@ -1459,6 +1601,32 @@ function hydrateUserVisibleResponse(
 
   for (const result of state.toolResults) {
     collectResponseLabelReplacements(result.data, replacements);
+  }
+
+  if (activeConfirmation) {
+    const userLabel = buildUserVisibleRecipientLabel({
+      recipientEmail: activeConfirmation.recipientEmail,
+      recipientFirstName: activeConfirmation.recipientFirstName,
+      recipientLastName: activeConfirmation.recipientLastName
+    });
+    const maskedEmail = maskEmail(activeConfirmation.recipientEmail);
+    if (maskedEmail !== userLabel) {
+      replacements.push([maskedEmail, userLabel]);
+    }
+
+    const maskedRecipientLabel =
+      "recipient" in activeConfirmation
+        ? activeConfirmation.recipient.displayName
+          ? `${activeConfirmation.recipient.displayName} (${maskedEmail})`
+          : maskedEmail
+        : buildUserVisibleRecipientLabel({
+            recipientEmail: activeConfirmation.recipientEmail,
+            recipientFirstName: activeConfirmation.recipientFirstName,
+            recipientLastName: activeConfirmation.recipientLastName
+          }).replace(activeConfirmation.recipientEmail, maskedEmail);
+    if (maskedRecipientLabel !== userLabel) {
+      replacements.push([maskedRecipientLabel, userLabel]);
+    }
   }
 
   return [...new Map(
@@ -1487,21 +1655,59 @@ function hasUnsafeMoneyMovementClaim(message: string) {
 }
 
 function hasMaskedLabelLeak(message: string, state: AssistantGraphState) {
-  const knownMaskedLabels = [
-    state.resolvedCounterparty,
-    ...state.counterpartyMemory.mentionedCounterparties
-  ]
-    .filter(
-      (counterparty): counterparty is NonNullable<typeof counterparty> =>
-        Boolean(
-          counterparty?.maskedLabel &&
-            counterparty.userLabel &&
-            counterparty.maskedLabel !== counterparty.userLabel
-        )
-    )
-    .map((counterparty) => counterparty.maskedLabel);
+  const knownMaskedLabels = new Set<string>();
+  const activeConfirmation =
+    state.confirmation ?? state.counterpartyMemory.pendingConfirmation ?? null;
 
-  return knownMaskedLabels.some((maskedLabel) => message.includes(maskedLabel));
+  const addMaskedLabel = (
+    maskedLabel: string | undefined,
+    userLabel: string | undefined
+  ) => {
+    if (maskedLabel && userLabel && maskedLabel !== userLabel) {
+      knownMaskedLabels.add(maskedLabel);
+    }
+  };
+
+  addMaskedLabel(
+    state.resolvedCounterparty?.maskedLabel,
+    state.resolvedCounterparty?.userLabel
+  );
+
+  for (const counterparty of state.counterpartyMemory.mentionedCounterparties) {
+    addMaskedLabel(counterparty.maskedLabel, counterparty.userLabel);
+  }
+
+  for (const result of state.toolResults) {
+    const replacements: Array<[from: string, to: string]> = [];
+    collectResponseLabelReplacements(result.data, replacements);
+    for (const [from, to] of replacements) {
+      addMaskedLabel(from, to);
+    }
+  }
+
+  if (activeConfirmation) {
+    const userLabel = buildUserVisibleRecipientLabel({
+      recipientEmail: activeConfirmation.recipientEmail,
+      recipientFirstName: activeConfirmation.recipientFirstName,
+      recipientLastName: activeConfirmation.recipientLastName
+    });
+    const maskedEmail = maskEmail(activeConfirmation.recipientEmail);
+    addMaskedLabel(maskedEmail, userLabel);
+
+    const maskedRecipientLabel =
+      "recipient" in activeConfirmation
+        ? activeConfirmation.recipient.displayName
+          ? `${activeConfirmation.recipient.displayName} (${maskedEmail})`
+          : maskedEmail
+        : buildUserVisibleRecipientLabel({
+            recipientEmail: activeConfirmation.recipientEmail,
+            recipientFirstName: activeConfirmation.recipientFirstName,
+            recipientLastName: activeConfirmation.recipientLastName
+          }).replace(activeConfirmation.recipientEmail, maskedEmail);
+    addMaskedLabel(maskedRecipientLabel, userLabel);
+  }
+
+  return [...knownMaskedLabels].some((maskedLabel) => message.includes(maskedLabel));
 }
 
 const requiredAmountMetadataFields = [
@@ -1520,6 +1726,7 @@ const requiredStatusValues = [
   "cancelled",
   "canceled"
 ] as const;
+const requiredCurrencyValues = ["ILS", "USD", "EUR"] as const;
 const emailPattern = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 
 function amountToCents(amount: number) {
@@ -1542,6 +1749,19 @@ function sanitizeTransferDraftForLlm(
       ? maskEmail(draft.recipientEmail)
       : null
   };
+}
+
+function buildUserVisibleRecipientLabel(input: {
+  recipientEmail: string;
+  recipientFirstName?: string | null;
+  recipientLastName?: string | null;
+}) {
+  const name = [input.recipientFirstName, input.recipientLastName]
+    .filter(Boolean)
+    .join(" ")
+    .trim();
+
+  return name ? `${name} (${input.recipientEmail})` : input.recipientEmail;
 }
 
 function sanitizeConfirmationForLlm(
@@ -1628,6 +1848,23 @@ function collectRequiredFactsFromData(
         value: status
       },
       `${source}.status:${status}`
+    );
+  }
+
+  const currency =
+    typeof record.currency === "string" &&
+    requiredCurrencyValues.includes(record.currency as typeof requiredCurrencyValues[number])
+      ? (record.currency as typeof requiredCurrencyValues[number])
+      : undefined;
+  if (currency) {
+    addRequiredResponseFact(
+      facts,
+      {
+        kind: "currency",
+        source: `${source}.currency`,
+        value: currency
+      },
+      `${source}.currency:${currency}`
     );
   }
 
@@ -1770,6 +2007,15 @@ function buildRequiredResponseFacts(
       },
       `confirmation.amount:${amountToCents(activeConfirmation.amount)}`
     );
+    addRequiredResponseFact(
+      requiredFacts,
+      {
+        kind: "currency",
+        source: "confirmation.currency",
+        value: activeConfirmation.currency
+      },
+      `confirmation.currency:${activeConfirmation.currency}`
+    );
   }
 
   return [...requiredFacts.values()];
@@ -1872,6 +2118,46 @@ function hasContradictingRequiredDateFact(
   );
 }
 
+function detectMentionedCurrencies(message: string) {
+  const mentioned = new Set<typeof requiredCurrencyValues[number]>();
+  // TODO:  improve regex robustness
+  if (/₪|\bILS\b|\bNIS\b|\bshekels?\b/i.test(message)) {
+    mentioned.add("ILS");
+  }
+  if (/\$|\bUSD\b|\bdollars?\b/i.test(message)) {
+    mentioned.add("USD");
+  }
+  if (/€|\bEUR\b|\beuros?\b/i.test(message)) {
+    mentioned.add("EUR");
+  }
+
+  return [...mentioned];
+}
+
+function hasContradictingRequiredCurrencyFact(
+  message: string,
+  requiredResponseFacts: RequiredResponseFact[]
+) {
+  const allowedCurrencies = new Set(
+    requiredResponseFacts
+      .filter(
+        (fact): fact is Extract<RequiredResponseFact, { kind: "currency" }> =>
+          fact.kind === "currency"
+      )
+      .map((fact) => fact.value)
+  );
+  if (allowedCurrencies.size === 0) {
+    return false;
+  }
+
+  const mentionedCurrencies = detectMentionedCurrencies(message);
+  if (mentionedCurrencies.length === 0) {
+    return false;
+  }
+
+  return mentionedCurrencies.some((currency) => !allowedCurrencies.has(currency));
+}
+
 function getResponsePostCheckFailure(
   message: string,
   state: AssistantGraphState,
@@ -1887,6 +2173,10 @@ function getResponsePostCheckFailure(
 
   if (hasMissingRequiredAmountFact(message, requiredResponseFacts)) {
     return "missing_required_amount_fact";
+  }
+
+  if (hasContradictingRequiredCurrencyFact(message, requiredResponseFacts)) {
+    return "contradicting_required_currency_fact";
   }
 
   if (hasContradictingRequiredRecipientFact(message, requiredResponseFacts)) {
@@ -2154,79 +2444,114 @@ function buildAssistantGraph(options: GraphOptions) {
   return new StateGraph(AssistantStateAnnotation)
     .addNode(
       "loadAuthenticatedContext",
-      withNodeTrace("loadAuthenticatedContext", loadAuthenticatedContext)
+      withNodeTrace(
+        "loadAuthenticatedContext",
+        loadAuthenticatedContext,
+        options.onProgress
+      )
     )
     .addNode(
       "loadConversationContext",
       withNodeTrace(
         "loadConversationContext",
-        buildConversationLoader(options.conversationStore)
+        buildConversationLoader(options.conversationStore),
+        options.onProgress
       )
     )
     .addNode(
       "normalizeUserMessage",
-      withNodeTrace("normalizeUserMessage", normalizeMessageNode)
+      withNodeTrace(
+        "normalizeUserMessage",
+        normalizeMessageNode,
+        options.onProgress
+      )
     )
     .addNode(
       "resolveClarificationReply",
-      withNodeTrace("resolveClarificationReply", resolveClarificationReplyNode)
+      withNodeTrace(
+        "resolveClarificationReply",
+        resolveClarificationReplyNode,
+        options.onProgress
+      )
     )
     .addNode(
       "classifyIntent",
-      withNodeTrace("classifyIntent", buildIntentClassifier(options.llmProvider))
+      withNodeTrace(
+        "classifyIntent",
+        buildIntentClassifier(options.llmProvider),
+        options.onProgress
+      )
     )
     .addNode(
       "extractRequestSlots",
-      withNodeTrace("extractRequestSlots", extractRequestSlotsNode)
+      withNodeTrace(
+        "extractRequestSlots",
+        extractRequestSlotsNode,
+        options.onProgress
+      )
     )
     .addNode(
       "extractTransferDraft",
       withNodeTrace(
         "extractTransferDraft",
-        buildTransferDraftExtractor(options.llmProvider)
+        buildTransferDraftExtractor(options.llmProvider),
+        options.onProgress
       )
     )
     .addNode(
       "resolveCounterpartyReference",
       withNodeTrace(
         "resolveCounterpartyReference",
-        buildCounterpartyResolver(options.llmProvider)
+        buildCounterpartyResolver(options.llmProvider),
+        options.onProgress
       )
     )
     .addNode(
       "resolveContextualAmounts",
       withNodeTrace(
         "resolveContextualAmounts",
-        buildContextualAmountResolver(options.amountResolutionService)
+        buildContextualAmountResolver(options.amountResolutionService),
+        options.onProgress
       )
     )
     .addNode(
       "prepareTransferConfirmation",
       withNodeTrace(
         "prepareTransferConfirmation",
-        buildTransferConfirmationPreparer(options.transferPreparationService)
+        buildTransferConfirmationPreparer(options.transferPreparationService),
+        options.onProgress
       )
     )
     .addNode(
       "modifyPendingTransferConfirmation",
       withNodeTrace(
         "modifyPendingTransferConfirmation",
-        buildPendingTransferModifier(options.transferModificationService)
+        buildPendingTransferModifier(options.transferModificationService),
+        options.onProgress
       )
     )
     .addNode(
       "routeReadOnlyTools",
-      withNodeTrace("routeReadOnlyTools", buildToolRouter(options.tools))
+      withNodeTrace(
+        "routeReadOnlyTools",
+        buildToolRouter(options.tools),
+        options.onProgress
+      )
     )
     .addNode(
       "composeResponse",
-      withNodeTrace("composeResponse", buildResponseComposer(options.llmProvider))
+      withNodeTrace(
+        "composeResponse",
+        buildResponseComposer(options.llmProvider),
+        options.onProgress
+      )
     )
     .addNode(
       "saveConversation",
       withNodeTrace(
         "saveConversation",
-        buildConversationSaver(options.conversationStore)
+        buildConversationSaver(options.conversationStore),
+        options.onProgress
       )
     )
     .addEdge(START, "loadAuthenticatedContext")
@@ -2238,10 +2563,10 @@ function buildAssistantGraph(options: GraphOptions) {
     .addEdge("extractRequestSlots", "extractTransferDraft")
     .addEdge("extractTransferDraft", "resolveCounterpartyReference")
     .addEdge("resolveCounterpartyReference", "resolveContextualAmounts")
-    .addEdge("resolveContextualAmounts", "prepareTransferConfirmation")
+    .addEdge("resolveContextualAmounts", "routeReadOnlyTools")
+    .addEdge("routeReadOnlyTools", "prepareTransferConfirmation")
     .addEdge("prepareTransferConfirmation", "modifyPendingTransferConfirmation")
-    .addEdge("modifyPendingTransferConfirmation", "routeReadOnlyTools")
-    .addEdge("routeReadOnlyTools", "composeResponse")
+    .addEdge("modifyPendingTransferConfirmation", "composeResponse")
     .addEdge("composeResponse", "saveConversation")
     .addEdge("saveConversation", END)
     .compile();
@@ -2255,6 +2580,7 @@ export async function runAssistantGraph(
     tools: options.tools ?? readOnlyToolExecutors,
     llmProvider: options.llmProvider,
     conversationStore: options.conversationStore,
+    onProgress: options.onProgress,
     amountResolutionService:
       options.amountResolutionService ?? resolveContextualAmount,
     transferPreparationService:

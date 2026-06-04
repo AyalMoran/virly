@@ -1,0 +1,39 @@
+{
+  "suiteName": "hebrew-mixed",
+  "scenarios": [
+    {
+      "id": "hebrew-recent-received",
+      "description": "Hebrew read-only phrasing reaches the recent received counterparties flow.",
+      "toolPreset": "phase_two_counterparty",
+      "turns": [
+        {
+          "userMessage": "מי העביר לי היום?",
+          "expectedIntent": "recent_received_counterparties",
+          "expectedToolCalls": ["getRecentReceivedCounterparties"],
+          "mustInclude": ["Sarah Example"],
+          "mustNotInclude": ["not available yet"]
+        }
+      ]
+    },
+    {
+      "id": "hebrew-transfer-pronoun",
+      "description": "Hebrew transfer preparation resolves a remembered recipient and prepares a confirmation card.",
+      "toolPreset": "default",
+      "setup": {
+        "rememberedCounterparties": ["alex@example.com"]
+      },
+      "turns": [
+        {
+          "userMessage": "תעביר לו 50",
+          "expectedIntent": "transfer_prepare",
+          "expectedConfirmation": {
+            "recipientEmail": "alex@example.com",
+            "amount": 50
+          },
+          "mustInclude": ["review the transfer details"],
+          "mustNotInclude": ["could not find account information"]
+        }
+      ]
+    }
+  ]
+}
