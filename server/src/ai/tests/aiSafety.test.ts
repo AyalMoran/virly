@@ -78,6 +78,7 @@ import {
   normalizeUserMessage
 } from "../messageNormalization.js";
 import { runAiEvalFixtures } from "../evals/runner.js";
+import { loadAiEvalFixtureFiles } from "../evals/loadFixtures.js";
 import { buildSeededMongoEvalSeedData } from "../evals/seededMongo.js";
 import type { AiEvalFixtureFile } from "../evals/types.js";
 
@@ -1267,6 +1268,33 @@ function createAuthHeaders() {
   };
 }
 
+async function collectGraphNodeTransitions(
+  input: Parameters<typeof runAssistantGraph>[0],
+  options: Parameters<typeof runAssistantGraph>[1]
+) {
+  const previousDebugTrace = config.ai.debugTrace;
+  const auditLogs: AuditLogInput[] = [];
+
+  config.ai.debugTrace = true;
+
+  try {
+    const result = await runAssistantGraph(input, {
+      ...options,
+      auditLogger: async (auditInput) => {
+        auditLogs.push(auditInput);
+        await options?.auditLogger?.(auditInput);
+      }
+    });
+    const nodeNames = (auditLogs[0]?.diagnostics ?? [])
+      .filter((event) => event.type === "node_transition")
+      .map((event) => event.nodeName);
+
+    return { result, nodeNames };
+  } finally {
+    config.ai.debugTrace = previousDebugTrace;
+  }
+}
+
 test("read-only route map preserves existing implemented tool routing", () => {
   assert.deepEqual(getReadOnlyToolsForIntent("balance_inquiry"), [
     "getUserAccounts",
@@ -1281,6 +1309,133 @@ test("read-only route map preserves existing implemented tool routing", () => {
   assert.deepEqual(getReadOnlyToolsForIntent("transfer_prepare"), []);
   assert.deepEqual(getReadOnlyToolsForIntent("transfer_modify_pending"), []);
   assert.deepEqual(getReadOnlyToolsForIntent("unsafe_request"), []);
+});
+
+test("read-only graph route skips transfer preparation and pending modification services", async () => {
+  const executed: string[] = [];
+  const transferPreparations: Array<Parameters<TransferPreparationService>[0]> = [];
+  const modifications: Array<Parameters<TransferModificationService>[0]> = [];
+  const { result, nodeNames } = await collectGraphNodeTransitions(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-routing-read-only-skips-transfer-services",
+      requestId: "request-routing-read-only-skips-transfer-services",
+      message: "What is my balance?"
+    },
+    {
+      tools: createFakeTools(executed),
+      transferPreparationService:
+        createFakeTransferPreparationService(transferPreparations),
+      transferModificationService:
+        createFakeTransferModificationService(modifications)
+    }
+  );
+
+  assert.equal(result.intent, "balance_inquiry");
+  assert.deepEqual(result.toolCalls, [
+    "getUserAccounts",
+    "getAccountBalance"
+  ]);
+  assert.equal(transferPreparations.length, 0);
+  assert.equal(modifications.length, 0);
+  assert.ok(nodeNames.includes("routeReadOnlyTools"));
+  assert.equal(nodeNames.includes("extractTransferDraft"), false);
+  assert.equal(nodeNames.includes("prepareTransferConfirmation"), false);
+  assert.equal(nodeNames.includes("modifyPendingTransferConfirmation"), false);
+});
+
+test("transfer preparation route skips generic read-only tool flow", async () => {
+  const executed: string[] = [];
+  const transferPreparations: Array<Parameters<TransferPreparationService>[0]> = [];
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "transfer_prepare" };
+    },
+    async extractTransferDraft() {
+      return {
+        recipientEmail: "alex@example.com",
+        amount: 25,
+        currency: "ILS",
+        currencyMentioned: true,
+        currencySupported: true
+      };
+    }
+  });
+  const { result, nodeNames } = await collectGraphNodeTransitions(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-routing-transfer-skips-read-only-flow",
+      requestId: "request-routing-transfer-skips-read-only-flow",
+      message: "Send alex@example.com 25 shekels"
+    },
+    {
+      tools: createFakeTools(executed),
+      llmProvider,
+      transferPreparationService:
+        createFakeTransferPreparationService(transferPreparations)
+    }
+  );
+
+  assert.equal(result.intent, "transfer_prepare");
+  assert.equal(result.confirmation?.status, "pending");
+  assert.deepEqual(result.toolCalls, []);
+  assert.deepEqual(executed, []);
+  assert.equal(transferPreparations.length, 1);
+  assert.ok(nodeNames.includes("extractTransferDraft"));
+  assert.ok(nodeNames.includes("prepareTransferConfirmation"));
+  assert.equal(nodeNames.includes("routeReadOnlyTools"), false);
+  assert.equal(nodeNames.includes("modifyPendingTransferConfirmation"), false);
+});
+
+test("pending confirmation chat route remains read-only and skips transfer services", async () => {
+  const executed: string[] = [];
+  const transferPreparations: Array<Parameters<TransferPreparationService>[0]> = [];
+  const modifications: Array<Parameters<TransferModificationService>[0]> = [];
+  const conversationStore = createFakeConversationStore({
+    messages: [],
+    memory: {
+      ...createEmptyCounterpartyMemory(),
+      pendingConfirmation: {
+        confirmationId: "pending-transfer-1",
+        type: "transfer",
+        status: "pending",
+        createdAt: new Date().toISOString(),
+        expiresAt: new Date(Date.now() + 600000).toISOString(),
+        recipientEmail: "alex@example.com",
+        amount: 50,
+        currency: "ILS",
+        turnCreated: 1,
+        version: 1
+      },
+      mode: "transfer_confirmation_pending"
+    }
+  });
+  const { result, nodeNames } = await collectGraphNodeTransitions(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-routing-chat-confirmation-read-only",
+      requestId: "request-routing-chat-confirmation-read-only",
+      message: "Yes, confirm it"
+    },
+    {
+      tools: createFakePhaseFourTransferTools(executed),
+      conversationStore,
+      transferPreparationService:
+        createFakeTransferPreparationService(transferPreparations),
+      transferModificationService:
+        createFakeTransferModificationService(modifications)
+    }
+  );
+
+  assert.equal(result.intent, "pending_confirmation_status");
+  assert.deepEqual(result.toolCalls, []);
+  assert.deepEqual(executed, []);
+  assert.equal(transferPreparations.length, 0);
+  assert.equal(modifications.length, 0);
+  assert.ok(nodeNames.includes("routeReadOnlyTools"));
+  assert.equal(nodeNames.includes("prepareTransferConfirmation"), false);
+  assert.equal(nodeNames.includes("modifyPendingTransferConfirmation"), false);
+  assert.match(result.message, /use its Confirm or Deny button/i);
 });
 
 test("read-only route map includes planned phase one tool routes", () => {
@@ -1311,10 +1466,21 @@ test("phase 13 deterministic eval fixtures pass against graph", async () => {
 });
 
 test("phase 13 llm-dev eval mode fails clearly when no configured provider is available", async () => {
-  await assert.rejects(
-    () => runAiEvalFixtures({ mode: "llm-dev" }),
-    /Configured LLM eval mode requires VIRLY_AI_EVAL_ENABLE_LLM_DEV=true|Configured LLM eval mode requires OPENAI_API_KEY and VIRLY_AI_MODEL/i
-  );
+  const previous = process.env.VIRLY_AI_EVAL_ENABLE_LLM_DEV;
+  delete process.env.VIRLY_AI_EVAL_ENABLE_LLM_DEV;
+
+  try {
+    await assert.rejects(
+      () => runAiEvalFixtures({ mode: "llm-dev" }),
+      /Configured LLM eval mode requires VIRLY_AI_EVAL_ENABLE_LLM_DEV=true|Configured LLM eval mode requires OPENAI_API_KEY and VIRLY_AI_MODEL/i
+    );
+  } finally {
+    if (previous == null) {
+      delete process.env.VIRLY_AI_EVAL_ENABLE_LLM_DEV;
+    } else {
+      process.env.VIRLY_AI_EVAL_ENABLE_LLM_DEV = previous;
+    }
+  }
 });
 
 test("phase 13 llm-dev eval mode can run with an injected configured provider", async () => {
@@ -1376,10 +1542,97 @@ test("phase 13 llm-dev eval mode can run with an injected configured provider", 
 });
 
 test("phase 13 seeded-mongo eval mode fails closed without explicit dedicated db opt-in", async () => {
-  await assert.rejects(
-    () => runAiEvalFixtures({ mode: "seeded-mongo" }),
-    /Seeded Mongo eval mode requires VIRLY_AI_EVAL_ENABLE_MONGO=true|Seeded Mongo eval mode requires VIRLY_AI_EVAL_MONGO_URI/i
-  );
+  const previousMongo = process.env.VIRLY_AI_EVAL_ENABLE_MONGO;
+  const previousMongoUri = process.env.VIRLY_AI_EVAL_MONGO_URI;
+  delete process.env.VIRLY_AI_EVAL_ENABLE_MONGO;
+  delete process.env.VIRLY_AI_EVAL_MONGO_URI;
+
+  try {
+    await assert.rejects(
+      () => runAiEvalFixtures({ mode: "seeded-mongo" }),
+      /Seeded Mongo eval mode requires VIRLY_AI_EVAL_ENABLE_MONGO=true|Seeded Mongo eval mode requires VIRLY_AI_EVAL_MONGO_URI/i
+    );
+  } finally {
+    if (previousMongo == null) {
+      delete process.env.VIRLY_AI_EVAL_ENABLE_MONGO;
+    } else {
+      process.env.VIRLY_AI_EVAL_ENABLE_MONGO = previousMongo;
+    }
+    if (previousMongoUri == null) {
+      delete process.env.VIRLY_AI_EVAL_MONGO_URI;
+    } else {
+      process.env.VIRLY_AI_EVAL_MONGO_URI = previousMongoUri;
+    }
+  }
+});
+
+test("phase 13 llm-seeded-mongo eval mode requires live llm opt-in", async () => {
+  const previous = process.env.VIRLY_AI_EVAL_ENABLE_LLM_DEV;
+  delete process.env.VIRLY_AI_EVAL_ENABLE_LLM_DEV;
+
+  try {
+    await assert.rejects(
+      () => runAiEvalFixtures({ mode: "llm-seeded-mongo" }),
+      /Configured LLM eval mode requires VIRLY_AI_EVAL_ENABLE_LLM_DEV=true/i
+    );
+  } finally {
+    if (previous == null) {
+      delete process.env.VIRLY_AI_EVAL_ENABLE_LLM_DEV;
+    } else {
+      process.env.VIRLY_AI_EVAL_ENABLE_LLM_DEV = previous;
+    }
+  }
+});
+
+test("phase 13 llm-seeded-mongo eval mode requires seeded mongo opt-in after live llm setup", async () => {
+  const previousLlm = process.env.VIRLY_AI_EVAL_ENABLE_LLM_DEV;
+  const previousMongo = process.env.VIRLY_AI_EVAL_ENABLE_MONGO;
+  const previousMongoUri = process.env.VIRLY_AI_EVAL_MONGO_URI;
+  process.env.VIRLY_AI_EVAL_ENABLE_LLM_DEV = "true";
+  delete process.env.VIRLY_AI_EVAL_ENABLE_MONGO;
+  delete process.env.VIRLY_AI_EVAL_MONGO_URI;
+
+  const fakeConfiguredProvider: AssistantLlmProvider = {
+    async classifyIntent() {
+      return { intent: "balance_inquiry" };
+    },
+    async extractTransferDraft() {
+      return {};
+    },
+    async resolveCounterpartyReference() {
+      return { kind: "none", confidence: "low" };
+    },
+    async composeResponse(input) {
+      return input.fallbackMessage;
+    }
+  };
+
+  try {
+    await assert.rejects(
+      () =>
+        runAiEvalFixtures({
+          mode: "llm-seeded-mongo",
+          createConfiguredProvider: () => fakeConfiguredProvider
+        }),
+      /Seeded Mongo eval mode requires VIRLY_AI_EVAL_ENABLE_MONGO=true/i
+    );
+  } finally {
+    if (previousLlm == null) {
+      delete process.env.VIRLY_AI_EVAL_ENABLE_LLM_DEV;
+    } else {
+      process.env.VIRLY_AI_EVAL_ENABLE_LLM_DEV = previousLlm;
+    }
+    if (previousMongo == null) {
+      delete process.env.VIRLY_AI_EVAL_ENABLE_MONGO;
+    } else {
+      process.env.VIRLY_AI_EVAL_ENABLE_MONGO = previousMongo;
+    }
+    if (previousMongoUri == null) {
+      delete process.env.VIRLY_AI_EVAL_MONGO_URI;
+    } else {
+      process.env.VIRLY_AI_EVAL_MONGO_URI = previousMongoUri;
+    }
+  }
 });
 
 test("phase 13 seeded-mongo seed data matches current fixture expectations", () => {
@@ -1400,14 +1653,36 @@ test("phase 13 seeded-mongo seed data matches current fixture expectations", () 
     .reduce((total, transaction) => total + transaction.amount, 0);
   assert.equal(alexTotalReceived, 35);
 
-  const danielDirections = (transactionsByCounterparty.get("daniel@example.com") ?? []).map(
-    (transaction) => transaction.type
-  );
-  assert.deepEqual(danielDirections.sort(), ["credit", "debit"]);
+  const danielTotalReceived = (transactionsByCounterparty.get("daniel@example.com") ?? [])
+    .filter((transaction) => transaction.type === "credit")
+    .reduce((total, transaction) => total + transaction.amount, 0);
+  assert.equal(danielTotalReceived, 35);
+
+  const mayaTransactions = transactionsByCounterparty.get("maya@example.com") ?? [];
+  assert.equal(mayaTransactions.some((transaction) => transaction.type === "debit" && transaction.amount === 42), true);
+  assert.equal(mayaTransactions.some((transaction) => transaction.type === "credit"), true);
 
   const sarahTransactions = transactionsByCounterparty.get("sarah@example.com") ?? [];
-  assert.equal(sarahTransactions.length > 0, true);
-  assert.equal(sarahTransactions[0]?.type, "credit");
+  assert.equal(sarahTransactions.some((transaction) => transaction.type === "credit" && transaction.amount === 30), true);
+  assert.equal(sarahTransactions.some((transaction) => transaction.type === "debit" && transaction.amount === 25), true);
+
+  const alexTransactions = transactionsByCounterparty.get("alex@example.com") ?? [];
+  assert.equal(alexTransactions.some((transaction) => transaction.type === "debit" && transaction.amount === 12), true);
+
+  const danielTransactions = transactionsByCounterparty.get("daniel@example.com") ?? [];
+  assert.equal(danielTransactions.some((transaction) => transaction.type === "debit" && transaction.amount === 25), true);
+
+  const pendingFixture = loadAiEvalFixtureFiles().find(
+    (fixture) => fixture.suiteName === "pending-confirmations"
+  );
+  const multiPendingScenario = pendingFixture?.scenarios.find(
+    (scenario) => scenario.id === "hebrew-pending-list-current-conversation"
+  );
+  assert.equal(multiPendingScenario?.setup?.pendingTransfers?.length, 2);
+  assert.deepEqual(
+    multiPendingScenario?.setup?.pendingTransfers?.map((pendingTransfer) => pendingTransfer.amount),
+    [50, 90]
+  );
 });
 
 test("openapi assistant intent enum stays in sync with state contracts", () => {
@@ -5518,7 +5793,7 @@ test("hebrew transfer request resolves לו from last counterparty and returns c
   assert.equal(transferPreparations[0].resolvedCounterparty?.email, "alex@example.com");
   assert.equal(
     result.message,
-    "Please review the transfer details and use the confirmation buttons before I send anything."
+    "צריך לבדוק את פרטי ההעברה ולהשתמש בכפתורי האישור לפני שמשהו נשלח."
   );
 });
 

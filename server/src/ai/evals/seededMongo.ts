@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { DEFAULT_ASSISTANT_ID } from "../assistants.js";
 import { runAssistantGraph } from "../graph.js";
-import type { AssistantToolExecutors } from "../state.js";
+import type { AssistantLlmProvider, AssistantToolExecutors } from "../state.js";
 import { readOnlyToolExecutors } from "../tools/index.js";
 import { AiConversation } from "../../models/AiConversation.js";
 import { AiPendingTransfer } from "../../models/AiPendingTransfer.js";
@@ -61,12 +61,17 @@ function isSeededMongoEvalEnabled() {
   return process.env.VIRLY_AI_EVAL_ENABLE_MONGO?.trim().toLowerCase() === "true";
 }
 
+function shouldKeepSeededMongoAfterRun() {
+  return process.env.VIRLY_AI_EVAL_KEEP_MONGO?.trim().toLowerCase() === "true";
+}
+
 export function buildSeededMongoEvalSeedData(): SeededMongoEvalSeedData {
   const now = new Date("2026-06-04T10:00:00.000Z");
   const oneHourAgo = new Date("2026-06-04T09:00:00.000Z");
   const yesterday = new Date("2026-06-03T08:00:00.000Z");
   const twoDaysAgo = new Date("2026-06-02T12:00:00.000Z");
   const threeDaysAgo = new Date("2026-06-01T14:00:00.000Z");
+  const fourDaysAgo = new Date("2026-05-31T11:00:00.000Z");
 
   return {
     users: [
@@ -131,6 +136,16 @@ export function buildSeededMongoEvalSeedData(): SeededMongoEvalSeedData {
       },
       {
         ownerId: SEEDED_MONGO_USER_ID,
+        counterpartyEmail: "maya@example.com",
+        amount: 42,
+        type: "debit",
+        directionLabel: "sent",
+        reason: "coffee",
+        createdAt: now,
+        updatedAt: now
+      },
+      {
+        ownerId: SEEDED_MONGO_USER_ID,
         counterpartyEmail: "daniel@example.com",
         amount: 50,
         type: "debit",
@@ -141,7 +156,37 @@ export function buildSeededMongoEvalSeedData(): SeededMongoEvalSeedData {
       },
       {
         ownerId: SEEDED_MONGO_USER_ID,
+        counterpartyEmail: "sarah@example.com",
+        amount: 25,
+        type: "debit",
+        directionLabel: "sent",
+        reason: "tickets",
+        createdAt: yesterday,
+        updatedAt: yesterday
+      },
+      {
+        ownerId: SEEDED_MONGO_USER_ID,
         counterpartyEmail: "alex@example.com",
+        amount: 20,
+        type: "credit",
+        directionLabel: "received",
+        reason: "payback",
+        createdAt: yesterday,
+        updatedAt: yesterday
+      },
+      {
+        ownerId: SEEDED_MONGO_USER_ID,
+        counterpartyEmail: "daniel@example.com",
+        amount: 25,
+        type: "debit",
+        directionLabel: "sent",
+        reason: "groceries",
+        createdAt: twoDaysAgo,
+        updatedAt: twoDaysAgo
+      },
+      {
+        ownerId: SEEDED_MONGO_USER_ID,
+        counterpartyEmail: "maya@example.com",
         amount: 20,
         type: "credit",
         directionLabel: "received",
@@ -161,7 +206,37 @@ export function buildSeededMongoEvalSeedData(): SeededMongoEvalSeedData {
       },
       {
         ownerId: SEEDED_MONGO_USER_ID,
+        counterpartyEmail: "daniel@example.com",
+        amount: 15,
+        type: "credit",
+        directionLabel: "received",
+        reason: "split",
+        createdAt: threeDaysAgo,
+        updatedAt: threeDaysAgo
+      },
+      {
+        ownerId: SEEDED_MONGO_USER_ID,
         counterpartyEmail: "alex@example.com",
+        amount: 15,
+        type: "credit",
+        directionLabel: "received",
+        reason: "split",
+        createdAt: threeDaysAgo,
+        updatedAt: threeDaysAgo
+      },
+      {
+        ownerId: SEEDED_MONGO_USER_ID,
+        counterpartyEmail: "alex@example.com",
+        amount: 12,
+        type: "debit",
+        directionLabel: "sent",
+        reason: "snacks",
+        createdAt: fourDaysAgo,
+        updatedAt: fourDaysAgo
+      },
+      {
+        ownerId: SEEDED_MONGO_USER_ID,
+        counterpartyEmail: "maya@example.com",
         amount: 15,
         type: "credit",
         directionLabel: "received",
@@ -209,6 +284,46 @@ async function seedScenarioConversationContext(scenario: AiEvalScenario) {
     messages: context.messages,
     memory: context.memory
   });
+
+  if (
+    scenario.setup?.pendingTransfers?.length ||
+    scenario.turns.some((turn) =>
+      turn.expectedToolCalls?.includes("getPendingAiTransfers")
+    )
+  ) {
+    const pendingTransfers =
+      scenario.setup?.pendingTransfers?.length
+        ? scenario.setup.pendingTransfers
+        : [
+            {
+              recipientEmail: "alex@example.com",
+              recipientFirstName: "Alex",
+              recipientLastName: "Example",
+              amount: 50,
+              currency: "ILS" as const
+            }
+          ];
+    const createdAtBase = new Date("2026-06-04T10:00:00.000Z").getTime();
+
+    await AiPendingTransfer.insertMany(
+      pendingTransfers.map((pendingTransfer, index) => ({
+        userId: SEEDED_MONGO_USER_ID,
+        conversationId: `eval-${scenario.id}`,
+        assistantId: DEFAULT_ASSISTANT_ID,
+        recipientEmail: pendingTransfer.recipientEmail,
+        recipientFirstName: pendingTransfer.recipientFirstName ?? null,
+        recipientLastName: pendingTransfer.recipientLastName ?? null,
+        amount: pendingTransfer.amount,
+        currency: pendingTransfer.currency,
+        reason: pendingTransfer.reason ?? null,
+        version: 1,
+        status: "pending",
+        expiresAt: new Date("2026-06-30T12:00:00.000Z"),
+        createdAt: new Date(createdAtBase - index * 60000),
+        updatedAt: new Date(createdAtBase - index * 60000)
+      }))
+    );
+  }
 }
 
 function collectFailures(
@@ -216,10 +331,20 @@ function collectFailures(
   scenario: AiEvalScenario,
   turn: AiEvalTurnExpectation,
   result: Awaited<ReturnType<typeof runAssistantGraph>>,
-  turnIndex: number
+  turnIndex: number,
+  mode: "seeded-mongo" | "llm-seeded-mongo"
 ) {
   const failures: string[] = [];
   const prefix = `${fixtureFile.suiteName}/${scenario.id} turn ${turnIndex}`;
+  const containsHebrew = /[\u0590-\u05ff]/.test(result.message);
+
+  if (
+    mode === "llm-seeded-mongo" &&
+    turn.expectedResponseLanguage === "hebrew" &&
+    !containsHebrew
+  ) {
+    failures.push(`${prefix} response expected Hebrew text`);
+  }
 
   if (turn.expectedIntent && result.intent !== turn.expectedIntent) {
     failures.push(
@@ -234,6 +359,12 @@ function collectFailures(
     failures.push(
       `${prefix} tool calls expected ${JSON.stringify(turn.expectedToolCalls)} but got ${JSON.stringify(result.toolCalls)}`
     );
+  }
+
+  for (const expectedToolName of turn.expectedToolCallsInclude ?? []) {
+    if (!result.toolCalls.includes(expectedToolName)) {
+      failures.push(`${prefix} tool calls must include ${expectedToolName}`);
+    }
   }
 
   if (
@@ -261,6 +392,10 @@ function collectFailures(
     failures.push(
       `${prefix} clarification presence expected ${turn.mustAskClarification} but got ${Boolean(result.clarification)}`
     );
+  }
+
+  if (turn.mustNotCreateConfirmation && result.confirmation) {
+    failures.push(`${prefix} expected no transfer confirmation`);
   }
 
   for (const expectedText of turn.mustInclude ?? []) {
@@ -292,7 +427,10 @@ async function getSeededMongoToolsForScenario(
   return readOnlyToolExecutors;
 }
 
-export async function runSeededMongoEvalFixtures(): Promise<AiEvalRunSummary> {
+export async function runSeededMongoEvalFixtures(options: {
+  mode?: "seeded-mongo" | "llm-seeded-mongo";
+  llmProvider?: AssistantLlmProvider;
+} = {}): Promise<AiEvalRunSummary> {
   if (!isSeededMongoEvalEnabled()) {
     throw new Error(
       "Seeded Mongo eval mode requires VIRLY_AI_EVAL_ENABLE_MONGO=true."
@@ -310,6 +448,7 @@ export async function runSeededMongoEvalFixtures(): Promise<AiEvalRunSummary> {
   const failedTurns: AiEvalTurnResult[] = [];
   let totalScenarios = 0;
   let totalTurns = 0;
+  const mode = options.mode ?? "seeded-mongo";
 
   await mongoose.connect(mongoUri);
 
@@ -334,6 +473,7 @@ export async function runSeededMongoEvalFixtures(): Promise<AiEvalRunSummary> {
             {
               tools,
               conversationStore: mongoConversationStore,
+              llmProvider: options.llmProvider,
               transferPreparationService: createTransferPreparationService(),
               transferModificationService: createTransferModificationService()
             }
@@ -344,7 +484,8 @@ export async function runSeededMongoEvalFixtures(): Promise<AiEvalRunSummary> {
             scenario,
             turn,
             result,
-            turnIndex
+            turnIndex,
+            mode
           );
 
           if (failures.length > 0) {
@@ -362,14 +503,16 @@ export async function runSeededMongoEvalFixtures(): Promise<AiEvalRunSummary> {
     }
   } finally {
     try {
-      await mongoose.connection.dropDatabase();
+      if (!shouldKeepSeededMongoAfterRun()) {
+        await mongoose.connection.dropDatabase();
+      }
     } finally {
       await mongoose.disconnect();
     }
   }
 
   return {
-    mode: "seeded-mongo",
+    mode,
     totalFixtures: fixtures.length,
     totalScenarios,
     totalTurns,

@@ -1,6 +1,7 @@
 import { runAssistantGraph } from "../graph.js";
 import { createConfiguredAssistantLlmProvider } from "../llm.js";
 import { classifyAmountReference } from "../amountResolution.js";
+import { classifyAssistantIntentDeterministic } from "../router.js";
 import type {
   AmountResolutionService,
   AssistantLlmProvider,
@@ -17,7 +18,11 @@ import {
 } from "./support.js";
 import type { AiEvalFixtureFile, AiEvalScenario, AiEvalTurnExpectation } from "./types.js";
 
-export type AiEvalMode = "deterministic" | "llm-dev" | "seeded-mongo";
+export type AiEvalMode =
+  | "deterministic"
+  | "llm-dev"
+  | "seeded-mongo"
+  | "llm-seeded-mongo";
 
 export type AiEvalTurnResult = {
   fixtureSuiteName: string;
@@ -40,6 +45,26 @@ function isLlmDevEvalEnabled() {
   return process.env.VIRLY_AI_EVAL_ENABLE_LLM_DEV?.trim().toLowerCase() === "true";
 }
 
+function createConfiguredLlmProviderForEval(
+  createConfiguredProvider: (() => AssistantLlmProvider | undefined) | undefined
+) {
+  if (!isLlmDevEvalEnabled()) {
+    throw new Error(
+      "Configured LLM eval mode requires VIRLY_AI_EVAL_ENABLE_LLM_DEV=true."
+    );
+  }
+
+  const configuredProvider =
+    createConfiguredProvider?.() ?? createConfiguredAssistantLlmProvider();
+  if (!configuredProvider) {
+    throw new Error(
+      "Configured LLM eval mode requires OPENAI_API_KEY and VIRLY_AI_MODEL."
+    );
+  }
+
+  return configuredProvider;
+}
+
 function fakeResult(input: {
   toolName: Parameters<typeof createToolResult>[0]["toolName"];
   summary: string;
@@ -60,8 +85,66 @@ function fakeResult(input: {
   });
 }
 
+function pendingTransferRowsForScenario(scenario?: AiEvalScenario) {
+  const configured = scenario?.setup?.pendingTransfers?.length
+    ? scenario.setup.pendingTransfers
+    : [
+        {
+          recipientEmail: "alex@example.com",
+          amount: 50,
+          currency: "ILS" as const,
+          recipientFirstName: "Alex",
+          recipientLastName: "Example"
+        }
+      ];
+
+  return configured.map((pending, index) => {
+    const firstName =
+      pending.recipientFirstName ?? pending.recipientEmail.split("@")[0] ?? "";
+    const lastName = pending.recipientLastName ?? "Example";
+    const displayName = [firstName, lastName].filter(Boolean).join(" ").trim();
+    const maskedEmail = `${pending.recipientEmail.slice(0, 1)}***@example.com`;
+    const recipientLabel = displayName
+      ? `${displayName} (${pending.recipientEmail})`
+      : pending.recipientEmail;
+    const recipientMaskedLabel = displayName
+      ? `${displayName} (${maskedEmail})`
+      : maskedEmail;
+
+    return {
+      pendingTransferId: `pending-transfer-${index + 1}`,
+      label: `${index + 1}. ${pending.amount.toFixed(2)} ${pending.currency} to ${recipientLabel}`,
+      llmLabel: `${index + 1}. ${pending.amount.toFixed(2)} ${pending.currency} to ${recipientMaskedLabel}`,
+      recipientLabel,
+      recipientMaskedLabel,
+      recipientEmailMasked: maskedEmail,
+      amount: pending.amount,
+      currency: pending.currency,
+      status: "pending" as const,
+      expiresAt: "2026-06-30T12:00:00.000Z"
+    };
+  });
+}
+
+function getOrdinalForEvalMessage(message: string) {
+  const normalized = message.toLowerCase();
+
+  if (/\b(second|2nd)\b/i.test(normalized) || /(השני|השנייה)/.test(message)) {
+    return 2;
+  }
+  if (/\b(third|3rd)\b/i.test(normalized) || /(השלישי|השלישית)/.test(message)) {
+    return 3;
+  }
+  if (/\b(first|1st)\b/i.test(normalized) || /(הראשון|הראשונה)/.test(message)) {
+    return 1;
+  }
+
+  return null;
+}
+
 function createDefaultFakeTools(
-  counterpartyEmail = "alex@example.com"
+  counterpartyEmail = "alex@example.com",
+  scenario?: AiEvalScenario
 ): AssistantToolExecutors {
   const maskedLabel = "a***@example.com";
   const userLabel = "alex@example.com";
@@ -195,6 +278,14 @@ function createDefaultFakeTools(
         metadata: { recordCount: 1 }
       });
     },
+    async getTransferQuote() {
+      return fakeResult({
+        toolName: "getTransferQuote",
+        summary:
+          "Transfer quote: this transfer can be prepared in ILS with no fee.",
+        metadata: { recordCount: 1 }
+      });
+    },
     async getTransferEligibility() {
       return fakeResult({
         toolName: "getTransferEligibility",
@@ -211,85 +302,79 @@ function createDefaultFakeTools(
       });
     },
     async getPendingAiTransfers() {
+      const rows = pendingTransferRowsForScenario(scenario);
+
       return fakeResult({
         toolName: "getPendingAiTransfers",
-        data: [
-          {
-            pendingTransferId: "pending-transfer-1",
-            label: "1. 50.00 ILS to Alex Example (alex@example.com)",
-            recipientLabel: "Alex Example (alex@example.com)",
-            recipientMaskedLabel: "Alex Example (a***@example.com)",
-            recipientEmailMasked: "a***@example.com",
-            amount: 50,
-            currency: "ILS",
-            status: "pending",
-            expiresAt: "2026-05-24T12:00:00.000Z"
-          }
-        ],
+        data: rows,
         memoryUpdates: {
-          pendingTransfers: [
-            {
-              pendingTransferId: "pending-transfer-1",
-              label: "1. 50.00 ILS to Alex Example (alex@example.com)",
-              recipientLabel: "Alex Example (alex@example.com)",
-              amount: 50,
-              currency: "ILS",
-              expiresAt: "2026-05-24T12:00:00.000Z"
-            }
-          ]
+          pendingTransfers: rows.map((row) => ({
+            pendingTransferId: row.pendingTransferId,
+            label: row.label,
+            recipientLabel: row.recipientLabel,
+            amount: row.amount,
+            currency: row.currency,
+            expiresAt: row.expiresAt
+          }))
         },
-        summary:
-          "Pending transfer confirmations in this conversation: 1. 50.00 ILS to Alex Example (a***@example.com).",
-        userSummary:
-          "Pending transfer confirmations in this conversation: 1. 50.00 ILS to Alex Example (alex@example.com).",
+        summary: `Pending transfer confirmations in this conversation: ${rows
+          .map((row) => row.llmLabel)
+          .join("; ")}.`,
+        userSummary: `Pending transfer confirmations in this conversation: ${rows
+          .map((row) => row.label)
+          .join("; ")}.`,
         metadata: {
-          recordCount: 1,
-          pendingTransfers: [
-            {
-              pendingTransferId: "pending-transfer-1",
-              label: "1. 50.00 ILS to Alex Example (a***@example.com)",
-              recipientLabel: "Alex Example (a***@example.com)",
-              amount: 50,
-              currency: "ILS",
-              status: "pending",
-              expiresAt: "2026-05-24T12:00:00.000Z"
-            }
-          ]
+          recordCount: rows.length,
+          pendingTransfers: rows.map((row) => ({
+            pendingTransferId: row.pendingTransferId,
+            label: row.llmLabel,
+            recipientLabel: row.recipientMaskedLabel,
+            amount: row.amount,
+            currency: row.currency,
+            status: row.status,
+            expiresAt: row.expiresAt
+          }))
         }
       });
     },
-    async resolvePendingTransferReference() {
+    async resolvePendingTransferReference(context: ToolContext) {
+      const rows = pendingTransferRowsForScenario(scenario);
+      const ordinal = getOrdinalForEvalMessage(context.message);
+      const resolvedRows = ordinal ? rows.slice(ordinal - 1, ordinal) : rows;
+      const status = resolvedRows.length === 1 ? "resolved" : "ambiguous";
+
       return fakeResult({
         toolName: "resolvePendingTransferReference",
         data: {
           kind: "pending_transfer",
-          status: "resolved",
-          pendingTransferId: "pending-transfer-1",
-          candidates: [
-            {
-              id: "pending-transfer-1",
-              label: "1. 50.00 ILS to Alex Example (alex@example.com)",
-              value: "pending-transfer-1"
-            }
-          ]
+          status,
+          pendingTransferId:
+            status === "resolved" ? resolvedRows[0]?.pendingTransferId : undefined,
+          candidates: resolvedRows.map((row) => ({
+            id: row.pendingTransferId,
+            label: row.label,
+            value: row.pendingTransferId
+          }))
         },
         summary:
-          "Resolved pending transfer reference to 1. 50.00 ILS to Alex Example (a***@example.com).",
+          status === "resolved"
+            ? `Resolved pending transfer reference to ${resolvedRows[0]?.llmLabel}.`
+            : `I found multiple pending transfer confirmations: ${rows.map((row) => row.llmLabel).join("; ")}.`,
         userSummary:
-          "Resolved pending transfer reference to 1. 50.00 ILS to Alex Example (alex@example.com).",
+          status === "resolved"
+            ? `Resolved pending transfer reference to ${resolvedRows[0]?.label}.`
+            : `I found multiple pending transfer confirmations: ${rows.map((row) => row.label).join("; ")}.`,
         metadata: {
-          recordCount: 1,
-          pendingTransferResolutionStatus: "resolved",
-          pendingTransferCandidates: [
-            {
-              pendingTransferId: "pending-transfer-1",
-              label: "1. 50.00 ILS to Alex Example (a***@example.com)",
-              recipientLabel: "Alex Example (a***@example.com)",
-              amount: 50,
-              currency: "ILS",
-              expiresAt: "2026-05-24T12:00:00.000Z"
-            }
-          ]
+          recordCount: resolvedRows.length,
+          pendingTransferResolutionStatus: status,
+          pendingTransferCandidates: resolvedRows.map((row) => ({
+            pendingTransferId: row.pendingTransferId,
+            label: row.llmLabel,
+            recipientLabel: row.recipientMaskedLabel,
+            amount: row.amount,
+            currency: row.currency,
+            expiresAt: row.expiresAt
+          }))
         }
       });
     }
@@ -299,7 +384,7 @@ function createDefaultFakeTools(
 function createPhaseTwoCounterpartyTools(
   scenario: AiEvalScenario
 ): AssistantToolExecutors {
-  const baseTools = createDefaultFakeTools();
+  const baseTools = createDefaultFakeTools("alex@example.com", scenario);
   const resolver = scenario.setup?.counterpartyResolver;
 
   return {
@@ -702,7 +787,7 @@ function createToolsForScenario(scenario: AiEvalScenario): AssistantToolExecutor
 
   return scenario.toolPreset === "phase_two_counterparty" || needsCounterpartyResolver
     ? createPhaseTwoCounterpartyTools(scenario)
-    : createDefaultFakeTools();
+    : createDefaultFakeTools("alex@example.com", scenario);
 }
 
 function createDeterministicAmountResolutionService(): AmountResolutionService {
@@ -841,24 +926,13 @@ function createLlmProviderForMode(
   createConfiguredProvider: (() => AssistantLlmProvider | undefined) | undefined
 ): AssistantLlmProvider | undefined {
   if (mode === "llm-dev") {
-    if (!isLlmDevEvalEnabled()) {
-      throw new Error(
-        "Configured LLM eval mode requires VIRLY_AI_EVAL_ENABLE_LLM_DEV=true."
-      );
-    }
-
-    const configuredProvider =
-      createConfiguredProvider?.() ?? createConfiguredAssistantLlmProvider();
-    if (!configuredProvider) {
-      throw new Error(
-        "Configured LLM eval mode requires OPENAI_API_KEY and VIRLY_AI_MODEL."
-      );
-    }
-    return configuredProvider;
+    return createConfiguredLlmProviderForEval(createConfiguredProvider);
   }
 
   const needsModificationClassifier = scenario.turns.some(
-    (turn) => turn.expectedIntent === "transfer_modify_pending"
+    (turn) =>
+      turn.expectedIntent === "transfer_modify_pending" &&
+      /\b(actually make it|make it|change it to)\b/i.test(turn.userMessage)
   );
 
   if (!needsModificationClassifier) {
@@ -867,11 +941,22 @@ function createLlmProviderForMode(
 
   return {
     async classifyIntent(input) {
-      if (input.userMessage === "yes") {
-        return { intent: "pending_confirmation_status" };
+      const deterministic = classifyAssistantIntentDeterministic(
+        input.userMessage,
+        { counterpartyMemory: input.counterpartyMemory }
+      );
+      if (deterministic.intent !== "unsupported") {
+        return deterministic;
       }
 
-      return { intent: "transfer_modify_pending" };
+      if (
+        input.counterpartyMemory.pendingConfirmation?.status === "pending" &&
+        /\b(actually make it|make it|change it to)\b/i.test(input.userMessage)
+      ) {
+        return { intent: "transfer_modify_pending" };
+      }
+
+      return deterministic;
     },
     async extractTransferDraft(input) {
       if (/Sarah/i.test(input.userMessage)) {
@@ -903,10 +988,21 @@ function collectFailures(
   scenario: AiEvalScenario,
   turn: AiEvalTurnExpectation,
   result: Awaited<ReturnType<typeof runAssistantGraph>>,
-  turnIndex: number
+  turnIndex: number,
+  mode: AiEvalMode
 ) {
   const failures: string[] = [];
   const prefix = `${fixtureFile.suiteName}/${scenario.id} turn ${turnIndex}`;
+  const isLiveLlmMode = mode === "llm-dev" || mode === "llm-seeded-mongo";
+  const containsHebrew = /[\u0590-\u05ff]/.test(result.message);
+
+  if (
+    isLiveLlmMode &&
+    turn.expectedResponseLanguage === "hebrew" &&
+    !containsHebrew
+  ) {
+    failures.push(`${prefix} response expected Hebrew text`);
+  }
 
   if (turn.expectedIntent && result.intent !== turn.expectedIntent) {
     failures.push(
@@ -921,6 +1017,12 @@ function collectFailures(
     failures.push(
       `${prefix} tool calls expected ${JSON.stringify(turn.expectedToolCalls)} but got ${JSON.stringify(result.toolCalls)}`
     );
+  }
+
+  for (const expectedToolName of turn.expectedToolCallsInclude ?? []) {
+    if (!result.toolCalls.includes(expectedToolName)) {
+      failures.push(`${prefix} tool calls must include ${expectedToolName}`);
+    }
   }
 
   if (
@@ -950,6 +1052,10 @@ function collectFailures(
     );
   }
 
+  if (turn.mustNotCreateConfirmation && result.confirmation) {
+    failures.push(`${prefix} expected no transfer confirmation`);
+  }
+
   for (const expectedText of turn.mustInclude ?? []) {
     if (!new RegExp(expectedText.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i").test(result.message)) {
       failures.push(`${prefix} message must include ${expectedText}`);
@@ -972,6 +1078,15 @@ export async function runAiEvalFixtures(options: {
 }): Promise<AiEvalRunSummary> {
   if (options.mode === "seeded-mongo") {
     return runSeededMongoEvalFixtures();
+  }
+
+  if (options.mode === "llm-seeded-mongo") {
+    return runSeededMongoEvalFixtures({
+      mode: "llm-seeded-mongo",
+      llmProvider: createConfiguredLlmProviderForEval(
+        options.createConfiguredProvider
+      )
+    });
   }
 
   const fixtures = options.fixtures ?? loadAiEvalFixtureFiles();
@@ -1016,7 +1131,8 @@ export async function runAiEvalFixtures(options: {
           scenario,
           turn,
           result,
-          turnIndex
+          turnIndex,
+          options.mode
         );
 
         if (failures.length > 0) {

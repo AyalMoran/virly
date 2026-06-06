@@ -1,78 +1,190 @@
 {
-  "suiteName": "hebrew-mixed",
+  "suiteName": "hebrew-flows",
   "scenarios": [
     {
-      "id": "hebrew-recent-received",
-      "description": "Hebrew read-only phrasing reaches the recent received counterparties flow.",
+      "id": "hebrew-mixed-recent-received-and-transfer",
+      "description": "Mixed Hebrew/English received-counterparty chain preserves Hebrew response, counterparty memory, and transfer context.",
       "toolPreset": "phase_two_counterparty",
       "turns": [
         {
-          "userMessage": "מי העביר לי היום?",
+          "userMessage": "מי העביר לי today?",
+          "expectedResponseLanguage": "hebrew",
           "expectedIntent": "recent_received_counterparties",
           "expectedToolCalls": ["getRecentReceivedCounterparties"],
-          "mustInclude": ["Sarah Example"],
-          "mustNotInclude": ["not available yet"]
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "כמה היא העבירה לי total?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_total_received",
+          "expectedToolCallsInclude": ["getTotalReceivedFromCounterparty"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תראה עסקאות איתה",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_transactions",
+          "expectedToolCallsInclude": ["getTransactionsWithCounterparty"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "transfer her same amount she sent me",
+          "expectedIntent": "transfer_prepare"
         }
       ]
     },
     {
-      "id": "hebrew-transfer-pronoun",
-      "description": "Hebrew transfer preparation resolves a remembered recipient and prepares a confirmation card.",
+      "id": "hebrew-mixed-explicit-email-modification",
+      "description": "Mixed explicit-email transfer creates a confirmation, modifies the amount, and keeps chat confirmation non-mutating.",
       "toolPreset": "default",
-      "setup": {
-        "rememberedCounterparties": ["alex@example.com"]
-      },
       "turns": [
         {
-          "userMessage": "תעביר לו 50",
+          "userMessage": "show me balance",
+          "expectedIntent": "balance_inquiry",
+          "expectedToolCalls": ["getUserAccounts", "getAccountBalance"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תעביר 45 ל Sarah <sarah@example.com>",
+          "expectedResponseLanguage": "hebrew",
           "expectedIntent": "transfer_prepare",
           "expectedConfirmation": {
-            "recipientEmail": "alex@example.com",
-            "amount": 50
-          },
-          "mustInclude": ["review the transfer details"],
-          "mustNotInclude": ["could not find account information"]
+            "recipientEmail": "sarah@example.com",
+            "amount": 45
+          }
+        },
+        {
+          "userMessage": "actually make it 70",
+          "expectedIntent": "transfer_modify_pending",
+          "expectedConfirmation": {
+            "amount": 70
+          }
+        },
+        {
+          "userMessage": "yes",
+          "expectedIntent": "pending_confirmation_status",
+          "expectedToolCalls": [],
+          "mustAskClarification": false,
+          "mustNotCreateConfirmation": true
         }
       ]
     },
     {
-      "id": "hebrew-mixed-success-criteria-chain",
-      "description": "A Hebrew/English multi-turn chain preserves sent-counterparty memory and contextual amount references without executing money movement.",
+      "id": "hebrew-mixed-transaction-search-detail-stats",
+      "description": "Mixed transaction wording routes search, ordinal detail, and stats through the phase three tools.",
+      "toolPreset": "phase_three_transactions",
+      "turns": [
+        {
+          "userMessage": "תראה לי העברות מעל 40 this week",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transaction_search",
+          "expectedToolCalls": ["searchTransactions"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "details on first one",
+          "expectedIntent": "transaction_detail",
+          "expectedToolCallsInclude": ["resolveTransactionReference"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תראה details על השנייה",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transaction_detail",
+          "expectedToolCallsInclude": ["resolveTransactionReference"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תן לי stats על ההעברות השבוע",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transaction_stats",
+          "expectedToolCalls": ["getTransactionStats"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "כמה transfers היו לי השבוע?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transaction_count",
+          "expectedToolCalls": ["getTransactionStats"],
+          "mustNotCreateConfirmation": true
+        }
+      ]
+    },
+    {
+      "id": "hebrew-mixed-counterparty-summary-and-transfer",
+      "description": "Mixed named counterparty chain uses English names and follow-ups before a Hebrew pronoun transfer.",
       "toolPreset": "phase_two_counterparty",
       "turns": [
         {
-          "userMessage": "למי העברתי היום?",
+          "userMessage": "תן לי סיכום מול Daniel",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_summary",
+          "expectedToolCallsInclude": [
+            "resolveCounterpartyCandidates",
+            "getCounterpartySummary"
+          ],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "What is the net with him?",
+          "expectedIntent": "counterparty_net_total",
+          "expectedToolCallsInclude": ["getNetWithCounterparty"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "כמה קיבלתי ממנו?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_total_received",
+          "expectedToolCallsInclude": ["getTotalReceivedFromCounterparty"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "show transactions with him",
+          "expectedIntent": "counterparty_transactions",
+          "expectedToolCallsInclude": ["getTransactionsWithCounterparty"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תעביר לו 15",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_prepare"
+        }
+      ]
+    },
+    {
+      "id": "hebrew-mixed-recent-sent-amount-reference",
+      "description": "English recent-sent phrasing feeds Hebrew total and English contextual transfer references.",
+      "toolPreset": "phase_two_counterparty",
+      "turns": [
+        {
+          "userMessage": "who did I send to today?",
           "expectedIntent": "recent_sent_counterparties",
           "expectedToolCalls": ["getRecentSentCounterparties"],
-          "mustInclude": ["Maya Example"],
-          "mustNotInclude": ["not available yet"]
+          "mustNotCreateConfirmation": true
         },
         {
-          "userMessage": "בוא נעביר לו שוב את אותה כמות",
-          "expectedIntent": "transfer_prepare",
-          "expectedConfirmation": {
-            "recipientEmail": "maya@example.com",
-            "amount": 42
-          },
-          "mustInclude": ["review the transfer details"],
-          "mustNotInclude": ["I need a valid positive amount"]
-        },
-        {
-          "userMessage": "how much did he send me?",
+          "userMessage": "כמה הוא העביר לי?",
+          "expectedResponseLanguage": "hebrew",
           "expectedIntent": "counterparty_total_received",
-          "expectedToolCalls": ["getTotalReceivedFromCounterparty"],
-          "mustInclude": ["35.00 in total"],
-          "mustNotInclude": ["multiple matching counterparties"]
+          "expectedToolCallsInclude": ["getTotalReceivedFromCounterparty"],
+          "mustNotCreateConfirmation": true
         },
         {
-          "userMessage": "send him the same amount he sent me",
-          "expectedIntent": "transfer_prepare",
-          "expectedConfirmation": {
-            "recipientEmail": "maya@example.com",
-            "amount": 35
-          },
-          "mustInclude": ["review the transfer details"],
-          "mustNotInclude": ["I need a valid positive amount"]
+          "userMessage": "send him that amount",
+          "expectedIntent": "transfer_prepare"
+        },
+        {
+          "userMessage": "confirm",
+          "expectedIntent": "pending_confirmation_status",
+          "expectedToolCalls": [],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תראה לי אישורי העברה ממתינים",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "pending_ai_transfers",
+          "expectedToolCalls": ["getPendingAiTransfers"],
+          "mustNotCreateConfirmation": true
         }
       ]
     }

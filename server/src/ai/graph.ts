@@ -1,4 +1,6 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
+import mongoose from "mongoose";
+import { connectDb } from "../db.js";
 import { DEFAULT_ASSISTANT_ID } from "./assistants.js";
 import {
   createEmptyCounterpartyMemory,
@@ -15,6 +17,12 @@ import {
   normalizeUserMessage
 } from "./messageNormalization.js";
 import { buildRefusalMessage } from "./policy.js";
+import {
+  getAuthRoute,
+  getIntentRoute,
+  getParseRoute,
+  getResumeRoute
+} from "./graphRoutes.js";
 import {
   classifyAssistantIntent,
   getReadOnlyToolsForIntent,
@@ -100,6 +108,7 @@ type GraphOptions = {
   llmProvider?: AssistantLlmProvider;
   conversationStore?: ConversationStore;
   onProgress?: RunAssistantProgressHandler;
+  autoConnectDb?: boolean;
   amountResolutionService: AmountResolutionService;
   transferPreparationService: TransferPreparationService;
   transferModificationService: TransferModificationService;
@@ -157,6 +166,41 @@ function getProgressPhaseForNode(
   }
 
   return undefined;
+}
+
+let dbConnectionPromise: Promise<void> | null = null;
+/**
+ * Function type: Database connection utility function.
+ *
+ * @brief Ensures the LangGraph Studio runtime has an active Mongoose connection.
+ */
+async function ensureDbConnected(): Promise<void> {
+  if (mongoose.connection.readyState === 1) {
+    return;
+  }
+
+  if (!dbConnectionPromise) {
+    dbConnectionPromise = connectDb().then(() => undefined);
+  }
+
+  await dbConnectionPromise;
+}
+
+/**
+ * Function type: LangGraph node function.
+ *
+ * @brief Opens the MongoDB connection before downstream graph nodes execute database-backed tools.
+ */
+function buildEnsureDbConnectionNode(autoConnectDb: boolean): GraphNode {
+  return async function ensureDbConnectionNode(
+    _state: AssistantGraphState
+  ): Promise<Partial<AssistantGraphState>> {
+    if (autoConnectDb) {
+      await ensureDbConnected();
+    }
+
+    return {};
+  };
 }
 
 /**
@@ -687,7 +731,7 @@ function extractTransferDraftDeterministic(
       /\b(same amount\s+(?:i\s+sent\s+(?:him|her|them)|(?:he|she|they)\s+sent\s+me)|what\s+(?:he|she|they)\s+sent\s+me|what\s+i\s+sent\s+(?:him|her|them)|same amount(?:\s+again)?|same as before|same as last time|(?:that|this)\s+(?:amount|total|net)|the\s+(?:last|previous)\s+(?:amount|total|net))\b/i
     ) ??
     message.match(
-      /(אותה כמות|אותו סכום|כמו קודם|כמו פעם שעברה|מה שהוא שלח לי|מה שהיא שלחה לי|מה שהם שלחו לי|מה ששלחתי לו|מה ששלחתי לה|מה ששלחתי להם|הסכום הזה|הסכום ההוא|הסכום האחרון|הסה"כ הזה|הסך הזה|הנטו הזה)/
+      /(אותו סכום שהוא שלח לי|אותו סכום שהוא העביר לי|אותה כמות שהוא שלח לי|אותה כמות שהוא העביר לי|אותה כמות|אותו סכום|כמו קודם|כמו פעם שעברה|מה שהוא שלח לי|מה שהוא העביר לי|מה שהיא שלחה לי|מה שהיא העבירה לי|מה שהם שלחו לי|מה ששלחתי לו|מה ששלחתי לה|מה ששלחתי להם|הסכום הזה|הסכום ההוא|הסכום האחרון|הסה"כ הזה|הסך הזה|הנטו הזה)/
     );
   const reasonMatch =
     message.match(/\b(?:add|set|change)?\s*reason\s+(?:to\s+)?(.{1,80})$/i) ??
@@ -879,10 +923,13 @@ function buildClarificationRequest(
  */
 function needsCounterpartyResolution(state: AssistantGraphState) {
   return (
+    state.detectedIntent === "counterparty_summary" ||
+    state.detectedIntent === "counterparty_activity_timeline" ||
     state.detectedIntent === "counterparty_transactions" ||
     state.detectedIntent === "counterparty_total_sent" ||
     state.detectedIntent === "counterparty_total_received" ||
     state.detectedIntent === "counterparty_net_total" ||
+    state.detectedIntent === "transfer_quote" ||
     (state.detectedIntent === "transfer_prepare" &&
       !state.transferDraft?.recipientEmail) ||
     (state.detectedIntent === "transfer_modify_pending" &&
@@ -998,9 +1045,15 @@ function shouldResolvePendingTransferReference(state: AssistantGraphState) {
       "pending_ai_transfers";
   const explicitlyPending =
     /\b(pending|confirmation|confirmations)\b/i.test(normalized) ||
-    /(ממתינה|ממתינות|אישור)/.test(message);
+    /(ממתינה|ממתינות|ממתין|ממתינים|אישור)/.test(message);
+  const asksAboutPendingReference =
+    /\b(what about|which one|which transfer)\b/i.test(normalized) ||
+    /(מה לגבי|מה עם).*?(העברה|אישור)/.test(message);
 
-  return hasOrdinal && (hasPendingContext || explicitlyPending);
+  return (
+    (hasOrdinal && (hasPendingContext || explicitlyPending)) ||
+    (hasPendingContext && explicitlyPending && asksAboutPendingReference)
+  );
 }
 
 /**
@@ -1180,13 +1233,20 @@ function buildTransferConfirmationPreparer(
       return {};
     }
 
+    const normalizedText = state.normalizedMessage?.normalizedText ?? "";
+    const isHebrew = Boolean(state.normalizedMessage?.containsHebrew);
+    const shouldUseHebrewClarification =
+      isHebrew && !/^\s*בוא(?:י|ו)?\s+נעביר(?:\s|$)/.test(normalizedText);
+
     if (state.transferDraft?.currencyMentioned && !state.transferDraft.currencySupported) {
       const currency = state.transferDraft.currency ?? "that currency";
       const amountText = state.transferDraft.amountText ?? "that amount";
       return buildClarificationRequest(
         state,
         "unsupported_currency",
-        `I can prepare transfers only in ILS right now. Should I prepare ${amountText} as ILS instead of ${currency}?`,
+        shouldUseHebrewClarification
+          ? `אפשר להכין העברות רק ב-ILS כרגע. להכין את ${amountText} כ-ILS במקום ${currency}?`
+          : `I can prepare transfers only in ILS right now. Should I prepare ${amountText} as ILS instead of ${currency}?`,
         "yes_no"
       );
     }
@@ -1205,17 +1265,28 @@ function buildTransferConfirmationPreparer(
         return buildClarificationRequest(
           state,
           "missing_recipient",
-          amount ? `Who should I send ₪${amount} to?` : result.message,
+          shouldUseHebrewClarification
+            ? amount
+              ? `למי לשלוח ₪${amount}?`
+              : "למי לשלוח, ובאיזה סכום?"
+            : amount
+              ? `Who should I send ₪${amount} to?`
+              : result.message,
           "recipient"
         );
       }
 
       if (!state.transferDraft?.amount) {
+        const recipientLabel =
+          state.resolvedCounterparty?.userLabel ??
+          state.resolvedCounterparty?.email ??
+          state.transferDraft?.recipientEmail ??
+          "that recipient";
         const clarification = buildClarificationRequest(
           state,
           "missing_amount",
-          state.resolvedCounterparty
-            ? `How much should I send to ${state.resolvedCounterparty.userLabel ?? state.resolvedCounterparty.email}?`
+          shouldUseHebrewClarification
+            ? `כמה לשלוח ל-${recipientLabel}?`
             : result.message,
           "amount"
         );
@@ -1292,7 +1363,9 @@ function buildContextualAmountResolver(
           ? buildClarificationRequest(
               state,
               "ambiguous_amount",
-              "Do you mean the last amount from that counterparty, or the total from the previous answer?",
+              state.normalizedMessage?.containsHebrew
+                ? "התכוונת לסכום האחרון מול הנמען הזה, או לסך מהתשובה הקודמת?"
+                : "Do you mean the last amount from that counterparty, or the total from the previous answer?",
               "amount_scope",
               {
                 resumeIntent: "transfer_prepare",
@@ -1468,7 +1541,10 @@ function resolvedCounterpartyFromResolutionData(
  *
  * @brief Builds messages from unresolved tool data.
  */
-function buildResolutionClarification(result: RuntimeToolResult) {
+function buildResolutionClarification(
+  result: RuntimeToolResult,
+  isHebrew = false
+) {
   const resolution = getResolutionResultData(result);
   if (!resolution || resolution.status === "resolved") {
     return undefined;
@@ -1481,15 +1557,27 @@ function buildResolutionClarification(result: RuntimeToolResult) {
     const message =
       resolution.kind === "counterparty"
         ? labels
-          ? `I found multiple matching counterparties: ${labels}. Which one do you mean?`
-          : "I found multiple matching counterparties. Which one do you mean?"
+          ? isHebrew
+            ? `מצאתי כמה נמענים מתאימים: ${labels}. למי התכוונת?`
+            : `I found multiple matching counterparties: ${labels}. Which one do you mean?`
+          : isHebrew
+            ? "מצאתי כמה נמענים מתאימים. למי התכוונת?"
+            : "I found multiple matching counterparties. Which one do you mean?"
         : resolution.kind === "transaction"
           ? labels
-            ? `I found multiple matching transactions: ${labels}. Which one do you mean?`
-            : "I found multiple matching transactions. Which one do you mean?"
+            ? isHebrew
+              ? `מצאתי כמה עסקאות מתאימות: ${labels}. לאיזו התכוונת?`
+              : `I found multiple matching transactions: ${labels}. Which one do you mean?`
+            : isHebrew
+              ? "מצאתי כמה עסקאות מתאימות. לאיזו התכוונת?"
+              : "I found multiple matching transactions. Which one do you mean?"
           : labels
-            ? `I found multiple pending transfer confirmations: ${labels}. Which one do you mean?`
-            : "I found multiple pending transfer confirmations. Which one do you mean?";
+            ? isHebrew
+              ? `מצאתי כמה אישורי העברה ממתינים: ${labels}. לאיזה התכוונת?`
+              : `I found multiple pending transfer confirmations: ${labels}. Which one do you mean?`
+            : isHebrew
+              ? "מצאתי כמה אישורי העברה ממתינים. לאיזה התכוונת?"
+              : "I found multiple pending transfer confirmations. Which one do you mean?";
 
     return {
       message,
@@ -1518,10 +1606,16 @@ function buildResolutionClarification(result: RuntimeToolResult) {
   return {
     message:
       resolution.kind === "counterparty"
-        ? "I could not find a matching counterparty in your transaction history."
+        ? isHebrew
+          ? "לא מצאתי נמען מתאים בהיסטוריית העסקאות שלך."
+          : "I could not find a matching counterparty in your transaction history."
         : resolution.kind === "transaction"
-          ? "I could not resolve which transaction you mean. Ask about a numbered item from the latest transaction list, such as the second one."
-          : "I could not resolve which pending transfer you mean.",
+          ? isHebrew
+            ? "לא הצלחתי להבין לאיזו עסקה התכוונת. כדאי לבחור פריט ממוספר מרשימת העסקאות האחרונה, למשל הראשונה או השנייה."
+            : "I could not resolve which transaction you mean. Ask about a numbered item from the latest transaction list, such as the second one."
+          : isHebrew
+            ? "לא הצלחתי להבין לאיזה אישור העברה ממתין התכוונת."
+            : "I could not resolve which pending transfer you mean.",
     request: {
       reason: "unresolved_reference" as const,
       expectedReplyType:
@@ -1640,7 +1734,10 @@ function buildToolRouter(tools: AssistantToolExecutors) {
         }
       }
 
-      const clarification = buildResolutionClarification(toolResult);
+      const clarification = buildResolutionClarification(
+        toolResult,
+        Boolean(state.normalizedMessage?.containsHebrew)
+      );
       if (clarification) {
         return {
           requestedToolNames,
@@ -1683,6 +1780,8 @@ function buildToolRouter(tools: AssistantToolExecutors) {
  * @brief Builds a deterministic response without the LLM.
  */
 function composeDeterministicResponse(state: AssistantGraphState) {
+  const isHebrew = Boolean(state.normalizedMessage?.containsHebrew);
+
   if (state.clarificationMessage) {
     return state.clarificationMessage;
   }
@@ -1695,7 +1794,9 @@ function composeDeterministicResponse(state: AssistantGraphState) {
 
   const intent = state.detectedIntent ?? "unsupported";
   if (intent === "general_help") {
-    return "I can help with account questions such as balances, recent transactions, verified recipients, transfer limits, and preparing transfers for explicit confirmation.";
+    return isHebrew
+      ? "אני יכול לעזור עם שאלות על יתרה, עסקאות אחרונות, נמענים מאומתים, מגבלות העברה והכנת העברות לאישור מפורש."
+      : "I can help with account questions such as balances, recent transactions, verified recipients, transfer limits, and preparing transfers for explicit confirmation.";
   }
 
   if (
@@ -1703,16 +1804,21 @@ function composeDeterministicResponse(state: AssistantGraphState) {
     intent === "pending_confirmation_status"
   ) {
     if (intent === "pending_confirmation_status" && state.toolResults.length > 0) {
-      return state.toolResults
+      const summary = state.toolResults
         .map((result) => getUserVisibleSummary(result))
         .join(" ");
+      return isHebrew ? `מצאתי את פרטי האישור הממתין: ${summary}` : summary;
     }
 
     if (state.counterpartyMemory.pendingConfirmation?.status === "pending") {
-      return "I cannot confirm a transfer from chat text. Please review the current confirmation card and use its Confirm or Deny button.";
+      return isHebrew
+        ? "אי אפשר לאשר העברה מתוך טקסט בצ'אט. צריך לבדוק את כרטיס האישור ולהשתמש בכפתורי האישור או הדחייה."
+        : "I cannot confirm a transfer from chat text. Please review the current confirmation card and use its Confirm or Deny button.";
     }
 
-    return "I do not see an active transfer confirmation in this conversation. I can prepare a new transfer for explicit confirmation.";
+    return isHebrew
+      ? "אני לא רואה אישור העברה פעיל בשיחה הזאת. אני יכול להכין העברה חדשה לאישור מפורש."
+      : "I do not see an active transfer confirmation in this conversation. I can prepare a new transfer for explicit confirmation.";
   }
 
   if (intent === "transfer_modify_pending") {
@@ -1722,28 +1828,39 @@ function composeDeterministicResponse(state: AssistantGraphState) {
           : "I updated the pending transfer. Please review the new confirmation card before anything is sent.";
     }
 
-    return "I do not see an active transfer confirmation in this conversation. I can prepare a new transfer for explicit confirmation.";
+    return isHebrew
+      ? "אני לא רואה אישור העברה פעיל בשיחה הזאת. אני יכול להכין העברה חדשה לאישור מפורש."
+      : "I do not see an active transfer confirmation in this conversation. I can prepare a new transfer for explicit confirmation.";
   }
 
   if (intent === "transfer_status") {
-    return "This app stores completed transaction history, but it does not expose a separate transfer status field yet. I can help review your recent transactions.";
+    return isHebrew
+      ? "האפליקציה שומרת היסטוריית עסקאות שהושלמו, אבל לא חושפת עדיין שדה סטטוס נפרד להעברה. אפשר לבדוק את העסקאות האחרונות שלך."
+      : "This app stores completed transaction history, but it does not expose a separate transfer status field yet. I can help review your recent transactions.";
   }
 
   if (intent === "unsupported") {
-    return "I can help with account information, recent transactions, verified recipients, transfer limits, transfer preparation, and general app guidance.";
+    return isHebrew
+      ? "אני יכול לעזור עם פרטי חשבון, עסקאות אחרונות, נמענים מאומתים, מגבלות העברה, הכנת העברות והכוונה כללית באפליקציה."
+      : "I can help with account information, recent transactions, verified recipients, transfer limits, transfer preparation, and general app guidance.";
   }
 
   if (intent === "transfer_prepare" && state.confirmation) {
-    return "Please review the transfer details and use the confirmation buttons before I send anything.";
+    return isHebrew
+      ? "צריך לבדוק את פרטי ההעברה ולהשתמש בכפתורי האישור לפני שמשהו נשלח."
+      : "Please review the transfer details and use the confirmation buttons before I send anything.";
   }
 
   if (state.toolResults.length === 0) {
-    return "I could not find account information for that request. Please try again from your authenticated session.";
+    return isHebrew
+      ? "לא מצאתי פרטי חשבון לבקשה הזאת. כדאי לנסות שוב מתוך סשן מחובר."
+      : "I could not find account information for that request. Please try again from your authenticated session.";
   }
 
-  return state.toolResults
+  const summary = state.toolResults
     .map((result) => getUserVisibleSummary(result))
     .join(" ");
+  return isHebrew ? `מצאתי: ${summary}` : summary;
 }
 
 /**
@@ -2836,39 +2953,15 @@ function buildConversationSaver(conversationStore?: ConversationStore) {
 /**
  * Function type: LangGraph builder function.
  *
- * @brief Builds and compiles the assistant workflow.
+ * @brief Builds the request parsing workflow.
  */
-function buildAssistantGraph(options: GraphOptions) {
+function buildRequestParsingSubgraph(options: GraphOptions) {
   return new StateGraph(AssistantStateAnnotation)
-    .addNode(
-      "loadAuthenticatedContext",
-      withNodeTrace(
-        "loadAuthenticatedContext",
-        loadAuthenticatedContext,
-        options.onProgress
-      )
-    )
-    .addNode(
-      "loadConversationContext",
-      withNodeTrace(
-        "loadConversationContext",
-        buildConversationLoader(options.conversationStore),
-        options.onProgress
-      )
-    )
     .addNode(
       "normalizeUserMessage",
       withNodeTrace(
         "normalizeUserMessage",
         normalizeMessageNode,
-        options.onProgress
-      )
-    )
-    .addNode(
-      "resolveClarificationReply",
-      withNodeTrace(
-        "resolveClarificationReply",
-        resolveClarificationReplyNode,
         options.onProgress
       )
     )
@@ -2896,6 +2989,73 @@ function buildAssistantGraph(options: GraphOptions) {
         options.onProgress
       )
     )
+    .addEdge(START, "normalizeUserMessage")
+    .addEdge("normalizeUserMessage", "classifyIntent")
+    .addEdge("classifyIntent", "extractRequestSlots")
+    .addConditionalEdges("extractRequestSlots", getParseRoute, {
+      transfer_related: "extractTransferDraft",
+      non_transfer: END
+    })
+    .addEdge("extractTransferDraft", END)
+    .compile();
+}
+
+/**
+ * Function type: LangGraph builder function.
+ *
+ * @brief Builds the clarification resume workflow.
+ */
+function buildClarificationSubgraph(options: GraphOptions) {
+  return new StateGraph(AssistantStateAnnotation)
+    .addNode(
+      "resolveClarificationReply",
+      withNodeTrace(
+        "resolveClarificationReply",
+        resolveClarificationReplyNode,
+        options.onProgress
+      )
+    )
+    .addEdge(START, "resolveClarificationReply")
+    .addEdge("resolveClarificationReply", END)
+    .compile();
+}
+
+/**
+ * Function type: LangGraph builder function.
+ *
+ * @brief Builds the read-only answer workflow.
+ */
+function buildReadOnlyAnswerSubgraph(options: GraphOptions) {
+  return new StateGraph(AssistantStateAnnotation)
+    .addNode(
+      "resolveCounterpartyReference",
+      withNodeTrace(
+        "resolveCounterpartyReference",
+        buildCounterpartyResolver(options.llmProvider),
+        options.onProgress
+      )
+    )
+    .addNode(
+      "routeReadOnlyTools",
+      withNodeTrace(
+        "routeReadOnlyTools",
+        buildToolRouter(options.tools),
+        options.onProgress
+      )
+    )
+    .addEdge(START, "resolveCounterpartyReference")
+    .addEdge("resolveCounterpartyReference", "routeReadOnlyTools")
+    .addEdge("routeReadOnlyTools", END)
+    .compile();
+}
+
+/**
+ * Function type: LangGraph builder function.
+ *
+ * @brief Builds the transfer preparation workflow.
+ */
+function buildTransferPreparationSubgraph(options: GraphOptions) {
+  return new StateGraph(AssistantStateAnnotation)
     .addNode(
       "resolveCounterpartyReference",
       withNodeTrace(
@@ -2920,11 +3080,33 @@ function buildAssistantGraph(options: GraphOptions) {
         options.onProgress
       )
     )
+    .addEdge(START, "resolveCounterpartyReference")
+    .addEdge("resolveCounterpartyReference", "resolveContextualAmounts")
+    .addEdge("resolveContextualAmounts", "prepareTransferConfirmation")
+    .addEdge("prepareTransferConfirmation", END)
+    .compile();
+}
+
+/**
+ * Function type: LangGraph builder function.
+ *
+ * @brief Builds the pending transfer modification workflow.
+ */
+function buildPendingModificationSubgraph(options: GraphOptions) {
+  return new StateGraph(AssistantStateAnnotation)
     .addNode(
-      "modifyPendingTransferConfirmation",
+      "resolveCounterpartyReference",
       withNodeTrace(
-        "modifyPendingTransferConfirmation",
-        buildPendingTransferModifier(options.transferModificationService),
+        "resolveCounterpartyReference",
+        buildCounterpartyResolver(options.llmProvider),
+        options.onProgress
+      )
+    )
+    .addNode(
+      "resolveContextualAmounts",
+      withNodeTrace(
+        "resolveContextualAmounts",
+        buildContextualAmountResolver(options.amountResolutionService),
         options.onProgress
       )
     )
@@ -2937,6 +3119,49 @@ function buildAssistantGraph(options: GraphOptions) {
       )
     )
     .addNode(
+      "modifyPendingTransferConfirmation",
+      withNodeTrace(
+        "modifyPendingTransferConfirmation",
+        buildPendingTransferModifier(options.transferModificationService),
+        options.onProgress
+      )
+    )
+    .addEdge(START, "resolveCounterpartyReference")
+    .addEdge("resolveCounterpartyReference", "resolveContextualAmounts")
+    .addEdge("resolveContextualAmounts", "routeReadOnlyTools")
+    .addEdge("routeReadOnlyTools", "modifyPendingTransferConfirmation")
+    .addEdge("modifyPendingTransferConfirmation", END)
+    .compile();
+}
+
+/**
+ * Function type: LangGraph builder function.
+ *
+ * @brief Builds the pending confirmation status workflow.
+ */
+function buildPendingStatusSubgraph(options: GraphOptions) {
+  return new StateGraph(AssistantStateAnnotation)
+    .addNode(
+      "routeReadOnlyTools",
+      withNodeTrace(
+        "routeReadOnlyTools",
+        buildToolRouter(options.tools),
+        options.onProgress
+      )
+    )
+    .addEdge(START, "routeReadOnlyTools")
+    .addEdge("routeReadOnlyTools", END)
+    .compile();
+}
+
+/**
+ * Function type: LangGraph builder function.
+ *
+ * @brief Builds the response workflow.
+ */
+function buildResponseSubgraph(options: GraphOptions) {
+  return new StateGraph(AssistantStateAnnotation)
+    .addNode(
       "composeResponse",
       withNodeTrace(
         "composeResponse",
@@ -2944,6 +3169,53 @@ function buildAssistantGraph(options: GraphOptions) {
         options.onProgress
       )
     )
+    .addEdge(START, "composeResponse")
+    .addEdge("composeResponse", END)
+    .compile();
+}
+
+/**
+ * Function type: LangGraph builder function.
+ *
+ * @brief Builds and compiles the assistant workflow.
+ */
+function buildAssistantGraph(options: GraphOptions) {
+  const requestParsingSubgraph = buildRequestParsingSubgraph(options);
+  const clarificationResumeSubgraph = buildClarificationSubgraph(options);
+  const readOnlyAnswerSubgraph = buildReadOnlyAnswerSubgraph(options);
+  const transferPreparationSubgraph = buildTransferPreparationSubgraph(options);
+  const pendingModificationSubgraph = buildPendingModificationSubgraph(options);
+  const pendingStatusSubgraph = buildPendingStatusSubgraph(options);
+  const responseSubgraph = buildResponseSubgraph(options);
+
+  return new StateGraph(AssistantStateAnnotation)
+    .addNode(
+      "ensureDbConnection",
+      buildEnsureDbConnectionNode(Boolean(options.autoConnectDb))
+    )
+    .addNode(
+      "loadAuthenticatedContext",
+      withNodeTrace(
+        "loadAuthenticatedContext",
+        loadAuthenticatedContext,
+        options.onProgress
+      )
+    )
+    .addNode(
+      "loadConversationContext",
+      withNodeTrace(
+        "loadConversationContext",
+        buildConversationLoader(options.conversationStore),
+        options.onProgress
+      )
+    )
+    .addNode("clarificationResumeSubgraph", clarificationResumeSubgraph)
+    .addNode("requestParsingSubgraph", requestParsingSubgraph)
+    .addNode("readOnlyAnswerSubgraph", readOnlyAnswerSubgraph)
+    .addNode("transferPreparationSubgraph", transferPreparationSubgraph)
+    .addNode("pendingModificationSubgraph", pendingModificationSubgraph)
+    .addNode("pendingStatusSubgraph", pendingStatusSubgraph)
+    .addNode("responseSubgraph", responseSubgraph)
     .addNode(
       "saveConversation",
       withNodeTrace(
@@ -2952,23 +3224,59 @@ function buildAssistantGraph(options: GraphOptions) {
         options.onProgress
       )
     )
-    .addEdge(START, "loadAuthenticatedContext")
-    .addEdge("loadAuthenticatedContext", "loadConversationContext")
-    .addEdge("loadConversationContext", "resolveClarificationReply")
-    .addEdge("resolveClarificationReply", "normalizeUserMessage")
-    .addEdge("normalizeUserMessage", "classifyIntent")
-    .addEdge("classifyIntent", "extractRequestSlots")
-    .addEdge("extractRequestSlots", "extractTransferDraft")
-    .addEdge("extractTransferDraft", "resolveCounterpartyReference")
-    .addEdge("resolveCounterpartyReference", "resolveContextualAmounts")
-    .addEdge("resolveContextualAmounts", "routeReadOnlyTools")
-    .addEdge("routeReadOnlyTools", "prepareTransferConfirmation")
-    .addEdge("prepareTransferConfirmation", "modifyPendingTransferConfirmation")
-    .addEdge("modifyPendingTransferConfirmation", "composeResponse")
-    .addEdge("composeResponse", "saveConversation")
+    .addEdge(START, "ensureDbConnection")
+    .addEdge("ensureDbConnection", "loadAuthenticatedContext")
+    .addConditionalEdges("loadAuthenticatedContext", getAuthRoute, {
+      unauthenticated: "responseSubgraph",
+      authenticated: "loadConversationContext"
+    })
+    .addConditionalEdges("loadConversationContext", getResumeRoute, {
+      clarification_reply: "clarificationResumeSubgraph",
+      normal_turn: "requestParsingSubgraph"
+    })
+    .addEdge("clarificationResumeSubgraph", "requestParsingSubgraph")
+    .addConditionalEdges("requestParsingSubgraph", getIntentRoute, {
+      read_only: "readOnlyAnswerSubgraph",
+      prepare_transfer: "transferPreparationSubgraph",
+      modify_pending: "pendingModificationSubgraph",
+      pending_status: "pendingStatusSubgraph",
+      unsafe_or_help: "responseSubgraph",
+      unsupported: "responseSubgraph"
+    })
+    .addEdge("readOnlyAnswerSubgraph", "responseSubgraph")
+    .addEdge("transferPreparationSubgraph", "responseSubgraph")
+    .addEdge("pendingModificationSubgraph", "responseSubgraph")
+    .addEdge("pendingStatusSubgraph", "responseSubgraph")
+    .addEdge("responseSubgraph", "saveConversation")
     .addEdge("saveConversation", END)
     .compile();
 }
+
+
+
+export function createAssistantGraph(
+  options: RunAssistantOptions & { autoConnectDb?: boolean } = {}
+) {
+  return buildAssistantGraph({
+    tools: options.tools ?? readOnlyToolExecutors,
+    llmProvider: options.llmProvider,
+    conversationStore: options.conversationStore,
+    onProgress: options.onProgress,
+    autoConnectDb: options.autoConnectDb,
+    amountResolutionService:
+      options.amountResolutionService ?? resolveContextualAmount,
+    transferPreparationService:
+      options.transferPreparationService ?? prepareAiPendingTransfer,
+    transferModificationService:
+      options.transferModificationService ?? modifyAiPendingTransfer
+  });
+}
+
+/**
+ * Static graph entrypoint for LangGraph Studio / LangSmith.
+ * This should use normal default dependencies.
+ */
+export const assistantGraph = createAssistantGraph({ autoConnectDb: true });
 
 /**
  * Function type: Public API function.
@@ -2979,18 +3287,8 @@ export async function runAssistantGraph(
   input: RunAssistantInput,
   options: RunAssistantOptions = {}
 ): Promise<RunAssistantResult> {
-  const graph = buildAssistantGraph({
-    tools: options.tools ?? readOnlyToolExecutors,
-    llmProvider: options.llmProvider,
-    conversationStore: options.conversationStore,
-    onProgress: options.onProgress,
-    amountResolutionService:
-      options.amountResolutionService ?? resolveContextualAmount,
-    transferPreparationService:
-      options.transferPreparationService ?? prepareAiPendingTransfer,
-    transferModificationService:
-      options.transferModificationService ?? modifyAiPendingTransfer
-  });
+  const graph = createAssistantGraph(options);
+
   const emptyMemory = createEmptyCounterpartyMemory();
   const initialState: AssistantGraphState = {
     userId: input.userId,

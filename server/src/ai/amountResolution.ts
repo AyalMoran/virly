@@ -29,7 +29,7 @@ export function classifyAmountReference(rawText: string): AmountReferenceKind {
   if (
     /\b(?:he|she|they)\s+sent\s+me\b/i.test(normalized) ||
     /\bwhat\s+(?:he|she|they)\s+sent\s+me\b/i.test(normalized) ||
-    /(מה שהוא שלח לי|מה שהיא שלחה לי|מה שהם שלחו לי)/.test(rawText)
+    /(מה שהוא שלח לי|מה שהוא העביר לי|מה שהיא שלחה לי|מה שהיא העבירה לי|מה שהם שלחו לי|אותו סכום שהוא שלח לי|אותו סכום שהוא העביר לי|אותה כמות שהוא שלח לי|אותה כמות שהוא העביר לי)/.test(rawText)
   ) {
     return "last_received_transaction";
   }

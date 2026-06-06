@@ -38,14 +38,94 @@ function extractQuery(context: ToolContext) {
     return englishMatch[1];
   }
 
+  const mixedHebrewEnglishMatch = message.match(
+    /(?:עם|מול|ל|אל|מ)\s*([A-Z][A-Za-z'-]*(?:\s+[A-Z][A-Za-z'-]*){0,2})/
+  );
+  if (mixedHebrewEnglishMatch?.[1]) {
+    return mixedHebrewEnglishMatch[1];
+  }
+
   const hebrewMatch = message.match(
-    /(?:עם|ל|אל|מ)\s*([\u0590-\u05ff]{2,}(?:\s+[\u0590-\u05ff]{2,}){0,2})/
+    /(?:עם|מול|ל|אל|מ)\s*([\u0590-\u05ff]{2,}(?:\s+[\u0590-\u05ff]{2,}){0,2})/
   );
   if (hebrewMatch?.[1]) {
     return hebrewMatch[1];
   }
 
   return message;
+}
+
+function isLastCounterpartyReference(query: string) {
+  const normalized = query.trim().toLowerCase();
+  return (
+    /\b(he|him|she|her|they|them|this person|that person|same person|same recipient|last recipient)\b/i.test(
+      normalized
+    ) ||
+    /(?<![\u0590-\u05ff])(הוא|היא|הם|הן|ממנו|ממנה|מהם|מהן|לו|לה|אליו|אליה|איתו|איתה|מולו|מולה|מולם|מולן|אותו|אותה|הנמען הזה|האדם הזה)(?![\u0590-\u05ff])/.test(
+      query
+    )
+  );
+}
+
+function createResolvedMemoryCounterpartyResult(
+  counterparty: CounterpartyRef
+): RuntimeToolResult {
+  const email = normalizeCounterpartyEmail(counterparty.email);
+  const maskedLabel = counterparty.maskedLabel;
+  const displayName =
+    counterparty.displayName ?? counterparty.userLabel ?? maskedLabel;
+  const userLabel = counterparty.userLabel ?? `${displayName} (${email})`;
+
+  return createToolResult({
+    toolName: "resolveCounterpartyCandidates",
+    status: "ok",
+    data: {
+      kind: "counterparty",
+      status: "resolved",
+      counterparty: {
+        email,
+        maskedLabel,
+        userLabel,
+        displayName
+      },
+      candidates: [
+        {
+          id: email,
+          label: userLabel,
+          value: email
+        }
+      ]
+    },
+    summary: `Resolved counterparty from conversation memory: ${displayName} (${maskedLabel}).`,
+    userSummary: `Resolved counterparty: ${userLabel}.`,
+    metadata: {
+      recordCount: 1,
+      resolutionStatus: "resolved",
+      counterpartyEmail: email,
+      maskedLabel,
+      displayName,
+      counterpartyCandidates: [
+        {
+          counterpartyEmail: email,
+          maskedLabel,
+          displayName,
+          confidence: "high"
+        }
+      ]
+    },
+    memoryUpdates: {
+      counterparties: [
+        {
+          counterpartyId: email,
+          emailFullForBackendOnly: email,
+          emailMasked: maskedLabel,
+          displayName,
+          relation: "both",
+          source: "transaction"
+        }
+      ]
+    }
+  });
 }
 
 function scoreCandidate(input: {
@@ -102,6 +182,13 @@ export async function resolveCounterpartyCandidates(
   context: ToolContext
 ): Promise<RuntimeToolResult> {
   const query = extractQuery(context);
+  const memoryRefs = context.counterpartyMemory?.mentionedCounterparties ?? [];
+  if (isLastCounterpartyReference(query) && context.counterpartyMemory?.lastCounterparty) {
+    return createResolvedMemoryCounterpartyResult(
+      context.counterpartyMemory.lastCounterparty
+    );
+  }
+
   const transactions = await Transaction.find({ ownerId: context.userId })
     .sort({ createdAt: -1 })
     .limit(200)
@@ -109,7 +196,6 @@ export async function resolveCounterpartyCandidates(
   const transactionEmails = [
     ...new Set(transactions.map((transaction) => normalizeCounterpartyEmail(transaction.counterpartyEmail)))
   ];
-  const memoryRefs = context.counterpartyMemory?.mentionedCounterparties ?? [];
   const allEmails = [
     ...new Set([
       ...memoryRefs.map((counterparty) => normalizeCounterpartyEmail(counterparty.email)),

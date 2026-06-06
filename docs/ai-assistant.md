@@ -911,6 +911,8 @@ Optional guarded eval modes:
 ```bash
 VIRLY_AI_EVAL_ENABLE_LLM_DEV=true ./scripts/ai-eval-chat.sh llm-dev
 VIRLY_AI_EVAL_ENABLE_MONGO=true VIRLY_AI_EVAL_MONGO_URI='mongodb://...' ./scripts/ai-eval-chat.sh seeded-mongo
+VIRLY_AI_EVAL_ENABLE_LLM_DEV=true VIRLY_AI_EVAL_ENABLE_MONGO=true VIRLY_AI_EVAL_MONGO_URI='mongodb://...' ./scripts/ai-eval-chat.sh llm-seeded-mongo
+VIRLY_AI_EVAL_KEEP_MONGO=true VIRLY_AI_EVAL_ENABLE_LLM_DEV=true VIRLY_AI_EVAL_ENABLE_MONGO=true VIRLY_AI_EVAL_MONGO_URI='mongodb://...' ./scripts/ai-eval-chat.sh llm-seeded-mongo
 ```
 
 Notes:
@@ -918,6 +920,13 @@ Notes:
 - `llm-dev` also requires a working `OPENAI_API_KEY` and `VIRLY_AI_MODEL`.
 - `seeded-mongo` is intentionally blocked unless a dedicated eval database URI
   is provided; it must not silently reuse the default development database.
+- `llm-seeded-mongo` requires both guarded setups: live LLM configuration plus
+  a dedicated seeded Mongo eval database.
+- `VIRLY_AI_EVAL_KEEP_MONGO=true` skips the final eval database drop so the
+  seeded collections can be inspected after the run. The initial drop still
+  happens before seeding, so the eval starts from a clean dedicated database.
+- For local Docker Mongo inspection in Compass, use
+  `mongodb://127.0.0.1:27017/virly_ai_eval?directConnection=true`.
 - The deterministic eval mode covers current fixture behavior, including
   pending-confirmation ordinal follow-ups and the Hebrew/English transfer
   success chain. It does not prove seeded database behavior or live model
@@ -928,6 +937,7 @@ Guarded eval environment variables:
 - `VIRLY_AI_EVAL_ENABLE_LLM_DEV=true`
 - `VIRLY_AI_EVAL_ENABLE_MONGO=true`
 - `VIRLY_AI_EVAL_MONGO_URI`
+- `VIRLY_AI_EVAL_KEEP_MONGO=true`
 - `OPENAI_API_KEY`
 - `VIRLY_AI_MODEL`
 

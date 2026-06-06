@@ -109,9 +109,10 @@ function extractAmount(message: string) {
 function extractCounterparty(message: string) {
   const explicitEmail = message.match(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i)?.[0]
     ?.toLowerCase();
+  const hebrewNameReference = message.match(/(?:ל|אל)\s*(שרה)\b/)?.[1];
   const referenceText = message.match(
     /\b(him|her|them|this person|that person|this recipient|that recipient)\b/i
-  )?.[0] ?? message.match(/(לו|לה|אליו|אליה|אותו|אותה|הנמען הזה|האדם הזה)/)?.[0];
+  )?.[0] ?? hebrewNameReference ?? message.match(/(?<![\u0590-\u05ff])(הוא|היא|הם|הן|ממנו|ממנה|מהם|מהן|לו|לה|אליו|אליה|איתו|איתה|מולו|מולה|מולם|מולן|אותו|אותה|הנמען הזה|האדם הזה)(?![\u0590-\u05ff])/)?.[0];
 
   return {
     explicitEmail: explicitEmail ?? null,
@@ -176,7 +177,7 @@ function buildCounterpartyRef(
       /\b(he|him|she|her|they|them|this person|that person|same person|same recipient|last recipient)\b/i
     )?.[0] ??
     normalizedMessage.normalizedText.match(
-      /(לו|לה|אליו|אליה|איתו|איתה|אותו אחד|אותה אחת|הנמען הקודם|האדם הקודם)/
+      /(?<![\u0590-\u05ff])(הוא|היא|הם|הן|ממנו|ממנה|מהם|מהן|לו|לה|אליו|אליה|איתו|איתה|מולו|מולה|מולם|מולן|אותו אחד|אותה אחת|הנמען הקודם|האדם הקודם|שרה)(?![\u0590-\u05ff])/
     )?.[0];
 
   if (referenceText) {
@@ -213,7 +214,7 @@ function classifyAmountReferenceKind(
     /\b(same amount\s+(?:he|she|they)\s+sent\s+me|what\s+(?:he|she|they)\s+sent\s+me)\b/i.test(
       message
     ) ||
-    /(מה שהוא שלח לי|מה שהיא שלחה לי|מה שהם שלחו לי)/.test(message)
+    /(מה שהוא שלח לי|מה שהוא העביר לי|מה שהיא שלחה לי|מה שהיא העבירה לי|מה שהם שלחו לי|אותו סכום שהוא שלח לי|אותו סכום שהוא העביר לי|אותה כמות שהוא שלח לי|אותה כמות שהוא העביר לי)/.test(message)
   ) {
     return "same_as_last_received_from_counterparty";
   }

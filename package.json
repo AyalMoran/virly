@@ -15,5 +15,10 @@
     "seed:transactions": "bash scripts/seed-transactions.sh",
     "build": "npm run build --workspace server && npm run build --workspace client"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@langchain/core": "^1.1.48",
+    "@langchain/langgraph": "^1.3.6",
+    "@langchain/openai": "^1.4.7",
+    "zod": "^4.4.3"
+  }
 }

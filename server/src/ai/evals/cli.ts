@@ -10,7 +10,8 @@ function parseMode(argv: string[]): AiEvalMode {
   if (
     modeValue !== "deterministic" &&
     modeValue !== "llm-dev" &&
-    modeValue !== "seeded-mongo"
+    modeValue !== "seeded-mongo" &&
+    modeValue !== "llm-seeded-mongo"
   ) {
     throw new Error(`Unsupported eval mode: ${modeValue}`);
   }

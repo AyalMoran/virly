@@ -607,14 +607,18 @@ export const clarificationReplyTypeValues = [
 export type ClarificationRequest = {
   reason: (typeof clarificationReasonValues)[number];
   message: string;
+  expectedReplyType: (typeof clarificationReplyTypeValues)[number];
   resumeIntent?: AssistantIntent;
+  resumeOperation?: AiUserRequest["operation"];
   resumeDraft?: TransferDraft;
   options?: Array<{
-      id: string;
-      label: string;
-      value: string;
-    }>;
-  expectedReplyType: (typeof clarificationReplyTypeValues)[number];
+    id: string;
+    label: string;
+    value: string;
+  }>;
+  safeResumeStateVersion?: number;
+  createdAt?: string;
+  expiresAt?: string;
 };
 
 export type ConversationMode =

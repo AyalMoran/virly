@@ -98,6 +98,13 @@ export function classifyAssistantIntentDeterministic(
   }
 
   if (
+    /\b(pending confirmations?|pending transfers?|transfers? waiting for confirmation|waiting confirmations?)\b/i.test(normalized) ||
+    /(העברות ממתינות|העברה ממתינה|אישורים ממתינים|אישורים הממתינים|האישורים הממתינים|אישור ממתין|אישורי העברה ממתינים|העברות שמחכות לאישור|כרטיסי אישור)/.test(message)
+  ) {
+    return { intent: "pending_ai_transfers" };
+  }
+
+  if (
     /\b(who|which people|which recipients)\b.*\b(sent|paid|transferred)\b.*\b(me|to me)\b/i.test(normalized) ||
     /\b(recent|latest|last)\b.*\b(people|recipients|counterparties)\b.*\b(sent|paid|transferred)\b.*\b(me|to me)\b/i.test(normalized) ||
     /\bwho\b.*\b(sent|paid|transferred)\b.*\b(me|to me)\b.*\b(today|yesterday)\b/i.test(normalized) ||
@@ -142,7 +149,7 @@ export function classifyAssistantIntentDeterministic(
   if (
     /\b(net|net total|balance between|settle up|who owes)\b.*\b(with|between|me and|us|him|her|them|this person|that person|recipient|counterparty)\b/i.test(normalized) ||
     /\b(with|between|me and|us|him|her|them|this person|that person|recipient|counterparty)\b.*\b(net|net total|balance between|settle up|who owes)\b/i.test(normalized) ||
-    /(נטו|מאזן|יתרה).*?(בינינו|ביני|איתו|איתה|מולו|מולה|עם|נמען|אדם)/.test(message)
+    /(נטו|מאזן|יתרה).*?(בינינו|ביני|איתו|איתה|מולו|מולה|מול|עם|נמען|אדם)/.test(message)
   ) {
     return { intent: "counterparty_net_total" };
   }
@@ -166,7 +173,8 @@ export function classifyAssistantIntentDeterministic(
   }
 
   if (
-    /\b(transaction|transactions|activity|history|recent|last\s+\d+)\b.*\b(with|to|from)\b.*\b(this|that|person|recipient|counterparty|them)\b/i.test(normalized) ||
+    /\b(transaction|transactions|activity|history|recent|last\s+\d+)\b.*\b(with|to|from)\b.*\b(this|that|person|recipient|counterparty|him|her|them)\b/i.test(normalized) ||
+    /(עסקאות|העברות).*?(איתו|איתה)/.test(message) ||
     /(עסקאות|העברות).*?(עם|ל|אל).*?(לו|לה|אליו|אליה|הנמען|האדם)/.test(message)
   ) {
     return { intent: "counterparty_transactions" };
@@ -186,14 +194,14 @@ export function classifyAssistantIntentDeterministic(
 
   if (
     /\b(how many|count)\b.*\b(transaction|transfer|payment)s?\b/i.test(normalized) ||
-    /(כמה).*?(עסקאות|העברות|תשלומים)/.test(message)
+    /(כמה).*?(עסקאות|העברות|תשלומים|transfers?)/i.test(message)
   ) {
     return { intent: "transaction_count" };
   }
 
   if (
     /\b(stats|statistics|totals|summary|summarize|recap)\b.*\b(transaction|transfer|payment|activity)s?\b/i.test(normalized) ||
-    /(סטטיסטיקה|סיכום|סה"כ|סך הכל).*?(עסקאות|העברות|תשלומים)/.test(message)
+    /(סטטיסטיקה|סטטיסטיקות|סיכום|סה"כ|סך הכל|stats|statistics).*?(עסקאות|העברות|תשלומים)/i.test(message)
   ) {
     return { intent: "transaction_stats" };
   }
@@ -208,7 +216,7 @@ export function classifyAssistantIntentDeterministic(
 
   if (
     /\b(pending confirmations?|pending transfers?|transfers? waiting for confirmation|waiting confirmations?)\b/i.test(normalized) ||
-    /(העברות ממתינות|אישורים ממתינים|העברות שמחכות לאישור|כרטיסי אישור)/.test(message)
+    /(העברות ממתינות|העברה ממתינה|אישורים ממתינים|אישורים הממתינים|האישורים הממתינים|אישור ממתין|אישורי העברה ממתינים|העברות שמחכות לאישור|כרטיסי אישור)/.test(message)
   ) {
     return { intent: "pending_ai_transfers" };
   }
@@ -220,6 +228,13 @@ export function classifyAssistantIntentDeterministic(
     /(כמה).*?(נשאר|נותר|השתמשתי).*?(לשלוח|להעביר|היום|יומי)/.test(message)
   ) {
     return { intent: "daily_transfer_usage" };
+  }
+
+  if (
+    /\b(limit|limits|maximum|max|how much can)\b/i.test(normalized) ||
+    /(מגבלות|מגבלה|תקרה|מקסימום).*?(העברות|להעביר|לשלוח)/.test(message)
+  ) {
+    return { intent: "transfer_limits" };
   }
 
   if (
@@ -333,7 +348,10 @@ function isPendingTransferReferenceFollowUp(
     /\b(pending|confirmation|confirmations)\b/i.test(
       normalized
     ) ||
-    /(ממתינה|ממתינות|אישור)/.test(message);
+    /(ממתינה|ממתינות|ממתין|ממתינים|אישור)/.test(message);
+  const asksForPendingReference =
+    /\b(status|what about|what is happening with)\b/i.test(normalized) ||
+    /(מה לגבי|מה עם|סטטוס|מצב).*?(העברה|אישור|שלו|שלה)/.test(message);
   const explicitlyTransaction =
     /\b(transaction|receipt)\b/i.test(normalized) || /(עסקה|קבלה)/.test(message);
   const bareOrdinalSelection =
@@ -345,11 +363,12 @@ function isPendingTransferReferenceFollowUp(
     );
 
   return (
-    hasOrdinal &&
     !explicitlyTransaction &&
-    (mentionsPendingTransfer ||
-      (hasRecentPendingTransferReferenceContext(context) &&
-        (asksForDetails || bareOrdinalSelection)))
+    ((hasOrdinal &&
+      (mentionsPendingTransfer ||
+        (hasRecentPendingTransferReferenceContext(context) &&
+          (asksForDetails || bareOrdinalSelection || asksForPendingReference)))) ||
+      (hasRecentPendingTransferReferenceContext(context) && asksForPendingReference))
   );
 }
 
@@ -372,7 +391,12 @@ export async function classifyAssistantIntent(
   if (
     deterministicClassification.intent === "transfer_modify_pending" ||
     deterministicClassification.intent === "transfer_cancel_pending" ||
-    deterministicClassification.intent === "pending_confirmation_status"
+    deterministicClassification.intent === "pending_confirmation_status" ||
+    deterministicClassification.intent === "pending_ai_transfers" ||
+    deterministicClassification.intent === "transfer_eligibility" ||
+    deterministicClassification.intent === "transfer_limits" ||
+    deterministicClassification.intent === "transfer_quote" ||
+    deterministicClassification.intent === "daily_transfer_usage"
   ) {
     return deterministicClassification;
   }

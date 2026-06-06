@@ -46,6 +46,10 @@ function parseTurnExpectation(
       record.userMessage,
       `${fixtureName} scenario ${scenarioId} turn ${index} userMessage`
     ),
+    expectedResponseLanguage:
+      record.expectedResponseLanguage === "hebrew"
+        ? "hebrew"
+        : undefined,
     expectedIntent:
       typeof record.expectedIntent === "string"
         ? (record.expectedIntent as AiEvalTurnExpectation["expectedIntent"])
@@ -57,6 +61,14 @@ function parseTurnExpectation(
             `${fixtureName} scenario ${scenarioId} turn ${index} expectedToolCalls[${toolIndex}]`
           )
         ) as AiEvalTurnExpectation["expectedToolCalls"]
+      : undefined,
+    expectedToolCallsInclude: Array.isArray(record.expectedToolCallsInclude)
+      ? record.expectedToolCallsInclude.map((value, toolIndex) =>
+          assertString(
+            value,
+            `${fixtureName} scenario ${scenarioId} turn ${index} expectedToolCallsInclude[${toolIndex}]`
+          )
+        ) as AiEvalTurnExpectation["expectedToolCallsInclude"]
       : undefined,
     expectedConfirmation:
       record.expectedConfirmation &&
@@ -96,6 +108,10 @@ function parseTurnExpectation(
     mustAskClarification:
       typeof record.mustAskClarification === "boolean"
         ? record.mustAskClarification
+        : undefined,
+    mustNotCreateConfirmation:
+      typeof record.mustNotCreateConfirmation === "boolean"
+        ? record.mustNotCreateConfirmation
         : undefined
   };
 }
@@ -120,6 +136,48 @@ function parseScenarioSetup(
           `${fixtureName} scenario ${scenarioId} setup.rememberedCounterparties[${index}]`
         )
     );
+  }
+
+  if (Array.isArray(record.pendingTransfers)) {
+    setup.pendingTransfers = record.pendingTransfers.map((value, index) => {
+      const pending = assertObject(
+        value,
+        `${fixtureName} scenario ${scenarioId} setup.pendingTransfers[${index}]`
+      );
+
+      return {
+        recipientEmail: assertString(
+          pending.recipientEmail,
+          `${fixtureName} scenario ${scenarioId} setup.pendingTransfers[${index}].recipientEmail`
+        ),
+        amount:
+          typeof pending.amount === "number"
+            ? pending.amount
+            : (() => {
+                throw new Error(
+                  `${fixtureName} scenario ${scenarioId} setup.pendingTransfers[${index}].amount must be a number`
+                );
+              })(),
+        currency: assertString(
+          pending.currency,
+          `${fixtureName} scenario ${scenarioId} setup.pendingTransfers[${index}].currency`
+        ) as NonNullable<
+          AiEvalScenarioSetup["pendingTransfers"]
+        >[number]["currency"],
+        recipientFirstName:
+          typeof pending.recipientFirstName === "string"
+            ? pending.recipientFirstName
+            : undefined,
+        recipientLastName:
+          typeof pending.recipientLastName === "string"
+            ? pending.recipientLastName
+            : undefined,
+        reason:
+          typeof pending.reason === "string" || pending.reason === null
+            ? pending.reason
+            : undefined
+      };
+    });
   }
 
   if (record.pendingConfirmation != null) {

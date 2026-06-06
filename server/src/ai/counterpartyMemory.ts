@@ -353,7 +353,7 @@ export function resolveCounterpartyReferenceDeterministic(
     /\b(the guy|the person from before|the last one)\b/.test(normalized) ||
     /\b(this|that)\s+(person|recipient|counterparty)\b/.test(normalized) ||
     /\b(with|to)\s+(them|that person|this person)\b/.test(normalized) ||
-    /(לו|לה|אליו|אליה|איתו|איתה|אותו|אותה|אותו אחד|אותה אחת|האדם הזה|הבן אדם הזה|הנמען הזה|הנמען הקודם|האדם הקודם|האחרון)/.test(message)
+    /(הוא|היא|הם|הן|ממנו|ממנה|מהם|מהן|לו|לה|אליו|אליה|איתו|איתה|מולו|מולה|מולם|מולן|אותו|אותה|אותו אחד|אותה אחת|האדם הזה|הבן אדם הזה|הנמען הזה|הנמען הקודם|האדם הקודם|האחרון)/.test(message)
   ) {
     return memory.lastCounterparty;
   }
