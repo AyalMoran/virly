@@ -31,6 +31,9 @@ const confirmationIdSchema = z
 function toChatResponse(result: Awaited<ReturnType<typeof runAssistantGraph>>) {
   return {
     message: result.message,
+    responseMessage: result.responseMessage,
+    responseFormatVersion: result.responseFormatVersion,
+    ...(result.responseBlocks ? { responseBlocks: result.responseBlocks } : {}),
     conversationId: result.conversationId,
     assistantId: result.assistantId,
     intent: result.intent,

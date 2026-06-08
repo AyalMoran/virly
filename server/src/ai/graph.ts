@@ -69,6 +69,11 @@ import {
   normalizeTransferDraftOutput,
   sanitizeMessagesForLlm
 } from "./llm.js";
+import {
+  assistantResponseFormatVersion,
+  buildAssistantResponseBlocks,
+  buildStructuredResponseFallbackMessage
+} from "./responseBlocks.js";
 import { resolveContextualAmount } from "./amountResolution.js";
 import { config } from "../config.js";
 import {
@@ -100,6 +105,8 @@ const AssistantStateAnnotation = Annotation.Root({
   clarificationMessage: Annotation<string | undefined>(),
   refusalReason: Annotation<string | undefined>(),
   responseMessage: Annotation<string | undefined>(),
+  responseFormatVersion: Annotation<AssistantGraphState["responseFormatVersion"]>(),
+  responseBlocks: Annotation<AssistantGraphState["responseBlocks"]>(),
   debugTrace: Annotation<AssistantGraphState["debugTrace"]>()
 });
 
@@ -2646,7 +2653,8 @@ function hasContradictingRequiredCurrencyFact(
 function getResponsePostCheckFailure(
   message: string,
   state: AssistantGraphState,
-  requiredResponseFacts: RequiredResponseFact[]
+  requiredResponseFacts: RequiredResponseFact[],
+  options: { structuredBlocksPresent?: boolean } = {}
 ) {
   if (hasUnsafeMoneyMovementClaim(message)) {
     return "unsafe_money_movement_claim";
@@ -2656,7 +2664,10 @@ function getResponsePostCheckFailure(
     return "masked_label_leak";
   }
 
-  if (hasMissingRequiredAmountFact(message, requiredResponseFacts)) {
+  if (
+    (!options.structuredBlocksPresent || extractNumericCents(message).length > 0) &&
+    hasMissingRequiredAmountFact(message, requiredResponseFacts)
+  ) {
     return "missing_required_amount_fact";
   }
 
@@ -2677,6 +2688,20 @@ function getResponsePostCheckFailure(
   }
 
   return undefined;
+}
+
+/**
+ * Function type: LangGraph node function.
+ *
+ * @brief Builds versioned structured response blocks from existing state only.
+ */
+function buildResponseBlocks(
+  state: AssistantGraphState
+): Partial<AssistantGraphState> {
+  return {
+    responseFormatVersion: assistantResponseFormatVersion,
+    responseBlocks: buildAssistantResponseBlocks(state)
+  };
 }
 
 /**
@@ -2711,10 +2736,22 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
       )
     };
     const requiredResponseFacts = buildRequiredResponseFacts(state);
+    const structuredIntroFallbackMessage = buildStructuredResponseFallbackMessage(
+      state,
+      state.responseBlocks ?? []
+    );
     const userFallbackMessage = composeDeterministicResponse(state);
-    const llmFallbackMessage = assistantToolResults.length > 0
-      ? assistantToolResults.map((result) => result.summary).join(" ")
-      : userFallbackMessage;
+    const structuredResponse =
+      state.responseBlocks && state.responseBlocks.length > 0
+        ? {
+            responseFormatVersion:
+              state.responseFormatVersion ?? assistantResponseFormatVersion,
+            blockTypes: state.responseBlocks.map((block) => block.type),
+            blockCount: state.responseBlocks.length,
+            introFallbackMessage:
+              structuredIntroFallbackMessage ?? userFallbackMessage
+          }
+        : undefined;
 
     if (
       !llmProvider ||
@@ -2735,8 +2772,9 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
         safeConversationSummary,
         safeResolvedReferences,
         requiredResponseFacts,
+        structuredResponse,
         refusalReason: state.refusalReason,
-        fallbackMessage: llmFallbackMessage
+        fallbackMessage: userFallbackMessage
       });
 
       const hydratedMessage =
@@ -2747,7 +2785,8 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
       const postCheckFailure = getResponsePostCheckFailure(
         hydratedMessage,
         state,
-        requiredResponseFacts
+        requiredResponseFacts,
+        { structuredBlocksPresent: Boolean(structuredResponse) }
       );
 
       if (postCheckFailure) {
@@ -3162,6 +3201,14 @@ function buildPendingStatusSubgraph(options: GraphOptions) {
 function buildResponseSubgraph(options: GraphOptions) {
   return new StateGraph(AssistantStateAnnotation)
     .addNode(
+      "buildResponseBlocks",
+      withNodeTrace(
+        "buildResponseBlocks",
+        buildResponseBlocks,
+        options.onProgress
+      )
+    )
+    .addNode(
       "composeResponse",
       withNodeTrace(
         "composeResponse",
@@ -3169,7 +3216,8 @@ function buildResponseSubgraph(options: GraphOptions) {
         options.onProgress
       )
     )
-    .addEdge(START, "composeResponse")
+    .addEdge(START, "buildResponseBlocks")
+    .addEdge("buildResponseBlocks", "composeResponse")
     .addEdge("composeResponse", END)
     .compile();
 }
@@ -3319,8 +3367,17 @@ export async function runAssistantGraph(
     });
   }
 
+  const responseMessage =
+    finalState.responseMessage ?? "I could not process that request.";
+
   return {
-    message: finalState.responseMessage ?? "I could not process that request.",
+    message: responseMessage,
+    responseMessage,
+    responseFormatVersion:
+      finalState.responseFormatVersion ?? assistantResponseFormatVersion,
+    ...(finalState.responseBlocks && finalState.responseBlocks.length > 0
+      ? { responseBlocks: finalState.responseBlocks }
+      : {}),
     conversationId: input.conversationId,
     assistantId: finalState.assistantId,
     intent,

@@ -238,6 +238,143 @@ export type AiChatStreamStatusEventType = "status";
 export type AiChatStreamResultEventType = "result";
 export type AiChatStreamErrorEventType = "error";
 
+export type AssistantResponseFormatVersion = 1;
+
+export type AssistantResponseBlockType =
+  | "text"
+  | "account_summary"
+  | "transaction_list"
+  | "transaction_detail"
+  | "transaction_stats"
+  | "pending_transfers"
+  | "transfer_quote"
+  | "transfer_confirmation"
+  | "empty_state"
+  | "notice";
+
+export type LocalizedText = {
+  text: string;
+  dir?: "rtl" | "ltr" | "auto";
+};
+
+export type AssistantMoneyValue = {
+  amount: number;
+  currency: AiTransferConfirmationCurrency | "USD" | "EUR";
+  formatted?: string;
+};
+
+export type AssistantKeyValueItem = {
+  label: LocalizedText;
+  value: LocalizedText | AssistantMoneyValue;
+};
+
+export type AssistantTransactionItem = {
+  id: string;
+  direction: "sent" | "received";
+  counterpartyName: string;
+  counterpartyEmail?: string;
+  amount: AssistantMoneyValue;
+  status?: "pending" | "completed" | "failed" | "cancelled" | "canceled";
+  createdAt: string;
+  reference?: string;
+  description?: string | null;
+};
+
+export type PendingTransferItem = {
+  id: string;
+  recipientLabel: string;
+  recipientEmailMasked?: string;
+  amount: AssistantMoneyValue;
+  reason?: string | null;
+  status: "pending";
+  expiresAt: string;
+  conversationId?: string;
+};
+
+export type AssistantResponseBlock =
+  | {
+      id: string;
+      type: "text";
+      title?: LocalizedText;
+      text: LocalizedText;
+    }
+  | {
+      id: string;
+      type: "account_summary";
+      title?: LocalizedText;
+      availableBalance: AssistantMoneyValue;
+      accountLabel?: LocalizedText;
+      items?: AssistantKeyValueItem[];
+    }
+  | {
+      id: string;
+      type: "transaction_list";
+      title?: LocalizedText;
+      subtitle?: LocalizedText;
+      transactions: AssistantTransactionItem[];
+      summary?: {
+        totalCount?: number;
+        totalAmount?: AssistantMoneyValue;
+      };
+    }
+  | {
+      id: string;
+      type: "transaction_detail";
+      title?: LocalizedText;
+      transaction: AssistantTransactionItem;
+    }
+  | {
+      id: string;
+      type: "transaction_stats";
+      title?: LocalizedText;
+      count: number;
+      sentTotal?: AssistantMoneyValue;
+      receivedTotal?: AssistantMoneyValue;
+      net?: AssistantMoneyValue;
+      items?: AssistantKeyValueItem[];
+    }
+  | {
+      id: string;
+      type: "pending_transfers";
+      title?: LocalizedText;
+      pendingTransfers: PendingTransferItem[];
+      summary?: {
+        totalCount?: number;
+      };
+    }
+  | {
+      id: string;
+      type: "transfer_quote";
+      title?: LocalizedText;
+      eligible: boolean;
+      recipientLabel?: string;
+      amount?: AssistantMoneyValue;
+      currentBalance?: AssistantMoneyValue;
+      remainingBalanceAfterTransfer?: AssistantMoneyValue;
+      dailyUsed?: AssistantMoneyValue;
+      dailyRemaining?: AssistantMoneyValue;
+      warnings?: string[];
+    }
+  | {
+      id: string;
+      type: "transfer_confirmation";
+      title?: LocalizedText;
+      confirmation: AiTransferConfirmation;
+    }
+  | {
+      id: string;
+      type: "empty_state";
+      title?: LocalizedText;
+      message: LocalizedText;
+    }
+  | {
+      id: string;
+      type: "notice";
+      title?: LocalizedText;
+      tone: "info" | "warning" | "error" | "success";
+      message: LocalizedText;
+    };
+
 export type AiTransferConfirmationType = "transfer";
 export type AiTransferConfirmationStatus = "pending";
 export type AiTransferConfirmationCurrency = "ILS";
@@ -298,6 +435,9 @@ export type AiTransferConfirmation = {
 
 export type AiChatResponse = {
   message: string;
+  responseMessage?: string;
+  responseFormatVersion: AssistantResponseFormatVersion;
+  responseBlocks?: AssistantResponseBlock[];
   conversationId: string;
   assistantId: AssistantId;
   intent: AssistantIntent;

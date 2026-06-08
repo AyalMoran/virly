@@ -29,6 +29,12 @@ import {
 } from "lucide-react";
 
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  AssistantBlocks,
+  AssistantMarkdown,
+  hasTransferConfirmationBlock,
+  type TransferConfirmationCardStatus,
+} from "@/components/assistant/AssistantBlocks";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -45,6 +51,8 @@ import type {
   AiClarificationRequest,
   AiChatResponse,
   AiChatStreamPhase,
+  AssistantResponseBlock,
+  AssistantResponseFormatVersion,
   AiTransferConfirmation,
   AssistantId
 } from "@/lib/types";
@@ -75,10 +83,12 @@ type ChatMessage = {
   id: string;
   role: "user" | "assistant";
   content: string;
+  responseFormatVersion?: AssistantResponseFormatVersion;
+  responseBlocks?: AssistantResponseBlock[];
   assistantId?: AssistantId;
   clarification?: AiClarificationRequest;
   confirmation?: AiTransferConfirmation;
-  confirmationStatus?: "pending" | "confirming" | "denying" | "confirmed" | "denied" | "superseded" | "failed";
+  confirmationStatus?: TransferConfirmationCardStatus;
 };
 
 function getStreamPhaseLabel(phase: AiChatStreamPhase | null) {
@@ -289,6 +299,8 @@ function PendingTransferCard({
           ? "border-slate-300/50 opacity-70 shadow-slate-950/5"
           : "border-emerald-500/25 shadow-emerald-950/5"
       )}
+      dir="auto"
+      style={{ textAlign: "start", overflowWrap: "anywhere" }}
     >
       <div className="flex items-center justify-between gap-2 border-b border-border/30 bg-emerald-500/10 px-2.5 py-2">
         <div className="flex min-w-0 items-center gap-2">
@@ -299,7 +311,7 @@ function PendingTransferCard({
             <p className="text-[11px] font-semibold uppercase leading-3 text-emerald-700">
               Pending transfer
             </p>
-            <p className="truncate text-[10px] leading-4 text-muted-foreground">
+            <p className="break-words text-[10px] leading-4 text-muted-foreground">
               {isSuperseded
                 ? "Replaced by a newer card"
                 : "Review details before money moves"}
@@ -324,21 +336,27 @@ function PendingTransferCard({
               To
             </dt>
             <dd className="min-w-0">
-              <p className="truncate font-medium leading-4 text-foreground">
+              <p className="break-words font-medium leading-4 text-foreground" dir="auto">
                 {getRecipientName(confirmation)}
               </p>
-              <p className="truncate text-muted-foreground">
+              <bdi
+                dir="ltr"
+                className="block min-w-0 break-all text-muted-foreground"
+              >
                 {confirmation.recipientEmail}
-              </p>
+              </bdi>
             </dd>
           </div>
 
           <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-2 rounded-md border border-border/30 bg-muted/20 px-2 py-1.5">
             <dt className="text-muted-foreground">Amount</dt>
             <dd className="flex min-w-0 items-baseline justify-between gap-2">
-              <span className="truncate text-base font-semibold leading-5 text-foreground">
+              <bdi
+                dir="ltr"
+                className="min-w-0 break-all text-base font-semibold leading-5 text-foreground"
+              >
                 {getConfirmationAmount(confirmation)}
-              </span>
+              </bdi>
               <span className="shrink-0 text-[10px] text-muted-foreground">
                 {confirmation.currency}
               </span>
@@ -347,7 +365,7 @@ function PendingTransferCard({
 
           <div className="grid grid-cols-[4.25rem_minmax(0,1fr)] items-center gap-2 rounded-md border border-border/30 bg-background/60 px-2 py-1.5">
             <dt className="text-muted-foreground">Reason</dt>
-            <dd className="truncate text-right font-medium text-foreground">
+            <dd className="break-words text-start font-medium text-foreground" dir="auto">
               {confirmation.reason || "Not provided"}
             </dd>
           </div>
@@ -357,7 +375,7 @@ function PendingTransferCard({
               <Clock className="h-3 w-3" />
               Expires
             </dt>
-            <dd className="truncate text-right font-medium text-foreground">
+            <dd className="break-words text-start font-medium text-foreground">
               {getConfirmationExpiryLabel(confirmation)}
             </dd>
           </div>
@@ -428,7 +446,7 @@ function ClarificationOptions({
           type="button"
           variant="outline"
           size="sm"
-          className="h-auto justify-start whitespace-normal rounded-lg border-border/40 bg-background/80 px-3 py-2 text-left text-xs font-medium"
+          className="h-auto justify-start whitespace-normal rounded-lg border-border/40 bg-background/80 px-3 py-2 text-start text-xs font-medium"
           disabled={disabled}
           onClick={() => onSelect(option.value)}
         >
@@ -522,7 +540,9 @@ export function FloatingChatWidget() {
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          content: response.message,
+          content: response.responseMessage ?? response.message,
+          responseFormatVersion: response.responseFormatVersion,
+          responseBlocks: response.responseBlocks,
           assistantId: response.assistantId,
           clarification: response.clarification,
           confirmation: response.confirmation,
@@ -757,8 +777,12 @@ export function FloatingChatWidget() {
                   <span className="text-xs font-medium text-muted-foreground">
                     {currentAgent.name}
                   </span>
-                  <div className="rounded-2xl rounded-tl-none border border-border/20 bg-muted/50 px-4 py-2.5 text-sm shadow-sm backdrop-blur-sm">
-                    <p>{currentAgent.greeting}</p>
+                  <div
+                    className="rounded-2xl rounded-tl-none border border-border/20 bg-muted/50 px-4 py-2.5 text-sm shadow-sm backdrop-blur-sm"
+                    dir="auto"
+                    style={{ textAlign: "start", overflowWrap: "anywhere" }}
+                  >
+                    <AssistantMarkdown text={currentAgent.greeting} />
                   </div>
                 </div>
               </motion.div>
@@ -781,8 +805,12 @@ export function FloatingChatWidget() {
                       </AvatarFallback>
                     </Avatar>
                     <div className="flex max-w-[85%] flex-col items-end gap-1">
-                      <div className="rounded-2xl rounded-tr-none bg-primary px-4 py-2.5 text-sm text-primary-foreground shadow-md">
-                        <p>{chatMessage.content}</p>
+                      <div
+                        className="rounded-2xl rounded-tr-none bg-primary px-4 py-2.5 text-sm text-primary-foreground shadow-md"
+                        dir="auto"
+                        style={{ textAlign: "start", overflowWrap: "anywhere" }}
+                      >
+                        <p className="min-w-0 break-words">{chatMessage.content}</p>
                       </div>
                     </div>
                   </motion.div>
@@ -804,8 +832,34 @@ export function FloatingChatWidget() {
                       <span className="text-xs font-medium text-muted-foreground">
                         {messageAgent.name}
                       </span>
-                      <div className="rounded-2xl rounded-tl-none border border-border/20 bg-muted/50 px-4 py-2.5 text-sm shadow-sm backdrop-blur-sm">
-                        <p>{chatMessage.content}</p>
+                      <div
+                        className="rounded-2xl rounded-tl-none border border-border/20 bg-muted/50 px-4 py-2.5 text-sm shadow-sm backdrop-blur-sm"
+                        dir="auto"
+                        style={{ textAlign: "start", overflowWrap: "anywhere" }}
+                      >
+                        {chatMessage.content ? (
+                          <AssistantMarkdown text={chatMessage.content} />
+                        ) : null}
+                        {chatMessage.responseBlocks?.length ? (
+                          <AssistantBlocks
+                            blocks={chatMessage.responseBlocks}
+                            confirmationStatus={chatMessage.confirmationStatus}
+                            onConfirmTransfer={(confirmation) =>
+                              handleConfirmationAction(
+                                chatMessage.id,
+                                confirmation,
+                                "confirm",
+                              )
+                            }
+                            onDenyTransfer={(confirmation) =>
+                              handleConfirmationAction(
+                                chatMessage.id,
+                                confirmation,
+                                "deny",
+                              )
+                            }
+                          />
+                        ) : null}
                         {chatMessage.clarification ? (
                           <ClarificationOptions
                             clarification={chatMessage.clarification}
@@ -815,7 +869,8 @@ export function FloatingChatWidget() {
                             }}
                           />
                         ) : null}
-                        {chatMessage.confirmation ? (
+                        {chatMessage.confirmation &&
+                        !hasTransferConfirmationBlock(chatMessage.responseBlocks) ? (
                           <PendingTransferCard
                             confirmation={chatMessage.confirmation}
                             status={chatMessage.confirmationStatus}

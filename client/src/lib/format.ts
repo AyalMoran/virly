@@ -1,17 +1,23 @@
-export function formatCurrency(value: number) {
-  return new Intl.NumberFormat("en-US", {
+export function formatMoneyILS(value: number, locale = "he-IL") {
+  return new Intl.NumberFormat(locale || "he-IL", {
     style: "currency",
     currency: "ILS",
-    minimumFractionDigits: 2
+    currencyDisplay: "narrowSymbol",
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
   }).format(value);
 }
 
-export function formatDate(value?: string) {
+export function formatCurrency(value: number, locale = "en-US") {
+  return formatMoneyILS(value, locale);
+}
+
+export function formatDate(value?: string, locale = "en-US") {
   if (!value) {
     return "Pending date";
   }
 
-  return new Intl.DateTimeFormat("en-US", {
+  return new Intl.DateTimeFormat(locale || "en-US", {
     month: "short",
     day: "numeric",
     year: "numeric",

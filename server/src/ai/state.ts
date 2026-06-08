@@ -1,4 +1,8 @@
 import type { AssistantId } from "./assistants.js";
+import type {
+  AssistantResponseBlock,
+  AssistantResponseFormatVersion
+} from "./responseBlocks.js";
 
 export const assistantIntentValues = [
   "balance_inquiry",
@@ -750,6 +754,12 @@ export type ComposeAssistantResponseInput = {
   safeConversationSummary: SafeConversationSummary;
   safeResolvedReferences: SafeResolvedReferences;
   requiredResponseFacts: RequiredResponseFact[];
+  structuredResponse?: {
+    responseFormatVersion: AssistantResponseFormatVersion;
+    blockTypes: AssistantResponseBlock["type"][];
+    blockCount: number;
+    introFallbackMessage: string;
+  };
   refusalReason?: string;
   fallbackMessage: string;
 };
@@ -805,6 +815,8 @@ export type AssistantGraphState = {
   clarificationMessage?: string;
   refusalReason?: string;
   responseMessage?: string;
+  responseFormatVersion?: AssistantResponseFormatVersion;
+  responseBlocks?: AssistantResponseBlock[];
   debugTrace?: AiGraphDebugEvent[];
 };
 
@@ -885,6 +897,9 @@ export type RunAssistantInput = {
 
 export type RunAssistantResult = {
   message: string;
+  responseMessage: string;
+  responseFormatVersion: AssistantResponseFormatVersion;
+  responseBlocks?: AssistantResponseBlock[];
   conversationId: string;
   assistantId: AssistantId;
   intent: AssistantIntent;

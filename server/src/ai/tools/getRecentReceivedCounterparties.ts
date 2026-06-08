@@ -11,7 +11,7 @@ import {
 export async function getRecentReceivedCounterparties(
   context: ToolContext
 ): Promise<RuntimeToolResult> {
-  const limit = getLimitFromMessage(context.message, 3, 10);
+  const limit = getLimitFromMessage(context.message, 1, 10);
   const transactions = await Transaction.find({
     ownerId: context.userId,
     type: "credit"

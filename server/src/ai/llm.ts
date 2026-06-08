@@ -635,6 +635,19 @@ function buildResponsePrompt(input: ComposeAssistantResponseInput)
         "Personality affects wording only. It must not change safety decisions, account scope, intent, tool use, or refusal behavior.",
         "Use only the supplied tool summaries for account facts. Do not invent balances, transactions, recipients, limits, or transfer status.",
         "If a transfer confirmation is supplied, ask the user to review the visible confirmation card and use the buttons. Do not say the transfer is complete.",
+        input.structuredResponse
+            ? [
+                  "Structured response blocks are available for the financial details.",
+                  `Structured response format version: ${input.structuredResponse.responseFormatVersion}.`,
+                  `Structured block types: ${input.structuredResponse.blockTypes.join(", ")}.`,
+                  `Short intro fallback to use for structured rendering: ${input.structuredResponse.introFallbackMessage}`,
+                  "Write only a short localized intro or fallback sentence.",
+                  "Do not manually format transaction lists, account summaries, pending transfers, transfer quotes, transfer confirmations, or financial tables.",
+                  "Do not repeat all amounts, dates, recipients, balances, or statuses as Markdown.",
+                  "Do not use Markdown tables, bullet lists, or bold markers for structured financial data.",
+                  "The UI will render the structured financial data from trusted backend blocks."
+              ].join("\n")
+            : "Markdown is allowed only for simple unstructured text fallback. Keep it concise.",
         "Return one concise assistant message.",
         "",
         `Selected assistant id: ${input.assistantId}`,
