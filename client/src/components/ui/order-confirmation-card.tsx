@@ -73,7 +73,7 @@ export const OrderConfirmationCard: React.FC<OrderConfirmationCardProps> = ({
         animate="visible"
         aria-live="polite"
         className={cn(
-          "w-full max-w-sm rounded-xl border bg-card p-6 text-card-foreground shadow-lg sm:p-8",
+          "order-confirmation-card w-full max-w-sm rounded-xl border bg-card p-5 text-card-foreground shadow-lg sm:p-8",
           className,
         )}
       >
@@ -89,15 +89,21 @@ export const OrderConfirmationCard: React.FC<OrderConfirmationCardProps> = ({
               <div
                 key={item.label}
                 className={cn(
-                  "flex items-center justify-between border-b pb-4 text-sm text-muted-foreground",
+                  "order-detail-row flex min-w-0 flex-col gap-1 border-b pb-4 text-start text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between sm:gap-4",
                   {
                     "border-none pb-0": index === details.length - 1,
                     "font-bold text-card-foreground": item.isBold,
                   },
                 )}
               >
-                <span>{item.label}</span>
-                <span className={cn({ "text-lg": item.isBold }, item.valueClassName)}>
+                <span className="shrink-0">{item.label}</span>
+                <span
+                  className={cn(
+                    "min-w-0 break-words sm:text-right",
+                    { "text-lg": item.isBold },
+                    item.valueClassName,
+                  )}
+                >
                   {item.value}
                 </span>
               </div>

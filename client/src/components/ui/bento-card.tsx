@@ -83,7 +83,7 @@ export default function BentoCard() {
 
   return (
     <div className="flex w-full items-center justify-center antialiased">
-      <div className="group relative m-0 w-full max-w-xl overflow-hidden rounded-3xl border bg-card shadow-2xl shadow-primary/5 transition-all duration-500 hover:-translate-y-1 hover:shadow-primary/10 sm:rounded-[2rem]">
+      <div className="bento-card-shell group relative m-0 w-full max-w-xl overflow-hidden rounded-3xl border bg-card shadow-2xl shadow-primary/5 transition-all duration-500 hover:-translate-y-1 hover:shadow-primary/10 sm:rounded-[2rem]">
         <div className="relative z-10 space-y-1.5 p-4 sm:p-6">
           <h2 className="text-xs uppercase text-muted-foreground">
             Project Dashboard
@@ -94,10 +94,10 @@ export default function BentoCard() {
           </p>
         </div>
 
-        <div className="relative h-[260px] w-full overflow-hidden rounded-2xl sm:h-[300px] sm:rounded-[2rem]">
-          <div className="absolute left-16 top-16 h-full w-full rounded-3xl border border-border/50 bg-muted opacity-80" />
+        <div className="bento-card-stage relative h-[260px] w-full overflow-hidden rounded-2xl sm:h-[300px] sm:rounded-[2rem]">
+          <div className="bento-card-shadow absolute left-16 top-16 h-full w-full rounded-3xl border border-border/50 bg-muted opacity-80" />
 
-          <div className="absolute left-24 top-8 flex h-full w-full flex-col overflow-hidden rounded-tl-3xl bg-background shadow-xl ring-4 ring-border sm:ring-6">
+          <div className="bento-card-window absolute left-24 top-8 flex h-full w-full flex-col overflow-hidden rounded-tl-3xl bg-background shadow-xl ring-4 ring-border sm:ring-6">
             <div className="relative flex items-center rounded-tl-3xl border-b border-border/70 px-5 py-4 backdrop-blur-sm">
               <div className="flex gap-1.5">
                 <div className="h-2 w-2 rounded-full bg-muted-foreground/20" />
@@ -112,7 +112,7 @@ export default function BentoCard() {
             </div>
 
             <div className="flex flex-1 overflow-hidden">
-              <div className="flex w-36 flex-col gap-1 border-r border-border/30 bg-muted/5 p-2 pt-6">
+              <div className="bento-card-tabs flex w-36 flex-col gap-1 border-r border-border/30 bg-muted/5 p-2 pt-6">
                 <LayoutGroup>
                   {TABS.map((tab) => {
                     const isActive = activeTab.id === tab.id;

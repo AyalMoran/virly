@@ -27,6 +27,32 @@ export function Card({
   return <section className={`card ${className}`}>{children}</section>;
 }
 
+export function PageStack({
+  children,
+  className = ""
+}: {
+  children: ReactNode;
+  className?: string;
+}) {
+  return <div className={`page-stack ${className}`.trim()}>{children}</div>;
+}
+
+export function ResponsiveGrid({
+  children,
+  className = "",
+  variant = "sidebar"
+}: {
+  children: ReactNode;
+  className?: string;
+  variant?: "sidebar" | "dashboard" | "split" | "filters";
+}) {
+  return (
+    <div className={`responsive-grid responsive-grid-${variant} ${className}`.trim()}>
+      {children}
+    </div>
+  );
+}
+
 type FieldProps = InputHTMLAttributes<HTMLInputElement> & {
   label: string;
   error?: string;
@@ -95,7 +121,7 @@ export function PageHeader({
 }) {
   return (
     <div className="page-header">
-      <div>
+      <div className="page-header-copy">
         {eyebrow ? <p className="eyebrow">{eyebrow}</p> : null}
         <h1>{title}</h1>
       </div>

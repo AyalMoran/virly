@@ -6,6 +6,8 @@ import {
   ErrorBanner,
   Field,
   PageHeader,
+  PageStack,
+  ResponsiveGrid,
   Skeleton,
   SuccessBanner
 } from "../../components/Primitives";
@@ -232,9 +234,9 @@ export function SettingsPage() {
   }
 
   return (
-    <div className="page-stack">
+    <PageStack>
       <PageHeader eyebrow="" title="Settings" />
-      <div className="settings-grid">
+      <ResponsiveGrid className="settings-grid" variant="sidebar">
         <Card className="settings-details-card">
           <div className="settings-card-header">
             <div>
@@ -421,7 +423,7 @@ export function SettingsPage() {
             </Button>
           </Card>
         </div>
-      </div>
-    </div>
+      </ResponsiveGrid>
+    </PageStack>
   );
 }

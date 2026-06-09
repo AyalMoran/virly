@@ -1,5 +1,13 @@
 import { FormEvent, useEffect, useState } from "react";
-import { Button, Card, ErrorBanner, Field, PageHeader, Skeleton } from "../../components/Primitives";
+import {
+  Button,
+  Card,
+  ErrorBanner,
+  Field,
+  PageHeader,
+  PageStack,
+  Skeleton
+} from "../../components/Primitives";
 import { TransactionDetailsDialog } from "../../components/TransactionDetailsDialog";
 import { TransactionList } from "../../components/TransactionList";
 import { api } from "../../lib/api";
@@ -72,7 +80,7 @@ export function TransactionsPage() {
   }
 
   return (
-    <div className="page-stack">
+    <PageStack>
       <PageHeader eyebrow="" title="Transactions" />
       <Card>
         <form className="filter-bar" onSubmit={applyFilter} noValidate>
@@ -109,6 +117,6 @@ export function TransactionsPage() {
         transaction={selectedTransaction}
         onClose={() => setSelectedTransaction(null)}
       />
-    </div>
+    </PageStack>
   );
 }

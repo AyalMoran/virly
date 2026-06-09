@@ -64,7 +64,6 @@ import { cn } from "@/lib/utils";
 import oshriAvatar from "@/assets/agents/oshri.jpeg";
 import chayaAvatar from "@/assets/agents/chaya.jpeg";
 import yehudaAvatar from "@/assets/agents/yehuda.jpeg";
-import yohaiDanielAvatar from "@/assets/agents/yohai-daniel.png";
 
 
 
@@ -399,7 +398,7 @@ function PendingTransferCard({
           <Button
             type="button"
             size="sm"
-            className="h-8 gap-1 rounded-md bg-emerald-600 px-2 text-xs text-white shadow-sm hover:bg-emerald-700 focus-visible:ring-emerald-600"
+            className="min-h-10 gap-1 rounded-md bg-emerald-600 px-2 text-xs text-white shadow-sm hover:bg-emerald-700 focus-visible:ring-emerald-600"
             disabled={disabled}
             onClick={onConfirm}
           >
@@ -409,7 +408,7 @@ function PendingTransferCard({
           <Button
             type="button"
             size="sm"
-            className="h-8 gap-1 rounded-md bg-red-600 px-2 text-xs text-white shadow-sm hover:bg-red-700 focus-visible:ring-red-600"
+            className="min-h-10 gap-1 rounded-md bg-red-600 px-2 text-xs text-white shadow-sm hover:bg-red-700 focus-visible:ring-red-600"
             disabled={disabled}
             onClick={onDeny}
           >
@@ -659,7 +658,7 @@ export function FloatingChatWidget() {
 
   return (
     <div
-      className="fixed bottom-5 right-4 z-50 flex flex-col items-end gap-4 sm:bottom-6 sm:right-6"
+      className="floating-chat-root fixed bottom-5 right-4 z-50 flex flex-col items-end gap-4 sm:bottom-6 sm:right-6"
       id={widgetId}
     >
       <AnimatePresence>
@@ -670,7 +669,7 @@ export function FloatingChatWidget() {
             initial="hidden"
             animate="visible"
             exit="exit"
-            className="w-[calc(100vw-2rem)] max-w-[380px] overflow-hidden rounded-2xl border border-border/40 bg-background/80 shadow-2xl backdrop-blur-xl ring-1 ring-white/30"
+            className="floating-chat-window w-[calc(100vw-2rem)] max-w-[380px] overflow-hidden rounded-2xl border border-border/40 bg-background/80 shadow-2xl backdrop-blur-xl ring-1 ring-white/30"
           >
             <div className="relative overflow-hidden border-b border-border/40 bg-muted/30 p-4">
               <div
@@ -714,7 +713,7 @@ export function FloatingChatWidget() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 rounded-full hover:bg-background/50"
+                  className="min-h-10 min-w-10 rounded-full hover:bg-background/50"
                   onClick={() => setIsOpen(false)}
                   aria-label="Close chat"
                 >
@@ -765,7 +764,7 @@ export function FloatingChatWidget() {
               </Select>
             </div>
 
-            <div className="flex h-[320px] flex-col gap-4 overflow-y-auto bg-gradient-to-b from-background/20 to-background/40 p-4">
+            <div className="floating-chat-messages flex h-[320px] flex-col gap-4 overflow-y-auto bg-gradient-to-b from-background/20 to-background/40 p-4">
               <motion.div variants={messageVariants} className="flex gap-3">
                 <Avatar className="h-8 w-8 border border-border/40 shadow-sm">
                   <AvatarImage src={currentAgent.avatar} />
@@ -773,7 +772,7 @@ export function FloatingChatWidget() {
                     AI
                   </AvatarFallback>
                 </Avatar>
-                <div className="flex max-w-[85%] flex-col gap-1">
+                <div className="chat-message-column flex max-w-[85%] flex-col gap-1">
                   <span className="text-xs font-medium text-muted-foreground">
                     {currentAgent.name}
                   </span>
@@ -804,7 +803,7 @@ export function FloatingChatWidget() {
                         {userInitials}
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex max-w-[85%] flex-col items-end gap-1">
+                    <div className="chat-message-column flex max-w-[85%] flex-col items-end gap-1">
                       <div
                         className="rounded-2xl rounded-tr-none bg-primary px-4 py-2.5 text-sm text-primary-foreground shadow-md"
                         dir="auto"
@@ -828,7 +827,7 @@ export function FloatingChatWidget() {
                         AI
                       </AvatarFallback>
                     </Avatar>
-                    <div className="flex max-w-[85%] flex-col gap-1">
+                    <div className="chat-message-column flex max-w-[85%] flex-col gap-1">
                       <span className="text-xs font-medium text-muted-foreground">
                         {messageAgent.name}
                       </span>

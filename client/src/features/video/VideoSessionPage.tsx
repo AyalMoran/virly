@@ -1,7 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Headphones, PhoneOff, ShieldCheck, UserRound, Video } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-import { Button, Card, ErrorBanner, PageHeader, TextareaField } from "../../components/Primitives";
+import {
+  Button,
+  Card,
+  ErrorBanner,
+  PageHeader,
+  PageStack,
+  ResponsiveGrid,
+  TextareaField
+} from "../../components/Primitives";
 import { api } from "../../lib/api";
 import type {
   JitsiJoinConfig,
@@ -156,7 +164,7 @@ export function VideoSessionPage() {
     jitsi && session && !["ended", "cancelled", "failed", "missed"].includes(session.status);
 
   return (
-    <div className="page-stack video-page">
+    <PageStack className="video-page">
       <PageHeader eyebrow="Secure help" title="Video calls">
         {session ? (
           <span className={`video-status-pill video-status-${session.status}`}>
@@ -167,7 +175,7 @@ export function VideoSessionPage() {
 
       {error ? <ErrorBanner message={error} /> : null}
 
-      <div className="video-layout">
+      <ResponsiveGrid className="video-layout" variant="split">
         <Card className="video-control-panel">
           <div className="video-intro">
             <span className="video-intro-icon" aria-hidden="true">
@@ -259,7 +267,7 @@ export function VideoSessionPage() {
             </div>
           )}
         </Card>
-      </div>
-    </div>
+      </ResponsiveGrid>
+    </PageStack>
   );
 }

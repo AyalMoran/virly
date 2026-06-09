@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Headphones, PhoneOff, RefreshCw, ShieldAlert, UserRound, Video } from "lucide-react";
-import { Button, Card, ErrorBanner, PageHeader, Skeleton } from "../../components/Primitives";
+import {
+  Button,
+  Card,
+  ErrorBanner,
+  PageHeader,
+  PageStack,
+  ResponsiveGrid,
+  Skeleton
+} from "../../components/Primitives";
 import { api } from "../../lib/api";
 import type {
   AgentVideoSession,
@@ -139,19 +147,19 @@ export function AgentVideoSessionsPage() {
 
   if (!agentAllowed) {
     return (
-      <div className="page-stack">
+      <PageStack>
         <PageHeader eyebrow="Internal" title="Video queue" />
         <Card className="video-empty-stage">
           <ShieldAlert aria-hidden="true" />
           <h2>Agent access required</h2>
           <p>Your account is not authorized for the internal video queue.</p>
         </Card>
-      </div>
+      </PageStack>
     );
   }
 
   return (
-    <div className="page-stack agent-video-page">
+    <PageStack className="agent-video-page">
       <PageHeader eyebrow="Internal" title="Video queue">
         <Button type="button" variant="secondary" onClick={loadSessions} disabled={isLoading}>
           <RefreshCw size={18} />
@@ -191,7 +199,7 @@ export function AgentVideoSessionsPage() {
         </label>
       </Card>
 
-      <div className="agent-video-layout">
+      <ResponsiveGrid className="agent-video-layout" variant="split">
         <Card className="agent-video-list">
           {isLoading ? (
             <Skeleton rows={5} />
@@ -284,8 +292,7 @@ export function AgentVideoSessionsPage() {
             </div>
           )}
         </Card>
-      </div>
-    </div>
+      </ResponsiveGrid>
+    </PageStack>
   );
 }
-

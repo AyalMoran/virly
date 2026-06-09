@@ -6,6 +6,8 @@ import {
   ErrorBanner,
   Field,
   PageHeader,
+  PageStack,
+  ResponsiveGrid,
   SuccessBanner,
   TextareaField
 } from "../../components/Primitives";
@@ -134,9 +136,9 @@ export function TransferPage() {
   }
 
   return (
-    <div className="page-stack">
+    <PageStack>
       <PageHeader eyebrow="" title="Transfer" />
-      <div className="transfer-layout figma-transfer-layout">
+      <ResponsiveGrid className="transfer-layout figma-transfer-layout" variant="sidebar">
         <Card className="transfer-card figma-transfer-card">
           {step === "success" && result ? (
             <div className="success-panel">
@@ -266,7 +268,7 @@ export function TransferPage() {
             </div>
           ) : null}
         </Card>
-      </div>
-    </div>
+      </ResponsiveGrid>
+    </PageStack>
   );
 }

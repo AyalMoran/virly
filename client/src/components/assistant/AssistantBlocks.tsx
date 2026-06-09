@@ -922,7 +922,7 @@ function TransferConfirmationCard({
       <div className="grid grid-cols-2 gap-2 border-t border-border/25 p-3 pt-2">
         <button
           type="button"
-          className="inline-flex h-8 items-center justify-center gap-1 rounded-md bg-emerald-600 px-2 text-xs font-medium text-white hover:bg-emerald-700 disabled:pointer-events-none disabled:opacity-50"
+          className="inline-flex min-h-10 items-center justify-center gap-1 rounded-md bg-emerald-600 px-2 text-xs font-medium text-white hover:bg-emerald-700 disabled:pointer-events-none disabled:opacity-50"
           disabled={disabled || !onConfirm}
           onClick={() => onConfirm?.(confirmation)}
         >
@@ -931,7 +931,7 @@ function TransferConfirmationCard({
         </button>
         <button
           type="button"
-          className="inline-flex h-8 items-center justify-center gap-1 rounded-md bg-red-600 px-2 text-xs font-medium text-white hover:bg-red-700 disabled:pointer-events-none disabled:opacity-50"
+          className="inline-flex min-h-10 items-center justify-center gap-1 rounded-md bg-red-600 px-2 text-xs font-medium text-white hover:bg-red-700 disabled:pointer-events-none disabled:opacity-50"
           disabled={disabled || !onDeny}
           onClick={() => onDeny?.(confirmation)}
         >
