@@ -635,6 +635,179 @@ function TransferQuoteCard({
   );
 }
 
+function TransferStatusCard({
+  block,
+  locale,
+}: {
+  block: Extract<AssistantResponseBlock, { type: "transfer_status" }>;
+  locale?: string;
+}) {
+  const items: AssistantKeyValueItem[] = [
+    {
+      label: { text: "Status", dir: "auto" },
+      value: { text: block.status, dir: "auto" },
+    },
+    ...(block.recipientLabel
+      ? [
+          {
+            label: { text: "Recipient", dir: "auto" as const },
+            value: { text: block.recipientLabel, dir: "auto" as const },
+          },
+        ]
+      : []),
+    ...(block.amount
+      ? [{ label: { text: "Amount", dir: "auto" as const }, value: block.amount }]
+      : []),
+    ...(block.reason
+      ? [
+          {
+            label: { text: "Reason", dir: "auto" as const },
+            value: { text: block.reason, dir: "auto" as const },
+          },
+        ]
+      : []),
+    ...(block.expiresAt
+      ? [
+          {
+            label: { text: "Expires", dir: "auto" as const },
+            value: {
+              text: formatDate(block.expiresAt, getPreferredLocale(locale)),
+              dir: "ltr" as const,
+            },
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <AssistantCard
+      title={block.title}
+      subtitle={{ text: block.status, dir: "auto" }}
+      icon={<Clock className="h-3.5 w-3.5" />}
+    >
+      <KeyValueGrid items={items} locale={locale} />
+      {block.message ? (
+        <p
+          dir={block.message.dir ?? "auto"}
+          className="border-t border-border/25 p-3 text-[12px] leading-5 text-muted-foreground"
+        >
+          {block.message.text}
+        </p>
+      ) : null}
+    </AssistantCard>
+  );
+}
+
+function TransferLimitsCard({
+  block,
+  locale,
+}: {
+  block: Extract<AssistantResponseBlock, { type: "transfer_limits" }>;
+  locale?: string;
+}) {
+  const items: AssistantKeyValueItem[] = [
+    ...(block.eligible !== undefined
+      ? [
+          {
+            label: { text: "Eligibility", dir: "auto" as const },
+            value: {
+              text: block.eligible ? "Eligible" : "Not eligible",
+              dir: "auto" as const,
+            },
+          },
+        ]
+      : []),
+    ...(block.amount
+      ? [{ label: { text: "Amount checked", dir: "auto" as const }, value: block.amount }]
+      : []),
+    ...(block.balance
+      ? [{ label: { text: "Balance", dir: "auto" as const }, value: block.balance }]
+      : []),
+    ...(block.maxSendableNow
+      ? [
+          {
+            label: { text: "Max now", dir: "auto" as const },
+            value: block.maxSendableNow,
+          },
+        ]
+      : []),
+    ...(block.perTransferLimit
+      ? [
+          {
+            label: { text: "Per transfer", dir: "auto" as const },
+            value: block.perTransferLimit,
+          },
+        ]
+      : []),
+    ...(block.dailyTransferLimit
+      ? [
+          {
+            label: { text: "Daily limit", dir: "auto" as const },
+            value: block.dailyTransferLimit,
+          },
+        ]
+      : []),
+    ...(block.dailyUsed
+      ? [{ label: { text: "Used today", dir: "auto" as const }, value: block.dailyUsed }]
+      : []),
+    ...(block.dailyRemaining
+      ? [
+          {
+            label: { text: "Daily remaining", dir: "auto" as const },
+            value: block.dailyRemaining,
+          },
+        ]
+      : []),
+    ...(block.transferCountToday !== undefined
+      ? [
+          {
+            label: { text: "Transfers today", dir: "auto" as const },
+            value: { text: String(block.transferCountToday), dir: "ltr" as const },
+          },
+        ]
+      : []),
+    ...(block.resetAt
+      ? [
+          {
+            label: { text: "Resets", dir: "auto" as const },
+            value: {
+              text: formatDate(block.resetAt, getPreferredLocale(locale)),
+              dir: "ltr" as const,
+            },
+          },
+        ]
+      : []),
+  ];
+
+  return (
+    <AssistantCard
+      title={block.title}
+      subtitle={
+        block.eligible === undefined
+          ? undefined
+          : { text: block.eligible ? "Eligible" : "Not eligible", dir: "auto" }
+      }
+      icon={<ShieldCheck className="h-3.5 w-3.5" />}
+    >
+      <KeyValueGrid items={items} locale={locale} />
+      {block.reasons?.length ? (
+        <div className="grid gap-1 border-t border-border/25 p-3 pt-2">
+          {block.reasons.map((reason) => (
+            <p
+              key={reason}
+              dir="auto"
+              className="flex min-w-0 gap-1.5 text-[11px] leading-4 text-amber-800"
+            >
+              <AlertTriangle className="mt-0.5 h-3 w-3 shrink-0" />
+              <span className="min-w-0 break-words">{reason}</span>
+            </p>
+          ))}
+        </div>
+      ) : null}
+    </AssistantCard>
+  );
+}
+
 function getRecipientName(confirmation: AiTransferConfirmation) {
   return confirmation.recipient?.displayName || [
     confirmation.recipientFirstName,
@@ -842,6 +1015,10 @@ function renderBlock(
       return <PendingTransfersCard block={block} locale={props.locale} />;
     case "transfer_quote":
       return <TransferQuoteCard block={block} locale={props.locale} />;
+    case "transfer_status":
+      return <TransferStatusCard block={block} locale={props.locale} />;
+    case "transfer_limits":
+      return <TransferLimitsCard block={block} locale={props.locale} />;
     case "transfer_confirmation":
       return (
         <TransferConfirmationCard

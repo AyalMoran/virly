@@ -3,6 +3,12 @@ import type {
   AssistantResponseBlock,
   AssistantResponseFormatVersion
 } from "./responseBlocks.js";
+import type {
+  ResponseSituation,
+  ResponseStyleContext,
+  RiskLevel,
+  PersonalityLintResult
+} from "./responseStyle.js";
 
 export const assistantIntentValues = [
   "balance_inquiry",
@@ -750,6 +756,7 @@ export type ComposeAssistantResponseInput = {
   assistantId: AssistantId;
   userMessage: string;
   intent: AssistantIntent;
+  responseStyleContext: ResponseStyleContext;
   safeToolSummaries: SafeToolSummary[];
   safeConversationSummary: SafeConversationSummary;
   safeResolvedReferences: SafeResolvedReferences;
@@ -762,6 +769,7 @@ export type ComposeAssistantResponseInput = {
   };
   refusalReason?: string;
   fallbackMessage: string;
+  personalityLintFeedback?: string;
 };
 
 export type AssistantLlmProvider = {
@@ -814,6 +822,10 @@ export type AssistantGraphState = {
   clarificationRequest?: ClarificationRequest;
   clarificationMessage?: string;
   refusalReason?: string;
+  responseSituation?: ResponseSituation;
+  riskLevel?: RiskLevel;
+  responseStyleContext?: ResponseStyleContext;
+  responsePersonalityLint?: PersonalityLintResult;
   responseMessage?: string;
   responseFormatVersion?: AssistantResponseFormatVersion;
   responseBlocks?: AssistantResponseBlock[];

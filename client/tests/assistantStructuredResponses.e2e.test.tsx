@@ -245,3 +245,37 @@ test("e2e renders Hebrew pending transfers without changing confirmation flow", 
   assert.match(html, /מקדמה/);
   assert.doesNotMatch(html, /Confirm|Deny/);
 });
+
+test("e2e renders Hebrew transfer limits and usage as structured cards", async () => {
+  const { result, html } = await runAndRenderScenario({
+    intent: "daily_transfer_usage",
+    message: "כמה נשאר לי להעברות היום?",
+    expectedBlockType: "transfer_limits",
+    tools: {
+      async getDailyTransferUsage() {
+        return createToolResult({
+          toolName: "getDailyTransferUsage",
+          status: "ok",
+          data: {
+            dailyLimit: 2500,
+            usedToday: 400,
+            remainingToday: 2100,
+            transferCountToday: 2,
+            resetAt: new Date("2026-06-09T00:00:00.000Z"),
+          },
+          summary:
+            "Daily transfer usage: **do not use markdown amount here**.",
+          metadata: { recordCount: 2, amount: 2100 },
+        });
+      },
+    },
+  });
+
+  assertStructuredMarkup({
+    html,
+    message: result.message,
+    expectedText: /מגבלות העברה|Daily remaining|2100/,
+  });
+  assert.match(html, /₪/);
+  assert.doesNotMatch(html, /\*\*/);
+});

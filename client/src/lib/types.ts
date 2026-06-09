@@ -249,6 +249,8 @@ export type AssistantResponseBlockType =
   | "pending_transfers"
   | "transfer_quote"
   | "transfer_confirmation"
+  | "transfer_status"
+  | "transfer_limits"
   | "empty_state"
   | "notice";
 
@@ -360,6 +362,42 @@ export type AssistantResponseBlock =
       type: "transfer_confirmation";
       title?: LocalizedText;
       confirmation: AiTransferConfirmation;
+    }
+  | {
+      id: string;
+      type: "transfer_status";
+      title?: LocalizedText;
+      status:
+        | "pending"
+        | "confirmed"
+        | "denied"
+        | "expired"
+        | "superseded"
+        | "cancelled"
+        | "canceled"
+        | "failed"
+        | "unknown";
+      recipientLabel?: string;
+      amount?: AssistantMoneyValue;
+      reason?: string | null;
+      expiresAt?: string;
+      message?: LocalizedText;
+    }
+  | {
+      id: string;
+      type: "transfer_limits";
+      title?: LocalizedText;
+      eligible?: boolean;
+      amount?: AssistantMoneyValue;
+      balance?: AssistantMoneyValue;
+      perTransferLimit?: AssistantMoneyValue;
+      dailyTransferLimit?: AssistantMoneyValue;
+      dailyUsed?: AssistantMoneyValue;
+      dailyRemaining?: AssistantMoneyValue;
+      maxSendableNow?: AssistantMoneyValue;
+      transferCountToday?: number;
+      resetAt?: string;
+      reasons?: string[];
     }
   | {
       id: string;

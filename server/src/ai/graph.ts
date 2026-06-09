@@ -1,7 +1,11 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import mongoose from "mongoose";
 import { connectDb } from "../db.js";
-import { DEFAULT_ASSISTANT_ID } from "./assistants.js";
+import {
+  assistantPersonalities,
+  DEFAULT_ASSISTANT_ID,
+  getAssistantPersonality
+} from "./assistants.js";
 import {
   createEmptyCounterpartyMemory,
   maskEmail,
@@ -74,12 +78,23 @@ import {
   buildAssistantResponseBlocks,
   buildStructuredResponseFallbackMessage
 } from "./responseBlocks.js";
+import {
+  buildPersonalityLintFeedback,
+  buildResponseStyleContext,
+  collectAllKnownPersonalityPhrases,
+  lintPersonalityUsage,
+  resolveResponseSituation
+} from "./responseStyle.js";
 import { resolveContextualAmount } from "./amountResolution.js";
 import { config } from "../config.js";
 import {
   modifyAiPendingTransfer,
   prepareAiPendingTransfer
 } from "../services/aiPendingTransfer.service.js";
+
+const allKnownPersonalityPhrases = collectAllKnownPersonalityPhrases(
+  assistantPersonalities
+);
 
 const AssistantStateAnnotation = Annotation.Root({
   userId: Annotation<string | undefined>(),
@@ -104,6 +119,10 @@ const AssistantStateAnnotation = Annotation.Root({
   clarificationRequest: Annotation<AssistantGraphState["clarificationRequest"]>(),
   clarificationMessage: Annotation<string | undefined>(),
   refusalReason: Annotation<string | undefined>(),
+  responseSituation: Annotation<AssistantGraphState["responseSituation"]>(),
+  riskLevel: Annotation<AssistantGraphState["riskLevel"]>(),
+  responseStyleContext: Annotation<AssistantGraphState["responseStyleContext"]>(),
+  responsePersonalityLint: Annotation<AssistantGraphState["responsePersonalityLint"]>(),
   responseMessage: Annotation<string | undefined>(),
   responseFormatVersion: Annotation<AssistantGraphState["responseFormatVersion"]>(),
   responseBlocks: Annotation<AssistantGraphState["responseBlocks"]>(),
@@ -2690,6 +2709,126 @@ function getResponsePostCheckFailure(
   return undefined;
 }
 
+function getClarificationMissingFields(
+  state: AssistantGraphState
+): string[] {
+  switch (state.clarificationRequest?.reason) {
+    case "missing_recipient":
+    case "ambiguous_recipient":
+      return ["recipient"];
+
+    case "missing_amount":
+    case "ambiguous_amount":
+      return ["amount"];
+
+    case "unsupported_currency":
+      return ["currency"];
+
+    default:
+      return [];
+  }
+}
+
+function getToolFailureReason(state: AssistantGraphState) {
+  const explicitError = state.toolResults.find((result) => result.status === "error");
+  const records = state.toolResults
+    .map((result) => result.data)
+    .filter((data): data is Record<string, unknown> =>
+      Boolean(data) && typeof data === "object" && !Array.isArray(data)
+    );
+  const reasons = records.flatMap((record) =>
+    Array.isArray(record.reasons)
+      ? record.reasons
+          .filter((reason): reason is string => typeof reason === "string")
+          .map((reason) => reason.toUpperCase())
+      : []
+  );
+  const warnings = records.flatMap((record) =>
+    Array.isArray(record.warnings)
+      ? record.warnings
+          .filter((warning): warning is string => typeof warning === "string")
+          .map((warning) => warning.toUpperCase())
+      : []
+  );
+  const errorText = [
+    explicitError?.error?.code,
+    explicitError?.error?.message,
+    explicitError ? getUserVisibleSummary(explicitError) : undefined,
+    ...reasons,
+    ...warnings
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (
+    errorText.includes("insufficient") ||
+    errorText.includes("not enough") ||
+    reasons.includes("INSUFFICIENT_BALANCE") ||
+    warnings.includes("INSUFFICIENT_BALANCE")
+  ) {
+    return "insufficient_funds";
+  }
+
+  if (explicitError) {
+    return explicitError.error?.code ?? "tool_error";
+  }
+
+  if (reasons.length > 0 || warnings.length > 0) {
+    return [...reasons, ...warnings].join(",");
+  }
+
+  return undefined;
+}
+
+function resolveRiskLevelForState(
+  state: AssistantGraphState,
+  failureReason: string | undefined
+) {
+  const intent = state.detectedIntent ?? "unsupported";
+
+  if (state.refusalReason || intent === "unsafe_request") {
+    return "blocked" as const;
+  }
+
+  if (failureReason === "insufficient_funds") {
+    return "high" as const;
+  }
+
+  if (
+    state.toolResults.some((result) => result.status === "error") &&
+    (
+      intent === "transfer_prepare" ||
+      intent === "transfer_modify_pending" ||
+      intent === "transfer_quote" ||
+      intent === "transfer_eligibility" ||
+      intent === "transfer_limits" ||
+      intent === "daily_transfer_usage"
+    )
+  ) {
+    return "high" as const;
+  }
+
+  if (
+    intent === "transfer_prepare" ||
+    intent === "transfer_modify_pending" ||
+    intent === "transfer_quote" ||
+    intent === "transfer_cancel_pending" ||
+    intent === "pending_confirmation_status"
+  ) {
+    return "medium" as const;
+  }
+
+  return "low" as const;
+}
+
+function getResponseTransferStatus(state: AssistantGraphState) {
+  return (
+    state.confirmation?.status ??
+    state.counterpartyMemory.pendingConfirmation?.status
+  );
+}
+
 /**
  * Function type: LangGraph node function.
  *
@@ -2701,6 +2840,49 @@ function buildResponseBlocks(
   return {
     responseFormatVersion: assistantResponseFormatVersion,
     responseBlocks: buildAssistantResponseBlocks(state)
+  };
+}
+
+/**
+ * Function type: LangGraph node function.
+ *
+ * @brief Resolves situation/risk and builds the active personality style context.
+ */
+function buildResponseStyle(
+  state: AssistantGraphState
+): Partial<AssistantGraphState> {
+  const failureReason = getToolFailureReason(state);
+  const riskLevel = resolveRiskLevelForState(state, failureReason);
+  const missingFields = [
+    ...(state.transferDraft?.missingFields ?? []),
+    ...getClarificationMissingFields(state)
+  ];
+  const transferStatus = getResponseTransferStatus(state);
+  const responseSituation = resolveResponseSituation({
+    intent: state.detectedIntent ?? "unsupported",
+    riskLevel,
+    toolSucceeded:
+      state.toolResults.length > 0
+        ? state.toolResults.every((result) => result.status !== "error")
+        : undefined,
+    requiresConfirmation:
+      state.confirmation?.status === "pending" ||
+      state.counterpartyMemory.pendingConfirmation?.status === "pending",
+    transferStatus,
+    missingFields,
+    failureReason,
+    backendConfirmedExecution: false
+  });
+  const responseStyleContext = buildResponseStyleContext(
+    getAssistantPersonality(state.assistantId),
+    responseSituation,
+    riskLevel
+  );
+
+  return {
+    riskLevel,
+    responseSituation,
+    responseStyleContext
   };
 }
 
@@ -2752,6 +2934,26 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
               structuredIntroFallbackMessage ?? userFallbackMessage
           }
         : undefined;
+    const responseStyleContext =
+      state.responseStyleContext ??
+      buildResponseStyleContext(
+        getAssistantPersonality(state.assistantId),
+        "general_help",
+        "low"
+      );
+    const composeInput = {
+      assistantId: state.assistantId,
+      userMessage: getUserMessage(state),
+      intent: state.detectedIntent ?? "unsupported",
+      responseStyleContext,
+      safeToolSummaries,
+      safeConversationSummary,
+      safeResolvedReferences,
+      requiredResponseFacts,
+      structuredResponse,
+      refusalReason: state.refusalReason,
+      fallbackMessage: userFallbackMessage
+    };
 
     if (
       !llmProvider ||
@@ -2764,18 +2966,7 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
     }
 
     try {
-      const responseMessage = await llmProvider.composeResponse({
-        assistantId: state.assistantId,
-        userMessage: getUserMessage(state),
-        intent: state.detectedIntent ?? "unsupported",
-        safeToolSummaries,
-        safeConversationSummary,
-        safeResolvedReferences,
-        requiredResponseFacts,
-        structuredResponse,
-        refusalReason: state.refusalReason,
-        fallbackMessage: userFallbackMessage
-      });
+      const responseMessage = await llmProvider.composeResponse(composeInput);
 
       const hydratedMessage =
         hydrateUserVisibleResponse(
@@ -2805,8 +2996,73 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
         );
       }
 
+      const personalityLint = lintPersonalityUsage(
+        hydratedMessage,
+        responseStyleContext,
+        allKnownPersonalityPhrases
+      );
+      if (!personalityLint.valid) {
+        const retryMessage = await llmProvider.composeResponse({
+          ...composeInput,
+          personalityLintFeedback: buildPersonalityLintFeedback(personalityLint)
+        });
+        const hydratedRetryMessage =
+          hydrateUserVisibleResponse(
+            retryMessage.trim() || userFallbackMessage,
+            state
+          ) || userFallbackMessage;
+        const retryPostCheckFailure = getResponsePostCheckFailure(
+          hydratedRetryMessage,
+          state,
+          requiredResponseFacts,
+          { structuredBlocksPresent: Boolean(structuredResponse) }
+        );
+        const retryPersonalityLint = lintPersonalityUsage(
+          hydratedRetryMessage,
+          responseStyleContext,
+          allKnownPersonalityPhrases
+        );
+
+        if (retryPostCheckFailure || !retryPersonalityLint.valid) {
+          return withDebugEvents(
+            state,
+            {
+              responseMessage: userFallbackMessage,
+              responsePersonalityLint: retryPersonalityLint
+            },
+            [
+              {
+                type: "fallback",
+                nodeName: "composeResponse",
+                failureClass: "deterministic_fallback_used",
+                fallbackUsed: true,
+                fallbackReason: retryPostCheckFailure
+                  ? `response_post_check_failed:${retryPostCheckFailure}`
+                  : "response_personality_lint_failed",
+                details: {
+                  disallowedPhrases:
+                    retryPersonalityLint.disallowedPhrases.join(", "),
+                  forbiddenPhrases:
+                    retryPersonalityLint.forbiddenPhrases.join(", "),
+                  usedPersonalityPhraseCount:
+                    retryPersonalityLint.usedPersonalityPhraseCount,
+                  maxPersonalityPhrases:
+                    responseStyleContext.maxPersonalityPhrases
+                }
+              }
+            ]
+          );
+        }
+
+        return {
+          responseMessage: hydratedRetryMessage,
+          responsePersonalityLint: retryPersonalityLint
+        };
+      }
+
       return {
-        responseMessage: hydratedMessage
+        responseMessage: hydratedMessage,
+        responsePersonalityLint: personalityLint
       };
     } catch (error) {
       return withDebugEvents(
@@ -3216,8 +3472,17 @@ function buildResponseSubgraph(options: GraphOptions) {
         options.onProgress
       )
     )
+    .addNode(
+      "buildResponseStyle",
+      withNodeTrace(
+        "buildResponseStyle",
+        buildResponseStyle,
+        options.onProgress
+      )
+    )
     .addEdge(START, "buildResponseBlocks")
-    .addEdge("buildResponseBlocks", "composeResponse")
+    .addEdge("buildResponseBlocks", "buildResponseStyle")
+    .addEdge("buildResponseStyle", "composeResponse")
     .addEdge("composeResponse", END)
     .compile();
 }

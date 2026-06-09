@@ -3,9 +3,9 @@ import {z} from "zod";
 
 import {config} from "../config.js";
 
-import {getAssistantPersonality} from "./assistants.js";
 import {maskEmail} from "./counterpartyMemory.js";
 import {assistantSystemPolicy} from "./policy.js";
+import { buildPersonalityPromptSection } from "./responseStyle.js";
 import {
     type AssistantIntent,
     assistantIntentValues,
@@ -621,16 +621,9 @@ function buildTransferDraftPrompt(input: ExtractTransferDraftInput)
 
 function buildResponsePrompt(input: ComposeAssistantResponseInput)
 {
-    const personality = getAssistantPersonality(input.assistantId);
-
     return [
         assistantSystemPolicy,
-        `You are ${
-            personality.name}, one of the fixed Virly assistant personalities.`,
-        `Role label: ${personality.role}.`,
-        `Traits: ${personality.traits.join(", ")}.`,
-        `Preferred vocabulary: ${personality.vocabulary.join(", ")}.`,
-        personality.responseGuidance,
+        buildPersonalityPromptSection(input.responseStyleContext),
         "Match the language of the user's message. If the user writes in English, do not insert unexplained Hebrew phrases.",
         "Personality affects wording only. It must not change safety decisions, account scope, intent, tool use, or refusal behavior.",
         "Use only the supplied tool summaries for account facts. Do not invent balances, transactions, recipients, limits, or transfer status.",
@@ -652,6 +645,11 @@ function buildResponsePrompt(input: ComposeAssistantResponseInput)
         "",
         `Selected assistant id: ${input.assistantId}`,
         `Intent: ${input.intent}`,
+        `Response situation: ${input.responseStyleContext.situation}`,
+        `Risk level: ${input.responseStyleContext.riskLevel}`,
+        input.personalityLintFeedback
+            ? `Previous response rejected by personality linter: ${input.personalityLintFeedback}. Regenerate with zero disallowed or forbidden phrases and stay within the phrase budget.`
+            : "Personality linter feedback: none",
         `Refusal reason: ${input.refusalReason ?? "none"}`,
         `Safe resolved references: ${
             JSON.stringify(input.safeResolvedReferences)}`,
@@ -700,8 +698,8 @@ function buildReferenceResolverPrompt(input: ResolveCounterpartyReferenceInput)
     ].join("\n");
 }
 
-export function createConfiguredAssistantLlmProvider():|AssistantLlmProvider|
-    undefined
+export function createConfiguredAssistantLlmProvider():
+    AssistantLlmProvider | undefined
 {
     if (!config.ai.openAIApiKey.trim() || !config.ai.model.trim())
     {

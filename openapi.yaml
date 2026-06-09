@@ -1149,6 +1149,8 @@ components:
             - pending_transfers
             - transfer_quote
             - transfer_confirmation
+            - transfer_status
+            - transfer_limits
             - empty_state
             - notice
         title:

@@ -215,6 +215,97 @@ test("response block builder exposes transfer confirmation blocks without execut
   assert.equal(blocks[0]?.confirmation.confirmAction.body.action, "confirm");
 });
 
+test("response block builder exposes pending transfer status without implying completion", () => {
+  const blocks = buildAssistantResponseBlocks(
+    hebrewState({
+      detectedIntent: "pending_confirmation_status",
+      counterpartyMemory: {
+        ...createEmptyCounterpartyMemory(),
+        pendingConfirmation: {
+          confirmationId: "6650cc68782e55fbbf857222",
+          type: "transfer",
+          status: "pending",
+          createdAt: "2026-06-08T11:00:00.000Z",
+          expiresAt: "2026-06-08T11:10:00.000Z",
+          recipientEmail: "recipient@example.com",
+          recipientFirstName: "Recipient",
+          recipientLastName: "Example",
+          amount: 75,
+          currency: "ILS",
+          reason: "Lunch",
+          turnCreated: 1,
+          version: 1
+        }
+      }
+    })
+  );
+
+  assert.equal(blocks.length, 1);
+  const [block] = blocks;
+  assert.equal(block?.type, "transfer_status");
+  assert.equal(block.status, "pending");
+  assert.equal(block.amount?.amount, 75);
+  assert.match(block.message?.text ?? "", /שום כסף לא הועבר/);
+});
+
+test("response block builder combines transfer limit, usage, and eligibility tool payloads", () => {
+  const blocks = buildAssistantResponseBlocks(
+    hebrewState({
+      detectedIntent: "transfer_eligibility",
+      toolResults: [
+        createToolResult({
+          toolName: "getTransferLimits",
+          status: "ok",
+          data: {
+            perTransferLimit: 1000,
+            dailyTransferLimit: 2500
+          },
+          summary: "Limits",
+          metadata: { recordCount: 1 }
+        }),
+        createToolResult({
+          toolName: "getDailyTransferUsage",
+          status: "ok",
+          data: {
+            dailyLimit: 2500,
+            usedToday: 400,
+            remainingToday: 2100,
+            transferCountToday: 2,
+            resetAt: new Date("2026-06-09T00:00:00.000Z")
+          },
+          summary: "Usage",
+          metadata: { recordCount: 2, amount: 2100 }
+        }),
+        createToolResult({
+          toolName: "getTransferEligibility",
+          status: "error",
+          data: {
+            eligible: false,
+            amount: 3000,
+            currency: "ILS",
+            reasons: ["INSUFFICIENT_BALANCE"],
+            maxSendableNow: 900
+          },
+          summary: "Not eligible",
+          metadata: { recordCount: 1, amount: 900 }
+        })
+      ]
+    })
+  );
+
+  assert.equal(blocks.length, 1);
+  const [block] = blocks;
+  assert.equal(block?.type, "transfer_limits");
+  assert.equal(block.eligible, false);
+  assert.equal(block.amount?.amount, 3000);
+  assert.equal(block.perTransferLimit?.amount, 1000);
+  assert.equal(block.dailyRemaining?.amount, 2100);
+  assert.equal(block.maxSendableNow?.amount, 900);
+  assert.equal(block.transferCountToday, 2);
+  assert.equal(block.resetAt, "2026-06-09T00:00:00.000Z");
+  assert.deepEqual(block.reasons, ["INSUFFICIENT_BALANCE"]);
+});
+
 test("response block builder returns no blocks for unsupported unstructured intents", () => {
   assert.deepEqual(
     buildAssistantResponseBlocks(
@@ -282,4 +373,105 @@ test("assistant graph returns responseBlocks and tells the LLM to keep structure
     introFallbackMessage: "מצאתי את הנתונים הרלוונטיים:"
   });
   assert.equal(result.message, "מצאתי את הפרטים:");
+});
+
+test("assistant graph regenerates once when personality linter rejects an out-of-context phrase", async () => {
+  let composeCalls = 0;
+  const tools: AssistantToolExecutors = {
+    async getUserAccounts() {
+      return createToolResult({
+        toolName: "getUserAccounts",
+        status: "ok",
+        data: { accountLabel: "Virly account" },
+        summary: "Virly account",
+        metadata: { recordCount: 1, accountLabel: "Virly account" }
+      });
+    },
+    async getAccountBalance() {
+      return createToolResult({
+        toolName: "getAccountBalance",
+        status: "ok",
+        data: { balance: 125 },
+        summary: "Balance 125.00 ILS",
+        metadata: { recordCount: 1, accountLabel: "Virly account", amount: 125 }
+      });
+    }
+  };
+  const llmProvider = fakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "balance_inquiry" };
+    },
+    async composeResponse(input) {
+      composeCalls += 1;
+      assert.equal(input.responseStyleContext.situation, "balance_inquiry_success");
+      return composeCalls === 1
+        ? "היתרה מוצגת בכרטיס. הכסף כבר בדרך."
+        : "בדקתי לך. היתרה מוצגת בכרטיס.";
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "response-style-lint-retry",
+      message: "מה היתרה שלי?"
+    },
+    {
+      tools,
+      llmProvider
+    }
+  );
+
+  assert.equal(composeCalls, 2);
+  assert.equal(result.message, "בדקתי לך. היתרה מוצגת בכרטיס.");
+  assert.doesNotMatch(result.message, /הכסף כבר בדרך/);
+});
+
+test("assistant graph falls back deterministically when personality linter rejects the retry", async () => {
+  let composeCalls = 0;
+  const tools: AssistantToolExecutors = {
+    async getUserAccounts() {
+      return createToolResult({
+        toolName: "getUserAccounts",
+        status: "ok",
+        data: { accountLabel: "Virly account" },
+        summary: "Virly account",
+        metadata: { recordCount: 1, accountLabel: "Virly account" }
+      });
+    },
+    async getAccountBalance() {
+      return createToolResult({
+        toolName: "getAccountBalance",
+        status: "ok",
+        data: { balance: 125 },
+        summary: "Balance 125.00 ILS",
+        metadata: { recordCount: 1, accountLabel: "Virly account", amount: 125 }
+      });
+    }
+  };
+  const llmProvider = fakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "balance_inquiry" };
+    },
+    async composeResponse() {
+      composeCalls += 1;
+      return "הכסף כבר בדרך.";
+    }
+  });
+
+  const result = await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "response-style-lint-fallback",
+      message: "מה היתרה שלי?"
+    },
+    {
+      tools,
+      llmProvider
+    }
+  );
+
+  assert.equal(composeCalls, 2);
+  assert.equal(result.message, "מצאתי: Virly account Balance 125.00 ILS");
+  assert.doesNotMatch(result.message, /הכסף כבר בדרך/);
 });

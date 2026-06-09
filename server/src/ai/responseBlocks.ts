@@ -21,6 +21,8 @@ export const assistantResponseBlockTypeValues = [
   "pending_transfers",
   "transfer_quote",
   "transfer_confirmation",
+  "transfer_status",
+  "transfer_limits",
   "empty_state",
   "notice"
 ] as const;
@@ -133,6 +135,40 @@ export type TransferConfirmationBlock =
     confirmation: TransferConfirmation;
   };
 
+export type TransferStatusBlock =
+  AssistantResponseBlockBase<"transfer_status"> & {
+    status:
+      | "pending"
+      | "confirmed"
+      | "denied"
+      | "expired"
+      | "superseded"
+      | "cancelled"
+      | "canceled"
+      | "failed"
+      | "unknown";
+    recipientLabel?: string;
+    amount?: AssistantMoneyValue;
+    reason?: string | null;
+    expiresAt?: string;
+    message?: LocalizedText;
+  };
+
+export type TransferLimitsBlock =
+  AssistantResponseBlockBase<"transfer_limits"> & {
+    eligible?: boolean;
+    amount?: AssistantMoneyValue;
+    balance?: AssistantMoneyValue;
+    perTransferLimit?: AssistantMoneyValue;
+    dailyTransferLimit?: AssistantMoneyValue;
+    dailyUsed?: AssistantMoneyValue;
+    dailyRemaining?: AssistantMoneyValue;
+    maxSendableNow?: AssistantMoneyValue;
+    transferCountToday?: number;
+    resetAt?: string;
+    reasons?: string[];
+  };
+
 export type EmptyStateBlock = AssistantResponseBlockBase<"empty_state"> & {
   message: LocalizedText;
 };
@@ -151,6 +187,8 @@ export type AssistantResponseBlock =
   | PendingTransfersBlock
   | TransferQuoteBlock
   | TransferConfirmationBlock
+  | TransferStatusBlock
+  | TransferLimitsBlock
   | EmptyStateBlock
   | NoticeBlock;
 
@@ -183,6 +221,14 @@ const structuredIntentTitles = {
     he: "אישור העברה",
     en: "Transfer confirmation"
   },
+  transfer_status: {
+    he: "סטטוס העברה",
+    en: "Transfer status"
+  },
+  transfer_limits: {
+    he: "מגבלות העברה",
+    en: "Transfer limits"
+  },
   empty_state: {
     he: "אין תוצאות",
     en: "No results"
@@ -203,6 +249,14 @@ function getFiniteNumber(value: unknown) {
 
 function getString(value: unknown) {
   return typeof value === "string" && value.trim() ? value.trim() : undefined;
+}
+
+function getIsoString(value: unknown) {
+  if (value instanceof Date) {
+    return value.toISOString();
+  }
+
+  return getString(value);
 }
 
 function isCurrency(value: unknown): value is CurrencyCode {
@@ -702,6 +756,162 @@ function buildTransferConfirmationBlocks(
   ];
 }
 
+function buildTransferStatusBlocks(
+  state: AssistantGraphState
+): AssistantResponseBlock[] {
+  const confirmation =
+    state.confirmation ?? state.counterpartyMemory.pendingConfirmation ?? null;
+
+  if (!confirmation) {
+    return [
+      emptyState(
+        state,
+        "transfer-status-empty",
+        "אין אישור העברה פעיל בשיחה הזאת.",
+        "There is no active transfer confirmation in this conversation."
+      )
+    ];
+  }
+
+  const recipientLabel =
+    "recipient" in confirmation
+      ? confirmation.recipient.displayName
+      : [
+          confirmation.recipientFirstName,
+          confirmation.recipientLastName
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .trim() || confirmation.recipientEmail;
+
+  const confirmationId =
+    "confirmationId" in confirmation ? confirmation.confirmationId : confirmation.id;
+
+  return [
+    {
+      id: `transfer-status-${confirmationId}`,
+      type: "transfer_status",
+      title: title(state, "transfer_status"),
+      status: confirmation.status,
+      recipientLabel,
+      amount: money(confirmation.amount, confirmation.currency),
+      reason: confirmation.reason ?? null,
+      expiresAt: confirmation.expiresAt,
+      message:
+        confirmation.status === "pending"
+          ? text(
+              state,
+              "האישור עדיין ממתין. שום כסף לא הועבר עד לאישור בכרטיס.",
+              "This confirmation is still pending. No money has moved until the card is confirmed."
+            )
+          : undefined
+    }
+  ];
+}
+
+function buildTransferLimitsBlocks(
+  state: AssistantGraphState
+): AssistantResponseBlock[] {
+  const limitsResult = getResult(state, "getTransferLimits");
+  const usageResult = getResult(state, "getDailyTransferUsage");
+  const eligibilityResult = getResult(state, "getTransferEligibility");
+  const results = [limitsResult, usageResult, eligibilityResult].filter(
+    (result): result is RuntimeToolResult => Boolean(result)
+  );
+
+  if (results.length === 0) {
+    return [];
+  }
+
+  const records = results
+    .map((result) => result.data)
+    .filter((data): data is Record<string, unknown> =>
+      Boolean(data) && typeof data === "object" && !Array.isArray(data)
+    );
+
+  if (records.length === 0) {
+    return [
+      notice(
+        state,
+        "transfer-limits-unavailable",
+        "warning",
+        "לא הצלחתי לקבל את נתוני מגבלות ההעברה כרגע.",
+        "I could not read transfer limit data right now."
+      )
+    ];
+  }
+
+  const valueFromRecords = (key: string) => {
+    for (const record of records) {
+      const value = getFiniteNumber(record[key]);
+      if (value !== undefined) {
+        return value;
+      }
+    }
+
+    return undefined;
+  };
+  const stringFromRecords = (key: string) => {
+    for (const record of records) {
+      const value = getIsoString(record[key]);
+      if (value) {
+        return value;
+      }
+    }
+
+    return undefined;
+  };
+  const reasons = records.flatMap((record) =>
+    Array.isArray(record.reasons)
+      ? record.reasons.filter((reason): reason is string => typeof reason === "string")
+      : []
+  );
+  const eligible = records.find((record) => typeof record.eligible === "boolean")
+    ?.eligible as boolean | undefined;
+  const currencyRecord = records.find((record) => isCurrency(record.currency));
+  const currency = isCurrency(currencyRecord?.currency)
+    ? currencyRecord.currency
+    : "ILS";
+  const amount = valueFromRecords("amount");
+  const balance = valueFromRecords("balance");
+  const perTransferLimit = valueFromRecords("perTransferLimit");
+  const dailyTransferLimit =
+    valueFromRecords("dailyTransferLimit") ?? valueFromRecords("dailyLimit");
+  const dailyUsed = valueFromRecords("usedToday");
+  const dailyRemaining =
+    valueFromRecords("dailyRemaining") ?? valueFromRecords("remainingToday");
+  const maxSendableNow = valueFromRecords("maxSendableNow");
+  const transferCountToday = valueFromRecords("transferCountToday");
+  const resetAt = stringFromRecords("resetAt");
+
+  return [
+    {
+      id: "transfer-limits",
+      type: "transfer_limits",
+      title: title(state, "transfer_limits"),
+      ...(eligible !== undefined ? { eligible } : {}),
+      ...(amount !== undefined ? { amount: money(amount, currency) } : {}),
+      ...(balance !== undefined ? { balance: money(balance, "ILS") } : {}),
+      ...(perTransferLimit !== undefined
+        ? { perTransferLimit: money(perTransferLimit, "ILS") }
+        : {}),
+      ...(dailyTransferLimit !== undefined
+        ? { dailyTransferLimit: money(dailyTransferLimit, "ILS") }
+        : {}),
+      ...(dailyUsed !== undefined ? { dailyUsed: money(dailyUsed, "ILS") } : {}),
+      ...(dailyRemaining !== undefined
+        ? { dailyRemaining: money(dailyRemaining, "ILS") }
+        : {}),
+      ...(maxSendableNow !== undefined
+        ? { maxSendableNow: money(maxSendableNow, "ILS") }
+        : {}),
+      ...(transferCountToday !== undefined ? { transferCountToday } : {}),
+      ...(resetAt ? { resetAt } : {}),
+      ...(reasons.length > 0 ? { reasons } : {})
+    }
+  ];
+}
+
 /**
  * Function type: AI response presentation builder.
  *
@@ -716,7 +926,6 @@ export function buildAssistantResponseBlocks(
       return buildAccountSummaryBlocks(state);
 
     case "recent_transactions":
-    case "transfer_status":
       return buildTransactionListBlocks(
         state,
         "getRecentTransactions",
@@ -748,8 +957,18 @@ export function buildAssistantResponseBlocks(
     case "pending_ai_transfers":
       return buildPendingTransfersBlocks(state);
 
+    case "pending_confirmation_status":
+    case "transfer_cancel_pending":
+    case "transfer_status":
+      return buildTransferStatusBlocks(state);
+
     case "transfer_quote":
       return buildTransferQuoteBlocks(state);
+
+    case "transfer_limits":
+    case "transfer_eligibility":
+    case "daily_transfer_usage":
+      return buildTransferLimitsBlocks(state);
 
     case "transfer_prepare":
     case "transfer_modify_pending":
@@ -783,6 +1002,18 @@ export function buildStructuredResponseFallbackMessage(
     return isHebrewState(state)
       ? "זה ציטוט ההעברה לפי הנתונים הקיימים."
       : "Here is the transfer quote from the available data.";
+  }
+
+  if (firstType === "transfer_status") {
+    return isHebrewState(state)
+      ? "זה סטטוס ההעברה לפי הנתונים הקיימים."
+      : "Here is the transfer status from the available data.";
+  }
+
+  if (firstType === "transfer_limits") {
+    return isHebrewState(state)
+      ? "אלה מגבלות ההעברה לפי הנתונים הקיימים."
+      : "Here are the transfer limits from the available data.";
   }
 
   return isHebrewState(state)

@@ -117,3 +117,47 @@ test("account and pending transfer blocks expose responsive wrapping classes", (
   assert.match(html, /break-words|break-all/);
   assert.doesNotMatch(html, /\*\*/);
 });
+
+test("transfer status and limits blocks render trusted values without raw Markdown", () => {
+  const blocks: AssistantResponseBlock[] = [
+    {
+      id: "transfer-status-pending-1",
+      type: "transfer_status",
+      title: { text: "סטטוס העברה", dir: "rtl" },
+      status: "pending",
+      recipientLabel:
+        "Very Long Pending Recipient Name עברית (pending.recipient@example.com)",
+      amount: { amount: 75, currency: "ILS" },
+      reason: "ארוחת צהריים",
+      expiresAt: "2026-06-08T12:00:00.000Z",
+      message: {
+        text: "האישור עדיין ממתין. שום כסף לא הועבר עד לאישור בכרטיס.",
+        dir: "rtl"
+      }
+    },
+    {
+      id: "transfer-limits",
+      type: "transfer_limits",
+      title: { text: "מגבלות העברה", dir: "rtl" },
+      eligible: false,
+      amount: { amount: 3000, currency: "ILS" },
+      perTransferLimit: { amount: 1000, currency: "ILS" },
+      dailyRemaining: { amount: 2100, currency: "ILS" },
+      maxSendableNow: { amount: 900, currency: "ILS" },
+      transferCountToday: 2,
+      resetAt: "2026-06-09T00:00:00.000Z",
+      reasons: ["INSUFFICIENT_BALANCE"]
+    }
+  ];
+
+  const html = renderToStaticMarkup(
+    <AssistantBlocks blocks={blocks} locale="he-IL" />,
+  );
+
+  assert.match(html, /pending\.recipient@example\.com/);
+  assert.match(html, /INSUFFICIENT_BALANCE/);
+  assert.match(html, /Not eligible/);
+  assert.match(html, /<bdi[^>]+dir="ltr"/);
+  assert.match(html, /₪/);
+  assert.doesNotMatch(html, /\*\*/);
+});
