@@ -324,7 +324,7 @@ Standard local checks:
 
 ```bash
 npm run build --workspace server
-env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server
+env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server
 ./scripts/ai-eval-chat.sh deterministic
 git diff --check
 ```

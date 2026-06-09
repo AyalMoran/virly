@@ -4,10 +4,15 @@ import { z } from "zod";
 import { assistantIds, DEFAULT_ASSISTANT_ID } from "../ai/assistants.js";
 import { runAssistantGraph } from "../ai/graph.js";
 import { createConfiguredAssistantLlmProvider } from "../ai/llm.js";
+import {
+  buildVideoSessionCtaBlock,
+  detectVideoSessionRequest
+} from "../ai/videoSessionCta.js";
 import { requireAuth } from "../middleware/auth.js";
 import { writeAiAuditLog } from "../services/aiAuditLog.service.js";
 import { mongoConversationStore } from "../services/aiConversation.service.js";
 import { respondToAiPendingTransfer } from "../services/aiPendingTransfer.service.js";
+import { createVideoSession } from "../services/videoSession.service.js";
 
 const router = Router();
 const assistantLlmProvider = createConfiguredAssistantLlmProvider();
@@ -47,6 +52,48 @@ function toChatResponse(result: Awaited<ReturnType<typeof runAssistantGraph>>) {
   };
 }
 
+function containsHebrew(text: string) {
+  return /[\u0590-\u05ff]/.test(text);
+}
+
+async function withVideoSessionCta(
+  req: Parameters<Parameters<typeof router.post>[1]>[0],
+  result: Awaited<ReturnType<typeof runAssistantGraph>>,
+  message: string
+) {
+  if (!req.userId) {
+    return result;
+  }
+
+  const request = detectVideoSessionRequest(message);
+  if (!request) {
+    return result;
+  }
+
+  const session = await createVideoSession({
+    userId: req.userId,
+    type: request.type,
+    topic: request.topic,
+    source: "ai_assistant",
+    metadata: {
+      ipAddress: req.ip ?? null,
+      userAgent: req.get("user-agent") ?? null,
+      locale: req.get("accept-language") ?? null
+    }
+  });
+  const block = buildVideoSessionCtaBlock(session, containsHebrew(message));
+  const responseMessage = containsHebrew(message)
+    ? "יצרתי סשן וידאו מאובטח. השתמש בכפתור באפליקציה כדי להצטרף."
+    : "I created a secure video session. Use the in-app button to join.";
+
+  return {
+    ...result,
+    message: responseMessage,
+    responseMessage,
+    responseBlocks: [...(result.responseBlocks ?? []), block]
+  };
+}
+
 function writeSseEvent(res: Response, event: string, data: unknown) {
   res.write(`event: ${event}\n`);
   res.write(`data: ${JSON.stringify(data)}\n\n`);
@@ -73,8 +120,9 @@ router.post("/chat", requireAuth, async (req, res, next) => {
         conversationStore: mongoConversationStore
       }
     );
+    const responseResult = await withVideoSessionCta(req, result, payload.message);
 
-    return res.json(toChatResponse(result));
+    return res.json(toChatResponse(responseResult));
   } catch (error) {
     next(error);
   }
@@ -126,12 +174,13 @@ router.post("/chat/stream", requireAuth, async (req, res, next) => {
         }
       }
     );
+    const responseResult = await withVideoSessionCta(req, result, payload.message);
 
     writeSseEvent(res, "result", {
       type: "result",
       conversationId,
-      assistantId: result.assistantId,
-      result: toChatResponse(result)
+      assistantId: responseResult.assistantId,
+      result: toChatResponse(responseResult)
     });
     sendStatusPhase("completed");
     res.end();

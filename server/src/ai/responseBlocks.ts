@@ -6,6 +6,10 @@ import type {
   ToolResultMetadata,
   TransferConfirmation
 } from "./state.js";
+import type {
+  VideoSessionStatus,
+  VideoSessionType
+} from "../models/VideoSession.js";
 
 export const assistantResponseFormatVersion = 1 as const;
 
@@ -23,6 +27,7 @@ export const assistantResponseBlockTypeValues = [
   "transfer_confirmation",
   "transfer_status",
   "transfer_limits",
+  "video_session_cta",
   "empty_state",
   "notice"
 ] as const;
@@ -169,6 +174,16 @@ export type TransferLimitsBlock =
     reasons?: string[];
   };
 
+export type VideoSessionCtaBlock =
+  AssistantResponseBlockBase<"video_session_cta"> & {
+    sessionId: string;
+    sessionType: VideoSessionType;
+    status: VideoSessionStatus;
+    ctaLabel: LocalizedText;
+    appPath: string;
+    message?: LocalizedText;
+  };
+
 export type EmptyStateBlock = AssistantResponseBlockBase<"empty_state"> & {
   message: LocalizedText;
 };
@@ -189,6 +204,7 @@ export type AssistantResponseBlock =
   | TransferConfirmationBlock
   | TransferStatusBlock
   | TransferLimitsBlock
+  | VideoSessionCtaBlock
   | EmptyStateBlock
   | NoticeBlock;
 

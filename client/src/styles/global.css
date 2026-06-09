@@ -899,6 +899,246 @@ textarea::placeholder {
   color: var(--color-primary-deep);
 }
 
+.video-layout,
+.agent-video-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.78fr) minmax(0, 1.35fr);
+  gap: 22px;
+  align-items: start;
+}
+
+.video-control-panel,
+.video-stage-card,
+.agent-video-list,
+.agent-video-stage,
+.agent-video-filters {
+  display: grid;
+  gap: 18px;
+}
+
+.video-intro {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.video-intro p,
+.video-stage-header p,
+.video-empty-stage p,
+.agent-video-row p,
+.agent-video-row small {
+  color: var(--color-muted);
+  line-height: 1.55;
+}
+
+.video-intro-icon,
+.video-choice-icon,
+.agent-video-icon {
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  background: rgba(53, 133, 142, 0.12);
+  color: var(--color-primary-deep);
+}
+
+.video-intro-icon {
+  width: 52px;
+  height: 52px;
+}
+
+.video-intro-icon svg,
+.video-choice-icon svg,
+.agent-video-icon svg,
+.video-empty-stage svg {
+  width: 24px;
+  height: 24px;
+}
+
+.video-choice-grid {
+  display: grid;
+  gap: 12px;
+}
+
+.video-choice {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr);
+  gap: 12px;
+  align-items: center;
+  width: 100%;
+  border: 1px solid rgba(53, 133, 142, 0.18);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.34);
+  color: var(--color-text);
+  padding: 12px;
+  text-align: left;
+  transition: transform 160ms ease, border 160ms ease, background 160ms ease;
+}
+
+.video-choice:hover {
+  border-color: rgba(53, 133, 142, 0.34);
+  background: rgba(255, 255, 255, 0.5);
+  transform: translateY(-1px);
+}
+
+.video-choice-icon {
+  width: 44px;
+  height: 44px;
+}
+
+.video-choice strong,
+.video-choice small,
+.video-choice-action {
+  display: block;
+}
+
+.video-choice small {
+  margin-top: 3px;
+  color: var(--color-muted);
+  line-height: 1.4;
+}
+
+.video-choice-action {
+  grid-column: 2;
+  color: var(--color-primary-deep);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.video-stage-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.video-status-pill {
+  display: inline-flex;
+  align-items: center;
+  min-height: 28px;
+  border: 1px solid rgba(53, 133, 142, 0.2);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.36);
+  color: var(--color-primary-deep);
+  padding: 0 10px;
+  font-size: 0.78rem;
+  font-weight: 900;
+  text-transform: capitalize;
+}
+
+.video-status-active {
+  border-color: rgba(9, 145, 32, 0.24);
+  color: var(--color-credit);
+}
+
+.video-status-ended,
+.video-status-cancelled,
+.video-status-failed,
+.video-status-missed {
+  border-color: rgba(127, 75, 68, 0.24);
+  color: #7f4b44;
+}
+
+.jitsi-meeting-shell {
+  position: relative;
+  min-height: 520px;
+  overflow: hidden;
+  border: 1px solid rgba(53, 133, 142, 0.18);
+  border-radius: 14px;
+  background: rgba(23, 61, 66, 0.08);
+}
+
+.jitsi-meeting-frame {
+  width: 100%;
+  height: 620px;
+}
+
+.video-loading,
+.video-empty-stage {
+  display: grid;
+  place-items: center;
+  min-height: 360px;
+  border: 1px dashed rgba(53, 133, 142, 0.24);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.24);
+  padding: 24px;
+  text-align: center;
+}
+
+.video-loading {
+  position: absolute;
+  inset: 12px;
+  z-index: 1;
+  min-height: 0;
+  font-weight: 900;
+  color: var(--color-primary-deep);
+}
+
+.video-empty-stage.compact {
+  min-height: 240px;
+}
+
+.agent-video-filters {
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+}
+
+.agent-video-filters label {
+  display: grid;
+  gap: 8px;
+  font-weight: 900;
+}
+
+.agent-video-filters select {
+  min-height: 44px;
+  border: 1px solid var(--color-border);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.42);
+  color: var(--color-text);
+  padding: 0 12px;
+}
+
+.agent-video-list {
+  align-content: start;
+}
+
+.agent-video-row {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 1px solid rgba(53, 133, 142, 0.16);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.3);
+  padding: 12px;
+}
+
+.agent-video-icon {
+  width: 42px;
+  height: 42px;
+}
+
+.agent-video-row-title,
+.agent-video-row-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.agent-video-row-main {
+  min-width: 0;
+}
+
+.agent-video-row-main p,
+.agent-video-row-main small {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.agent-video-row-actions {
+  justify-content: end;
+}
+
 .auth-page {
   position: relative;
   display: grid;
@@ -1729,6 +1969,8 @@ dd {
 
   .figma-dashboard-grid,
   .transfer-layout,
+  .video-layout,
+  .agent-video-layout,
   .settings-grid,
   .auth-page {
     grid-template-columns: 1fr;
@@ -1792,7 +2034,7 @@ dd {
     left: 12px;
     z-index: 20;
     display: grid;
-    grid-template-columns: repeat(4, 1fr);
+    grid-template-columns: repeat(auto-fit, minmax(54px, 1fr));
     gap: 4px;
     border: 1px solid var(--color-border);
     border-radius: 20px;
@@ -1843,6 +2085,28 @@ dd {
 
   .settings-form-grid.two-columns {
     grid-template-columns: 1fr;
+  }
+
+  .agent-video-filters,
+  .agent-video-row {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-video-row-actions,
+  .video-stage-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .agent-video-row-actions .button,
+  .video-stage-header .button {
+    width: 100%;
+  }
+
+  .jitsi-meeting-shell,
+  .jitsi-meeting-frame {
+    min-height: 420px;
+    height: 420px;
   }
 
   .profile-auth-card {

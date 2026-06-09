@@ -38,7 +38,7 @@ Files touched:
 
 Verification:
 - Passed: `npm run build --workspace server`
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - Passed: `git diff --check`
 - Passed: `./scripts/ai-eval-chat.sh deterministic`
 
@@ -62,7 +62,7 @@ Files touched:
 
 Verification:
 - Passed: `npm run build --workspace server`
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - Passed: `git diff --check`
 - Passed: `./scripts/ai-eval-chat.sh deterministic`
 

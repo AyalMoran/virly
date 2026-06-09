@@ -8,6 +8,9 @@ import aiRoutes from "./routes/ai.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import transactionRoutes from "./routes/transaction.routes.js";
 import userRoutes from "./routes/user.routes.js";
+import videoSessionRoutes, {
+  adminVideoSessionRoutes
+} from "./routes/videoSession.routes.js";
 
 export const app = express();
 
@@ -35,4 +38,6 @@ app.use("/api/auth", authRoutes);
 app.use("/api/accounts", userRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/ai", aiRoutes);
+app.use("/api/video-sessions", videoSessionRoutes);
+app.use("/api/admin/video-sessions", adminVideoSessionRoutes);
 app.use(errorHandler);

@@ -120,8 +120,8 @@ Verification:
 
 - Passed: `npm run build --workspace server`
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts` from `server/` after rerunning outside the sandbox because `tsx` IPC pipe creation under `/tmp` was blocked by sandbox permissions.
-- Partial: `npm run test --workspace server` passed all AI/auth diagnostics tests but failed one unrelated existing email test because local `VIRLY_EMAIL_FROM` is `Virly <verify@auth.ayal.online>` while `server/src/email.service.test.ts` expects `Virly <verify@example.com>`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server` outside the sandbox, confirming 80/80 tests pass when the email sender is set to the test default.
+- Partial: `npm run test --workspace server` passed all AI/auth diagnostics tests but failed one unrelated existing email test because local `VIRLY_EMAIL_FROM` is `Virly <verify@auth.ayal.online>` while `server/src/email.service.test.ts` expects `Virly <verify@virly.ayal.online>`.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server` outside the sandbox, confirming 80/80 tests pass when the email sender is set to the test default.
 
 Next milestone:
 
@@ -172,14 +172,14 @@ Commands run:
 
 - `npm run build --workspace server`
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 
 Results:
 
 - Passed: `npm run build --workspace server`
 - Initial focused `npx tsx --test src/ai/tests/aiSafety.test.ts` hit the sandbox `/tmp/tsx-1000/*.pipe` IPC permission issue.
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts` outside the sandbox, confirming 74/74 focused AI tests pass.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server` outside the sandbox, confirming 84/84 server tests pass when the email sender is set to the test default.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server` outside the sandbox, confirming 84/84 server tests pass when the email sender is set to the test default.
 
 Assumptions made:
 
@@ -250,14 +250,14 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
 
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 115/115 focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 125/125 server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 125/125 server tests pass.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -317,7 +317,7 @@ Commands run:
 
 - `npm run build --workspace server`
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 
 Results:
 
@@ -325,7 +325,7 @@ Results:
 - Initial focused AI test run exposed a deterministic router gap: `send him the same amount he sent me` classified as `unsupported`.
 - Fixed the router gap and reran focused tests.
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 77/77 focused AI tests pass.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 87/87 server tests pass when the email sender is set to the test default.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 87/87 server tests pass when the email sender is set to the test default.
 
 Assumptions made:
 
@@ -394,7 +394,7 @@ Commands run:
 
 - `npm run build --workspace server`
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -403,7 +403,7 @@ Results:
 - Initial focused AI run exposed that an older preservation test now reached the default Mongo-backed resolver and timed out without a database connection.
 - Fixed that test by injecting an unresolved amount resolver.
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 81/81 focused AI tests pass.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 91/91 server tests pass when the email sender is set to the test default.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 91/91 server tests pass when the email sender is set to the test default.
 - Passed: `git diff --check`.
 
 Assumptions made:
@@ -483,7 +483,7 @@ Commands run:
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
 - `npm run build --workspace client`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -496,7 +496,7 @@ Results:
 - Fixed graph gating so unresolved names can fall through to `resolveCounterpartyCandidates` when that resolver tool is explicitly in the route.
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 84/84 focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 94/94 server tests pass when the email sender is set to the test default.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 94/94 server tests pass when the email sender is set to the test default.
 - Passed: `git diff --check`.
 
 Assumptions made:
@@ -577,14 +577,14 @@ Commands run:
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
 - `npm run build --workspace client`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
 
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 87/87 focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 97/97 server tests pass when the email sender is set to the test default.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 97/97 server tests pass when the email sender is set to the test default.
 - Passed: `git diff --check`.
 
 Assumptions made:
@@ -659,7 +659,7 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -668,7 +668,7 @@ Results:
 - Fixed the extra bracket in both tools and reran focused tests.
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 88/88 focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 98/98 server tests pass when the email sender is set to the test default.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 98/98 server tests pass when the email sender is set to the test default.
 - Passed: `git diff --check`.
 
 Assumptions made:
@@ -740,14 +740,14 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
 
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 90/90 focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 100/100 server tests pass when the email sender is set to the test default.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 100/100 server tests pass when the email sender is set to the test default.
 - Passed: `git diff --check`.
 
 Assumptions made:
@@ -817,14 +817,14 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
 
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 92/92 focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 102/102 server tests pass when the email sender is set to the test default.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 102/102 server tests pass when the email sender is set to the test default.
 - Passed: `git diff --check`.
 
 Assumptions made:
@@ -893,7 +893,7 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -902,7 +902,7 @@ Results:
 - Fixed the resume node to resolve the saved draft recipient reference from conversation memory.
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 93/93 focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 103/103 server tests pass when the email sender is set to the test default.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 103/103 server tests pass when the email sender is set to the test default.
 - Passed: `git diff --check`.
 
 Assumptions made:
@@ -965,14 +965,14 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
 
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 94/94 focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 104/104 server tests pass when the email sender is set to the test default.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 104/104 server tests pass when the email sender is set to the test default.
 - Passed: `git diff --check`.
 
 Assumptions made:
@@ -1038,14 +1038,14 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
 
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 96/96 focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 106/106 server tests pass when the email sender is set to the test default.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 106/106 server tests pass when the email sender is set to the test default.
 - Passed: `git diff --check`.
 
 Assumptions made:
@@ -1120,14 +1120,14 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
 
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 97/97 focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 107/107 server tests pass when the email sender is set to the test default.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 107/107 server tests pass when the email sender is set to the test default.
 - Passed: `git diff --check`.
 
 Assumptions made:
@@ -1201,14 +1201,14 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
 
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 100/100 focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 110/110 server tests pass when the email sender is set to the test default.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 110/110 server tests pass when the email sender is set to the test default.
 - Passed: `git diff --check`.
 
 Assumptions made:
@@ -1272,14 +1272,14 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
 
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 104/104 focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 114/114 server tests pass when the email sender is set to the test default.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 114/114 server tests pass when the email sender is set to the test default.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -1346,14 +1346,14 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
 
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 102/102 focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 112/112 server tests pass when the email sender is set to the test default.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 112/112 server tests pass when the email sender is set to the test default.
 - Passed: `git diff --check`.
 
 Assumptions made:
@@ -1421,14 +1421,14 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
 
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 104/104 focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 114/114 server tests pass when the email sender is set to the test default.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 114/114 server tests pass when the email sender is set to the test default.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -1495,14 +1495,14 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
 
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 106/106 focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 116/116 server tests pass when the email sender is set to the test default.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 116/116 server tests pass when the email sender is set to the test default.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -1584,7 +1584,7 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -1592,7 +1592,7 @@ Results:
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 109/109 focused AI tests pass.
 - Passed: `npm run build --workspace server`.
 - Passed: `npm run build --workspace client`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 119/119 server tests pass when the email sender is set to the test default.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 119/119 server tests pass when the email sender is set to the test default.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -1664,14 +1664,14 @@ Commands run:
 
 - `npm run build --workspace client`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
 
 - Passed: `npm run build --workspace client`.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 119/119 server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 119/119 server tests pass.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -1741,14 +1741,14 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
 
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 111/111 focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 121/121 server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 121/121 server tests pass.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -1816,14 +1816,14 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
 
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 117/117 focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 127/127 server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 127/127 server tests pass.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -1902,7 +1902,7 @@ Commands run:
 - `npm run build --workspace server`
 - `chmod +x scripts/ai-eval-chat.sh`
 - `./scripts/ai-eval-chat.sh`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -1910,7 +1910,7 @@ Results:
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming 118/118 focused AI tests pass after adding the deterministic eval suite.
 - Passed: `npm run build --workspace server`.
 - Passed: `./scripts/ai-eval-chat.sh` after rerunning unsandboxed because `tsx` IPC pipe creation under `/tmp` was blocked by the sandbox.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 128/128 server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 128/128 server tests pass.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -1987,7 +1987,7 @@ Commands run:
 - `node --import tsx ./src/ai/evals/cli.ts --mode deterministic`
 - `npm run build --workspace server`
 - `./scripts/ai-eval-chat.sh deterministic`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -1996,7 +1996,7 @@ Results:
 - Passed: `node --import tsx ./src/ai/evals/cli.ts --mode deterministic`, confirming the reusable runner returns `failedTurns: 0` across 4 fixture files, 8 scenarios, and 8 turns.
 - Passed: `npm run build --workspace server`.
 - Passed: `./scripts/ai-eval-chat.sh deterministic`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming 129/129 server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming 129/129 server tests pass.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -2083,7 +2083,7 @@ Commands run:
 - `node --import tsx ./src/ai/evals/cli.ts --mode deterministic`
 - `node --import tsx ./src/ai/evals/cli.ts --mode seeded-mongo`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -2092,7 +2092,7 @@ Results:
 - Passed: `node --import tsx ./src/ai/evals/cli.ts --mode deterministic`, confirming deterministic evals still return `failedTurns: 0` across `4` fixture files, `8` scenarios, and `8` turns.
 - Passed: `node --import tsx ./src/ai/evals/cli.ts --mode seeded-mongo` in the expected fail-closed path, returning `Seeded Mongo eval mode requires VIRLY_AI_EVAL_ENABLE_MONGO=true.` because no dedicated eval DB was enabled in this shell.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming `131/131` server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming `131/131` server tests pass.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -2170,7 +2170,7 @@ Commands run:
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `node --import tsx ./src/ai/evals/cli.ts --mode deterministic`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -2178,7 +2178,7 @@ Results:
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming focused AI tests remain green after the expanded fixture matrix.
 - Passed: `node --import tsx ./src/ai/evals/cli.ts --mode deterministic`, confirming deterministic evals now return `failedTurns: 0` across `4` fixture files, `10` scenarios, and `12` turns.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming `131/131` server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming `131/131` server tests pass.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -2409,14 +2409,14 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
 
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming `123/123` focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming `133/133` server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming `133/133` server tests pass.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -2481,7 +2481,7 @@ Commands run:
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `ruby -e 'require "yaml"; YAML.load_file("openapi.yaml")'`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -2489,7 +2489,7 @@ Results:
 - Passed: `ruby -e 'require "yaml"; YAML.load_file("openapi.yaml")'`
 - Passed: `npm run build --workspace server`
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming `125/125` focused AI tests pass.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming `135/135` server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming `135/135` server tests pass.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -2569,7 +2569,7 @@ Commands run:
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace client`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -2577,7 +2577,7 @@ Results:
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming `129/129` focused AI tests pass.
 - Passed: `npm run build --workspace client`
 - Passed: `npm run build --workspace server`
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming `139/139` server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming `139/139` server tests pass.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -2646,7 +2646,7 @@ Commands run:
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace client`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -2654,7 +2654,7 @@ Results:
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming `133/133` focused AI tests pass.
 - Passed: `npm run build --workspace client`
 - Passed: `npm run build --workspace server`
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming `143/143` server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming `143/143` server tests pass.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -2722,14 +2722,14 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
 
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming `158/158` focused AI tests pass.
 - Passed: `npm run build --workspace server`
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming `168/168` server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming `168/168` server tests pass.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -2814,7 +2814,7 @@ Commands run:
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace client`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -2822,7 +2822,7 @@ Results:
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming `157/157` focused AI tests pass.
 - Passed: `npm run build --workspace client`
 - Passed: `npm run build --workspace server`
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming `167/167` server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming `167/167` server tests pass.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -2894,7 +2894,7 @@ Commands run:
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace client`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -2902,7 +2902,7 @@ Results:
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming `150/150` focused AI tests pass.
 - Passed: `npm run build --workspace client`
 - Passed: `npm run build --workspace server`
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming `160/160` server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming `160/160` server tests pass.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -2994,7 +2994,7 @@ Commands run:
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace client`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -3002,7 +3002,7 @@ Results:
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming `146/146` focused AI tests pass.
 - Passed: `npm run build --workspace client`
 - Passed: `npm run build --workspace server`
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming `156/156` server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming `156/156` server tests pass.
 - Failed: `git diff --check` due to unrelated existing trailing whitespace in `server/src/middleware/auth.ts:19`.
 
 Assumptions made:
@@ -3073,7 +3073,7 @@ Commands run:
 - `node --import tsx --input-type=module -e "<pending-reference behavior probe>"`
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -3082,7 +3082,7 @@ Results:
 - Probe result: first pending-list turn returned `pending_ai_transfers` with `getPendingAiTransfers`; follow-up `what about the first one` returned `transaction_detail` with no tool calls, confirming pending-reference follow-ups are not currently wired through this route.
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming `158/158` focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming `168/168` server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming `168/168` server tests pass.
 - Passed: `git diff --check`.
 
 Assumptions made:
@@ -3154,7 +3154,7 @@ Commands run:
 - `node --import tsx ./src/ai/evals/cli.ts --mode deterministic`
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -3164,7 +3164,7 @@ Results:
 - Fixed by requiring explicit pending/confirmation wording unless the latest answer frame was `pending_ai_transfers`.
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming `159/159` focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming `169/169` server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming `169/169` server tests pass.
 - Passed: `git diff --check`.
 
 Assumptions made:
@@ -3230,7 +3230,7 @@ Commands run:
 - `node --import tsx ./src/ai/evals/cli.ts --mode deterministic`
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -3238,7 +3238,7 @@ Results:
 - Passed: deterministic eval CLI, confirming `4` fixture files, `13` scenarios, `19` turns, and `0` failed turns.
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming `160/160` focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming `170/170` server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming `170/170` server tests pass.
 - Passed: `git diff --check`.
 
 Assumptions made:
@@ -3313,7 +3313,7 @@ Commands run:
 - `node --import tsx ./src/ai/evals/cli.ts --mode deterministic`
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -3323,7 +3323,7 @@ Results:
 - Passed: deterministic eval CLI, confirming `4` fixture files, `14` scenarios, `23` turns, and `0` failed turns.
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming `161/161` focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming `171/171` server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming `171/171` server tests pass.
 - Passed: `git diff --check`.
 
 Assumptions made:
@@ -3476,7 +3476,7 @@ Commands run:
 
 - `npx tsx --test src/ai/tests/aiSafety.test.ts`
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Results:
@@ -3485,7 +3485,7 @@ Results:
 - Fixed by expanding deterministic received-direction capture for English `how much did he/she/they send me?` phrasing and matching Hebrew `כמה ... שלח/העביר ... לי` phrasing.
 - Passed: `npx tsx --test src/ai/tests/aiSafety.test.ts`, confirming `164/164` focused AI tests pass.
 - Passed: `npm run build --workspace server`.
-- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`, confirming `174/174` server tests pass.
+- Passed: `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`, confirming `174/174` server tests pass.
 - Passed: `git diff --check`.
 
 Assumptions made:

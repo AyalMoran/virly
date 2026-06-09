@@ -160,7 +160,7 @@ Files touched:
 
 Verification:
 - `npm run build --workspace server`
-- `env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server`
+- `env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server`
 - `git diff --check`
 
 Result:
@@ -1399,7 +1399,7 @@ Run after each implementation slice:
 
 ```bash
 npm run build --workspace server
-env VIRLY_EMAIL_FROM='Virly <verify@example.com>' npm run test --workspace server
+env VIRLY_EMAIL_FROM='Virly <verify@virly.ayal.online>' npm run test --workspace server
 git diff --check
 ```
 

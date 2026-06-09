@@ -39,6 +39,18 @@ const clientUrl = getStringEnv("VIRLY_CLIENT_URL", "http://localhost:5173", {
   aliases: ["CLIENT_URL"]
 });
 
+const videoProvider = getStringEnv("VIRLY_VIDEO_PROVIDER", "jitsi-public-demo");
+
+if (
+  !["jitsi-jaas", "jitsi-self-hosted", "jitsi-public-demo", "mock"].includes(
+    videoProvider
+  )
+) {
+  throw new Error(
+    "VIRLY_VIDEO_PROVIDER must be one of: jitsi-jaas, jitsi-self-hosted, jitsi-public-demo, mock."
+  );
+}
+
 export const config = {
   port: getIntEnv("VIRLY_PORT", {
     defaultValue: 3000,
@@ -59,7 +71,7 @@ export const config = {
   }),
   email: {
     resendApiKey: getOptionalStringEnv("RESEND_API_KEY"),
-    from: getStringEnv("VIRLY_EMAIL_FROM", "Virly <verify@example.com>", {
+    from: getStringEnv("VIRLY_EMAIL_FROM", "Virly <verify@virly.ayal.online>", {
       aliases: ["EMAIL_FROM"]
     })
   },
@@ -81,6 +93,27 @@ export const config = {
     debugTrace: getBooleanEnv("VIRLY_AI_DEBUG_TRACE", {
       defaultValue: false
     })
+  },
+  video: {
+    provider: videoProvider as
+      | "jitsi-jaas"
+      | "jitsi-self-hosted"
+      | "jitsi-public-demo"
+      | "mock",
+    jitsi: {
+      domain: getStringEnv("VIRLY_JITSI_DOMAIN", "meet.jit.si"),
+      appId: getOptionalStringEnv("VIRLY_JITSI_APP_ID"),
+      audience: getStringEnv("VIRLY_JITSI_AUDIENCE", "jitsi"),
+      issuer: getOptionalStringEnv("VIRLY_JITSI_ISSUER"),
+      subject: getOptionalStringEnv("VIRLY_JITSI_SUBJECT"),
+      keyId: getOptionalStringEnv("VIRLY_JITSI_KID"),
+      privateKey: getOptionalStringEnv("VIRLY_JITSI_PRIVATE_KEY")?.replace(/\\n/g, "\n"),
+      tokenTtlSeconds: getIntEnv("VIRLY_JITSI_TOKEN_TTL_SECONDS", {
+        defaultValue: 900,
+        min: 60,
+        max: 3600
+      })
+    }
   },
   cookies: {
     sameSite: getCookieSameSite()

@@ -2,10 +2,12 @@ import { motion } from "framer-motion";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   CreditCard,
+  Headphones,
   LayoutDashboard,
   LogOut,
   Settings,
-  Send
+  Send,
+  Video
 } from "lucide-react";
 import { useAuth } from "../features/auth/AuthProvider";
 import { hasAuthTransition } from "../lib/route-transition";
@@ -14,12 +16,22 @@ import { AnimatedText } from "./ui/animated-text";
 import { FloatingChatWidget } from "./ui/floating-chat-widget-shadcnui";
 import { UserProfileSidebar } from "./ui/menu";
 
-const navItems = [
+const baseNavItems = [
   { to: "/dashboard", label: "Dashboard", icon: <LayoutDashboard /> },
   { to: "/transfer", label: "Transfer", icon: <Send /> },
   { to: "/transactions", label: "Transactions", icon: <CreditCard /> },
+  { to: "/video", label: "Video", icon: <Video /> },
   { to: "/settings", label: "Settings", icon: <Settings />, isSeparator: true }
 ];
+
+function canUseAgentVideo(role?: string) {
+  return (
+    role === "support_agent" ||
+    role === "sales_agent" ||
+    role === "support_manager" ||
+    role === "admin"
+  );
+}
 
 export function AppShell() {
   const auth = useAuth();
@@ -27,6 +39,17 @@ export function AppShell() {
   const navigate = useNavigate();
   const displayName = getDisplayName(auth.user?.email);
   const enteredFromAuth = hasAuthTransition(location.state);
+  const navItems = canUseAgentVideo(auth.user?.role)
+    ? [
+        ...baseNavItems,
+        {
+          to: "/agent/video-sessions",
+          label: "Queue",
+          icon: <Headphones />,
+          isSeparator: true
+        }
+      ]
+    : baseNavItems;
 
   async function handleLogout() {
     await auth.logout();

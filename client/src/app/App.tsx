@@ -9,6 +9,8 @@ import { ResendVerificationPage } from "../features/auth/ResendVerificationPage"
 import { TransferPage } from "../features/transfer/TransferPage";
 import { TransactionsPage } from "../features/transactions/TransactionsPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
+import { AgentVideoSessionsPage } from "../features/video/AgentVideoSessionsPage";
+import { VideoSessionPage } from "../features/video/VideoSessionPage";
 import ShaderBackground from "../components/ui/shader-background";
 
 export function App() {
@@ -47,6 +49,8 @@ export function App() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/transfer" element={<TransferPage />} />
             <Route path="/transactions" element={<TransactionsPage />} />
+            <Route path="/video" element={<VideoSessionPage />} />
+            <Route path="/agent/video-sessions" element={<AgentVideoSessionsPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />

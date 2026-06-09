@@ -2,11 +2,19 @@ export type User = {
   id: string;
   email: string;
   balance: number;
+  role: UserRole;
   createdAt?: string;
   personalDetailsId: string;
   personalDetailsStatus: PersonalDetailsStatus;
   needsPersonalDetails: boolean;
 };
+
+export type UserRole =
+  | "user"
+  | "support_agent"
+  | "sales_agent"
+  | "support_manager"
+  | "admin";
 
 export type PersonalDetailsStatus = "not_provided" | "provided";
 
@@ -108,6 +116,70 @@ export type TransferResponse = {
   message: string;
   newBalance: number;
   transaction: Transaction;
+};
+
+export type VideoSessionType = "support" | "sales";
+
+export type VideoSessionStatus =
+  | "requested"
+  | "waiting_for_agent"
+  | "active"
+  | "ended"
+  | "missed"
+  | "cancelled"
+  | "failed";
+
+export type VideoSessionSource =
+  | "dashboard"
+  | "ai_assistant"
+  | "transfer_flow"
+  | "account_page";
+
+export type VideoSession = {
+  id: string;
+  type: VideoSessionType;
+  status: VideoSessionStatus;
+  topic: string | null;
+  userProblemSummary: string | null;
+  source: VideoSessionSource;
+  assignedAgentId: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  startedAt: string | null;
+  endedAt: string | null;
+  userJoinedAt: string | null;
+  agentJoinedAt: string | null;
+};
+
+export type AgentVideoSession = VideoSession & {
+  user: {
+    id: string;
+    emailMasked: string | null;
+  };
+};
+
+export type CreateVideoSessionRequest = {
+  type: VideoSessionType;
+  topic?: string;
+  userProblemSummary?: string;
+  source?: VideoSessionSource;
+  locale?: string;
+};
+
+export type JitsiJoinConfig = {
+  provider: "jitsi-jaas" | "jitsi-self-hosted" | "jitsi-public-demo" | "mock";
+  domain: string;
+  roomName: string;
+  appId?: string;
+  jwt?: string;
+  configOverwrite: {
+    prejoinPageEnabled: boolean;
+    disableDeepLinking: boolean;
+  };
+  interfaceConfigOverwrite: {
+    SHOW_JITSI_WATERMARK: boolean;
+  };
+  expiresAt: string;
 };
 
 export type AssistantId = "oshri" | "chaya" | "yehuda" | "yohai_daniel";
@@ -251,6 +323,7 @@ export type AssistantResponseBlockType =
   | "transfer_confirmation"
   | "transfer_status"
   | "transfer_limits"
+  | "video_session_cta"
   | "empty_state"
   | "notice";
 
@@ -398,6 +471,17 @@ export type AssistantResponseBlock =
       transferCountToday?: number;
       resetAt?: string;
       reasons?: string[];
+    }
+  | {
+      id: string;
+      type: "video_session_cta";
+      title?: LocalizedText;
+      sessionId: string;
+      sessionType: VideoSessionType;
+      status: VideoSessionStatus;
+      ctaLabel: LocalizedText;
+      appPath: string;
+      message?: LocalizedText;
     }
   | {
       id: string;

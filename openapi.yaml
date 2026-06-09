@@ -1151,6 +1151,7 @@ components:
             - transfer_confirmation
             - transfer_status
             - transfer_limits
+            - video_session_cta
             - empty_state
             - notice
         title:

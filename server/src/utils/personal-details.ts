@@ -45,6 +45,7 @@ export function toAuthUserDto(user: UserDocument, details: PersonalDetailsDocume
     id: user.id,
     email: user.email,
     balance: user.balance,
+    role: user.role ?? "user",
     createdAt: user.createdAt,
     personalDetailsId: details.id,
     personalDetailsStatus: details.status,

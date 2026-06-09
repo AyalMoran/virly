@@ -8,13 +8,19 @@ import type {
   AiChatStreamStatusEvent,
   ApiErrorBody,
   AuthSuccessResponse,
+  AgentVideoSession,
+  CreateVideoSessionRequest,
+  JitsiJoinConfig,
   LoginRequest,
   PersonalDetailsRequest,
   PersonalDetailsResponse,
   RegisterRequest,
   TransactionsResponse,
   TransferRequest,
-  TransferResponse
+  TransferResponse,
+  VideoSession,
+  VideoSessionStatus,
+  VideoSessionType
 } from "./types";
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
@@ -340,6 +346,82 @@ export const api = {
           "Idempotency-Key": idempotencyKey
         },
         body: JSON.stringify({ action, version, idempotencyKey })
+      }
+    );
+  },
+  createVideoSession(payload: CreateVideoSessionRequest) {
+    const topic = payload.topic?.trim();
+    const userProblemSummary = payload.userProblemSummary?.trim();
+
+    return request<{ session: VideoSession }>("/api/video-sessions", {
+      method: "POST",
+      body: JSON.stringify({
+        type: payload.type,
+        ...(topic ? { topic } : {}),
+        ...(userProblemSummary ? { userProblemSummary } : {}),
+        ...(payload.source ? { source: payload.source } : {}),
+        ...(payload.locale ? { locale: payload.locale } : {})
+      })
+    });
+  },
+  videoSession(id: string) {
+    return request<{ session: VideoSession }>(
+      `/api/video-sessions/${encodeURIComponent(id)}`
+    );
+  },
+  videoJoinToken(id: string) {
+    return request<{ session: VideoSession; jitsi: JitsiJoinConfig }>(
+      `/api/video-sessions/${encodeURIComponent(id)}/join-token`,
+      {
+        method: "POST"
+      }
+    );
+  },
+  endVideoSession(id: string) {
+    return request<{ session: VideoSession }>(
+      `/api/video-sessions/${encodeURIComponent(id)}/end`,
+      {
+        method: "POST"
+      }
+    );
+  },
+  adminVideoSessions(params: {
+    type?: VideoSessionType;
+    status?: VideoSessionStatus;
+  } = {}) {
+    const search = new URLSearchParams();
+    if (params.type) {
+      search.set("type", params.type);
+    }
+    if (params.status) {
+      search.set("status", params.status);
+    }
+
+    return request<{ sessions: AgentVideoSession[] }>(
+      `/api/admin/video-sessions${search.size ? `?${search.toString()}` : ""}`
+    );
+  },
+  assignVideoSession(id: string) {
+    return request<{ session: VideoSession }>(
+      `/api/admin/video-sessions/${encodeURIComponent(id)}/assign`,
+      {
+        method: "POST"
+      }
+    );
+  },
+  adminVideoJoinToken(id: string) {
+    return request<{ session: VideoSession; jitsi: JitsiJoinConfig }>(
+      `/api/admin/video-sessions/${encodeURIComponent(id)}/join-token`,
+      {
+        method: "POST"
+      }
+    );
+  },
+  adminEndVideoSession(id: string) {
+    return request<{ session: VideoSession }>(
+      `/api/admin/video-sessions/${encodeURIComponent(id)}/end`,
+      {
+        method: "POST"
       }
     );
   }

@@ -9,8 +9,10 @@ import {
   Info,
   ReceiptText,
   ShieldCheck,
+  Video,
   Wallet,
 } from "lucide-react";
+import { Link } from "react-router-dom";
 
 import { formatDate, formatMoneyILS } from "../../lib/format";
 import type {
@@ -987,6 +989,46 @@ export function NoticeCard({
   );
 }
 
+export function VideoSessionCtaCard({
+  block,
+}: {
+  block: Extract<AssistantResponseBlock, { type: "video_session_cta" }>;
+}) {
+  return (
+    <AssistantCard
+      title={block.title}
+      icon={<Video className="h-3.5 w-3.5" />}
+      className="border-emerald-500/25"
+    >
+      <div className="grid gap-2.5 p-3 text-[12px] leading-5">
+        {block.message ? (
+          <p
+            dir={block.message.dir ?? "auto"}
+            className="min-w-0 break-words text-muted-foreground"
+          >
+            {block.message.text}
+          </p>
+        ) : null}
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          <span className="rounded-full border border-emerald-500/25 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold capitalize text-emerald-700">
+            {block.sessionType}
+          </span>
+          <span className="rounded-full border border-border/40 bg-background/70 px-2 py-0.5 text-[10px] font-semibold capitalize text-muted-foreground">
+            {block.status.replace(/_/g, " ")}
+          </span>
+        </div>
+        <Link
+          to={block.appPath}
+          dir={block.ctaLabel.dir ?? "auto"}
+          className="inline-flex min-h-9 items-center justify-center rounded-md bg-primary px-3 text-[12px] font-semibold text-primary-foreground"
+        >
+          {block.ctaLabel.text}
+        </Link>
+      </div>
+    </AssistantCard>
+  );
+}
+
 function renderBlock(
   block: AssistantResponseBlock,
   props: Omit<AssistantBlocksProps, "blocks">,
@@ -1029,6 +1071,8 @@ function renderBlock(
           onDeny={props.onDenyTransfer}
         />
       );
+    case "video_session_cta":
+      return <VideoSessionCtaCard block={block} />;
     case "empty_state":
       return <EmptyStateCard block={block} />;
     case "notice":
