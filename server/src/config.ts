@@ -39,15 +39,37 @@ const clientUrl = getStringEnv("VIRLY_CLIENT_URL", "http://localhost:5173", {
   aliases: ["CLIENT_URL"]
 });
 
+const videoProviderValues = [
+  "jitsi-jaas",
+  "jitsi-self-hosted",
+  "jitsi-public-demo",
+  "mock"
+] as const;
+type VideoProvider = (typeof videoProviderValues)[number];
+
 const videoProvider = getStringEnv("VIRLY_VIDEO_PROVIDER", "jitsi-public-demo");
 
-if (
-  !["jitsi-jaas", "jitsi-self-hosted", "jitsi-public-demo", "mock"].includes(
-    videoProvider
-  )
-) {
+if (!videoProviderValues.includes(videoProvider as VideoProvider)) {
   throw new Error(
     "VIRLY_VIDEO_PROVIDER must be one of: jitsi-jaas, jitsi-self-hosted, jitsi-public-demo, mock."
+  );
+}
+
+const jitsiPrivateKey = getOptionalStringEnv("VIRLY_JITSI_PRIVATE_KEY")?.replace(/\\n/g, "\n");
+const jitsiAppId = getOptionalStringEnv("VIRLY_JITSI_APP_ID");
+const jitsiKeyId = getOptionalStringEnv("VIRLY_JITSI_KID");
+const signedJitsiProvider =
+  videoProvider === "jitsi-jaas" || videoProvider === "jitsi-self-hosted";
+
+if (signedJitsiProvider && !jitsiPrivateKey) {
+  throw new Error(
+    "VIRLY_JITSI_PRIVATE_KEY is required when VIRLY_VIDEO_PROVIDER is jitsi-jaas or jitsi-self-hosted."
+  );
+}
+
+if (videoProvider === "jitsi-jaas" && (!jitsiAppId || !jitsiKeyId)) {
+  throw new Error(
+    "VIRLY_JITSI_APP_ID and VIRLY_JITSI_KID are required when VIRLY_VIDEO_PROVIDER is jitsi-jaas."
   );
 }
 
@@ -95,19 +117,15 @@ export const config = {
     })
   },
   video: {
-    provider: videoProvider as
-      | "jitsi-jaas"
-      | "jitsi-self-hosted"
-      | "jitsi-public-demo"
-      | "mock",
+    provider: videoProvider as VideoProvider,
     jitsi: {
       domain: getStringEnv("VIRLY_JITSI_DOMAIN", "meet.jit.si"),
-      appId: getOptionalStringEnv("VIRLY_JITSI_APP_ID"),
+      appId: jitsiAppId,
       audience: getStringEnv("VIRLY_JITSI_AUDIENCE", "jitsi"),
       issuer: getOptionalStringEnv("VIRLY_JITSI_ISSUER"),
       subject: getOptionalStringEnv("VIRLY_JITSI_SUBJECT"),
-      keyId: getOptionalStringEnv("VIRLY_JITSI_KID"),
-      privateKey: getOptionalStringEnv("VIRLY_JITSI_PRIVATE_KEY")?.replace(/\\n/g, "\n"),
+      keyId: jitsiKeyId,
+      privateKey: jitsiPrivateKey,
       tokenTtlSeconds: getIntEnv("VIRLY_JITSI_TOKEN_TTL_SECONDS", {
         defaultValue: 900,
         min: 60,

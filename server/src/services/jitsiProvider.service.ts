@@ -46,8 +46,25 @@ function getFullRoomName(roomName: string) {
 function createJitsiJwt(input: CreateVideoJoinConfigInput, expiresAtSeconds: number) {
   const { privateKey, keyId, audience, issuer, subject } = config.video.jitsi;
   if (!privateKey) {
-    return undefined;
+    throw new Error("Jitsi JWT signing is not configured.");
   }
+  const tokenIssuer =
+    issuer ??
+    (config.video.provider === "jitsi-jaas"
+      ? "chat"
+      : config.video.jitsi.appId ?? "virly");
+  const tokenSubject =
+    subject ??
+    (config.video.provider === "jitsi-jaas"
+      ? config.video.jitsi.appId ?? config.video.jitsi.domain
+      : config.video.jitsi.domain);
+  const tokenKeyId =
+    config.video.provider === "jitsi-jaas" &&
+    keyId &&
+    config.video.jitsi.appId &&
+    !keyId.includes("/")
+      ? `${config.video.jitsi.appId}/${keyId}`
+      : keyId;
 
   const nowSeconds = Math.floor(Date.now() / 1000);
   const moderator =
@@ -58,8 +75,8 @@ function createJitsiJwt(input: CreateVideoJoinConfigInput, expiresAtSeconds: num
   return jwt.sign(
     {
       aud: audience,
-      iss: issuer ?? config.video.jitsi.appId ?? "virly",
-      sub: subject ?? config.video.jitsi.domain,
+      iss: tokenIssuer,
+      sub: tokenSubject,
       room: input.roomName,
       nbf: nowSeconds - 10,
       exp: expiresAtSeconds,
@@ -86,7 +103,7 @@ function createJitsiJwt(input: CreateVideoJoinConfigInput, expiresAtSeconds: num
     privateKey,
     {
       algorithm: "RS256",
-      ...(keyId ? { keyid: keyId } : {})
+      ...(tokenKeyId ? { keyid: tokenKeyId } : {})
     }
   );
 }
