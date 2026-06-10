@@ -1,6 +1,13 @@
-import { useState } from "react";
-import { motion } from "framer-motion";
-import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  Link,
+  NavLink,
+  useLocation,
+  useNavigate,
+  useNavigationType,
+  useOutlet
+} from "react-router-dom";
 import {
   CreditCard,
   Headphones,
@@ -17,6 +24,27 @@ import { getDisplayName, getUserAvatarUrl } from "../lib/user-avatar";
 import { AnimatedText } from "./ui/animated-text";
 import { FloatingChatWidget } from "./ui/floating-chat-widget-shadcnui";
 import { UserProfileSidebar } from "./ui/menu";
+
+/**
+ * Captures the outlet element at mount so the exiting copy keeps rendering
+ * the previous route while AnimatePresence plays its exit animation.
+ */
+function AnimatedOutlet() {
+  const outlet = useOutlet();
+  const [frozenOutlet] = useState(outlet);
+  return <>{frozenOutlet}</>;
+}
+
+const routeTransition = {
+  initial: { opacity: 0, y: 14 },
+  animate: { opacity: 1, y: 0 },
+  exit: {
+    opacity: 0,
+    y: -8,
+    transition: { duration: 0.14, ease: [0.4, 0, 1, 1] as const }
+  },
+  transition: { duration: 0.26, ease: [0.16, 1, 0.3, 1] as const }
+};
 
 const SIDEBAR_COLLAPSED_KEY = "virly-sidebar-collapsed";
 
@@ -57,9 +85,18 @@ export function AppShell() {
   const auth = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
+  const navigationType = useNavigationType();
   const displayName = getDisplayName(auth.user?.email);
   const enteredFromAuth = hasAuthTransition(location.state);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(readSidebarCollapsed);
+
+  useEffect(() => {
+    // Forward navigation starts at the top of the new page; browser-driven
+    // back/forward (POP) keeps the browser's own scroll restoration.
+    if (navigationType !== "POP") {
+      window.scrollTo(0, 0);
+    }
+  }, [location.pathname, navigationType]);
 
   function toggleSidebar() {
     setIsSidebarCollapsed((collapsed) => {
@@ -168,7 +205,17 @@ export function AppShell() {
           </div>
         </motion.header>
         <main className="page-frame">
-          <Outlet />
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={location.pathname}
+              initial={routeTransition.initial}
+              animate={routeTransition.animate}
+              exit={routeTransition.exit}
+              transition={routeTransition.transition}
+            >
+              <AnimatedOutlet />
+            </motion.div>
+          </AnimatePresence>
         </main>
       </motion.div>
 

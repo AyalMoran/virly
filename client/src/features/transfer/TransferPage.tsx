@@ -1,4 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Button,
@@ -140,6 +141,18 @@ export function TransferPage() {
       <PageHeader eyebrow="" title="Transfer" />
       <ResponsiveGrid className="transfer-layout figma-transfer-layout" variant="sidebar">
         <Card className="transfer-card figma-transfer-card">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={step}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{
+                opacity: 0,
+                y: -6,
+                transition: { duration: 0.12, ease: [0.4, 0, 1, 1] }
+              }}
+              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+            >
           {step === "success" && result ? (
             <div className="success-panel">
               <SuccessBanner message={result.message} />
@@ -264,6 +277,8 @@ export function TransferPage() {
               <Button type="submit">Review transfer</Button>
             </form>
           )}
+            </motion.div>
+          </AnimatePresence>
         </Card>
         <Card className="balance-aside figma-balance-aside">
           <p className="eyebrow">Balance</p>
