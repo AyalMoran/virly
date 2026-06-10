@@ -4,6 +4,7 @@ import type {
   InputHTMLAttributes,
   ReactNode
 } from "react";
+import { Inbox } from "lucide-react";
 
 type ButtonProps = ButtonHTMLAttributes<HTMLButtonElement> & {
   variant?: "primary" | "secondary" | "ghost" | "danger";
@@ -149,16 +150,18 @@ export function SuccessBanner({ message }: { message: string }) {
 export function EmptyState({
   title,
   message,
+  icon,
   children
 }: {
   title: string;
   message: string;
+  icon?: ReactNode;
   children?: ReactNode;
 }) {
   return (
     <div className="empty-state">
       <div className="empty-icon" aria-hidden="true">
-        *
+        {icon ?? <Inbox />}
       </div>
       <h2>{title}</h2>
       {message ? <p>{message}</p> : null}
@@ -169,7 +172,7 @@ export function EmptyState({
 
 export function Skeleton({ rows = 3 }: { rows?: number }) {
   return (
-    <div className="skeleton-stack" aria-label="Loading">
+    <div className="skeleton-stack" role="status" aria-busy="true" aria-label="Loading">
       {Array.from({ length: rows }).map((_, index) => (
         <div className="skeleton-row" key={index} />
       ))}

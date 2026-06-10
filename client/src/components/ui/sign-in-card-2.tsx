@@ -1,6 +1,6 @@
 import * as React from "react";
 import { AnimatePresence, motion, useMotionValue, useTransform } from "framer-motion";
-import { ArrowRight, Eye, EyeClosed, Lock, Mail, Phone } from "lucide-react";
+import { ArrowRight, Check, Eye, EyeClosed, Lock, Mail, Phone } from "lucide-react";
 import { Link } from "react-router-dom";
 import { cn } from "../../lib/utils";
 
@@ -323,7 +323,9 @@ export function SignInCard2({
                     checked={rememberMe}
                     onChange={(event) => onRememberMeChange?.(event.target.checked)}
                   />
-                  <span>{rememberMe ? "✓" : ""}</span>
+                  <span aria-hidden="true">
+                    {rememberMe ? <Check size={12} strokeWidth={3} /> : null}
+                  </span>
                   Remember me
                 </label>
               </div> : null}

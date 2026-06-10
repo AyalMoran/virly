@@ -1,3 +1,4 @@
+import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { formatCurrency, formatRelativeDate } from "../lib/format";
 import type { Pagination, Transaction } from "../lib/types";
@@ -20,7 +21,10 @@ export function TransactionList({
 }) {
   if (!transactions.length) {
     return (
-      <EmptyState title="No transactions" message="">
+      <EmptyState
+        title="No transactions"
+        message="Money you send or receive will show up here. Start by sending your first transfer."
+      >
         <Link className="button button-primary" to="/transfer">
           Send money
         </Link>
@@ -55,7 +59,7 @@ export function TransactionList({
               className={isCredit ? "direction-mark direction-in" : "direction-mark direction-out"}
               aria-hidden="true"
             >
-              {isCredit ? "↓" : "↑"}
+              {isCredit ? <ArrowDownLeft /> : <ArrowUpRight />}
             </div>
             <div className="transaction-main">
               <strong>{transaction.counterpartyEmail}</strong>
@@ -72,7 +76,7 @@ export function TransactionList({
         );
       })}
       {pagination && page && onPageChange ? (
-        <div className="pagination">
+        <nav className="pagination" aria-label="Transactions pages">
           <Button
             type="button"
             variant="secondary"
@@ -92,7 +96,7 @@ export function TransactionList({
           >
             Next
           </Button>
-        </div>
+        </nav>
       ) : null}
     </div>
   );

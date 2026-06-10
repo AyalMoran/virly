@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
+import { ArrowDownLeft, ArrowUpRight, TrendingUp } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Card, ErrorBanner, PageHeader, Skeleton } from "../../components/Primitives";
 import { QuickContacts } from "../../components/QuickContacts";
 import { TransactionDetailsDialog } from "../../components/TransactionDetailsDialog";
 import { TransactionList } from "../../components/TransactionList";
-import BentoCard from "../../components/ui/bento-card";
 import { api } from "../../lib/api";
 import { getQuickContacts } from "../../lib/contacts";
 import { formatCurrency } from "../../lib/format";
@@ -89,8 +89,8 @@ export function DashboardPage() {
         visible: {
           opacity: 1,
           transition: {
-            delayChildren: 0.35,
-            staggerChildren: 0.18
+            delayChildren: 0.15,
+            staggerChildren: 0.08
           }
         }
       }
@@ -103,7 +103,7 @@ export function DashboardPage() {
           opacity: 1,
           y: 0,
           scale: 1,
-          transition: { duration: 1.25, ease: [0.16, 1, 0.3, 1] }
+          transition: { duration: 0.65, ease: [0.16, 1, 0.3, 1] }
         }
       }
     : undefined;
@@ -146,7 +146,7 @@ export function DashboardPage() {
                   <strong>{formatCurrency(summary?.balance ?? 0)}</strong>
                 </div>
                 <span className="trend-badge" aria-hidden="true">
-                  ↗
+                  <TrendingUp />
                 </span>
               </div>
               <div className="figma-balance-stats">
@@ -200,7 +200,7 @@ export function DashboardPage() {
                 <div className="activity-stat-list">
                   <div className="activity-stat">
                     <span className="direction-mark direction-in" aria-hidden="true">
-                      ↓
+                      <ArrowDownLeft />
                     </span>
                     <div>
                       <strong>Received</strong>
@@ -209,7 +209,7 @@ export function DashboardPage() {
                   </div>
                   <div className="activity-stat">
                     <span className="direction-mark direction-out" aria-hidden="true">
-                      ↑
+                      <ArrowUpRight />
                     </span>
                     <div>
                       <strong>Sent</strong>
@@ -219,14 +219,6 @@ export function DashboardPage() {
                 </div>
               </Card>
             </motion.div>
-
-            <motion.section
-              className="dashboard-bento-card"
-              aria-label="Workspace overview"
-              variants={itemAnimation}
-            >
-              <BentoCard />
-            </motion.section>
           </aside>
         </motion.div>
       )}

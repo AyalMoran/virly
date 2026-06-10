@@ -36,6 +36,7 @@ body {
   margin: 0;
   min-width: 320px;
   min-height: 100vh;
+  min-height: 100dvh;
   color: var(--color-text);
   background: transparent;
   font-family: var(--font-body);
@@ -43,6 +44,7 @@ body {
 
 #root {
   min-height: 100vh;
+  min-height: 100dvh;
   isolation: isolate;
 }
 
@@ -55,6 +57,7 @@ body {
 .app-content-layer {
   position: relative;
   min-height: 100vh;
+  min-height: 100dvh;
   z-index: 1;
 }
 
@@ -81,6 +84,15 @@ textarea {
   font: inherit;
 }
 
+button,
+a,
+input,
+textarea,
+select,
+[role="button"] {
+  touch-action: manipulation;
+}
+
 button {
   cursor: pointer;
 }
@@ -99,6 +111,7 @@ button:disabled {
   display: grid;
   grid-template-columns: 320px minmax(0, 1fr);
   min-height: 100vh;
+  min-height: 100dvh;
 }
 
 .sidebar {
@@ -107,6 +120,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   height: 100vh;
+  height: 100dvh;
   padding: 16px;
   border-right: 1px solid rgba(53, 133, 142, 0.12);
   background: rgba(230, 238, 201, 0.28);
@@ -325,26 +339,6 @@ button:disabled {
   color: var(--color-primary);
   font-size: 0.68rem;
   font-weight: 800;
-}
-
-.icon-grid::before {
-  content: "G";
-}
-
-.icon-send::before {
-  content: "S";
-}
-
-.icon-list::before {
-  content: "L";
-}
-
-.icon-user::before {
-  content: "U";
-}
-
-.icon-logout::before {
-  content: "O";
 }
 
 .sidebar-logout {
@@ -652,6 +646,14 @@ h2 {
   font-weight: 900;
 }
 
+.direction-mark svg,
+.trend-badge svg,
+.empty-icon svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 2.1;
+}
+
 .direction-in {
   background: rgba(194, 208, 153, 0.42);
   color: var(--color-primary-deep);
@@ -684,6 +686,19 @@ h2 {
 
 .amount-debit {
   color: var(--color-debit);
+}
+
+/* Monetary figures align and never shift width as values change. */
+.amount-credit,
+.amount-debit,
+.transaction-meta strong,
+.figma-balance-top strong,
+.figma-balance-stats strong,
+.balance-aside > strong,
+.projection strong,
+.activity-stat strong + span,
+.auth-balance-card strong {
+  font-variant-numeric: tabular-nums;
 }
 
 .transaction-confirmation-overlay {
@@ -878,6 +893,17 @@ textarea::placeholder {
 
 .button:hover {
   transform: translateY(-1px);
+}
+
+.button:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.quick-contact:active,
+.contact-picker-item:active,
+.video-choice:active,
+.transaction-row.selectable:active {
+  transform: translateY(0) scale(0.99);
 }
 
 .button-primary {
@@ -2621,15 +2647,21 @@ select {
 .floating-chat-window {
   display: flex;
   width: min(380px, calc(100vw - 20px));
-  max-height: calc(100dvh - var(--mobile-nav-offset) - 24px);
+  /* Budget: root bottom inset (6px) + toggle button (56px) + gap (16px) + 12px headroom. */
+  max-height: calc(
+    100dvh - var(--mobile-nav-offset) - 90px - env(safe-area-inset-top, 0px)
+  );
   flex-direction: column;
 }
 
 .floating-chat-messages {
   height: auto;
-  min-height: 220px;
-  max-height: calc(100dvh - var(--mobile-nav-offset) - 290px);
+  min-height: min(220px, 30dvh);
+  max-height: calc(
+    100dvh - var(--mobile-nav-offset) - 290px - env(safe-area-inset-top, 0px)
+  );
   flex: 1 1 auto;
+  overscroll-behavior: contain;
 }
 
 .chat-message-column {
@@ -2836,6 +2868,7 @@ select {
 
   .auth-visual {
     min-height: 100vh;
+    min-height: 100dvh;
     padding: 34px;
   }
 
@@ -2906,7 +2939,8 @@ select {
   }
 
   .floating-chat-window {
-    max-height: min(720px, calc(100dvh - 48px));
+    /* Budget: root bottom inset (24px) + toggle button (56px) + gap (16px) + 24px headroom. */
+    max-height: min(720px, calc(100dvh - 120px));
   }
 
   .floating-chat-messages {

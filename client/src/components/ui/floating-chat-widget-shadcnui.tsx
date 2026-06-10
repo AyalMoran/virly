@@ -41,7 +41,6 @@ import {
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue,
 } from "@/components/ui/select";
 import { useAuth } from "@/features/auth/AuthProvider";
 import { api, ApiError, supportsAiChatStreaming } from "@/lib/api";
@@ -678,42 +677,92 @@ export function FloatingChatWidget() {
                   currentAgent.gradient,
                 )}
               />
-              <div className="relative z-10 flex items-center justify-between">
-                <div className="flex min-w-0 items-center gap-3">
-                  <div className="relative">
-                    <Avatar className="h-10 w-10 border-2 border-background shadow-sm">
-                      <AvatarImage
-                        src={currentAgent.avatar}
-                        alt={currentAgent.name}
-                      />
-                      <AvatarFallback>AI</AvatarFallback>
-                    </Avatar>
-                    <span
-                      className={cn(
-                        "absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background",
-                        currentAgent.status === "online"
-                          ? "bg-emerald-500"
-                          : currentAgent.status === "busy"
-                            ? "bg-amber-500"
-                            : "bg-slate-400",
-                      )}
-                    />
-                  </div>
-                  <div className="min-w-0">
-                    <h3 className="truncate text-sm font-semibold text-foreground">
-                      {currentAgent.name}
-                    </h3>
-                    <div className="flex items-center gap-1.5">
-                      <span className="truncate text-xs text-muted-foreground">
-                        {currentAgent.role}
-                      </span>
+              <div className="relative z-10 flex items-center justify-between gap-2">
+                <Select
+                  value={selectedAgent}
+                  onValueChange={(value) => setSelectedAgent(value as AssistantId)}
+                >
+                  <SelectTrigger
+                    aria-label={`Assistant: ${currentAgent.name}. Choose an assistant`}
+                    className="h-auto min-h-11 min-w-0 flex-1 cursor-pointer rounded-xl border-none bg-transparent px-1.5 py-1 shadow-none transition-colors hover:bg-background/40 focus:ring-2 focus:ring-primary/30 focus:ring-offset-0 [&>svg]:shrink-0"
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-3 text-left">
+                      <div className="relative shrink-0">
+                        <Avatar className="h-10 w-10 border-2 border-background shadow-sm">
+                          <AvatarImage
+                            src={currentAgent.avatar}
+                            alt=""
+                          />
+                          <AvatarFallback>AI</AvatarFallback>
+                        </Avatar>
+                        <span
+                          className={cn(
+                            "absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-background",
+                            currentAgent.status === "online"
+                              ? "bg-emerald-500"
+                              : currentAgent.status === "busy"
+                                ? "bg-amber-500"
+                                : "bg-slate-400",
+                          )}
+                        />
+                      </div>
+                      <div className="min-w-0">
+                        <h3 className="truncate text-sm font-semibold text-foreground">
+                          {currentAgent.name}
+                        </h3>
+                        <span
+                          className="block truncate text-xs text-muted-foreground"
+                          dir="auto"
+                        >
+                          {currentAgent.role}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                </div>
+                  </SelectTrigger>
+                  <SelectContent className="border-border/40 bg-background/90 backdrop-blur-xl">
+                    {AI_AGENTS.map((agent) => (
+                      <SelectItem
+                        key={agent.id}
+                        value={agent.id}
+                        className="cursor-pointer focus:bg-primary/10"
+                      >
+                        <div className="flex items-center gap-3 py-1">
+                          <div className="relative shrink-0">
+                            <Avatar className="h-8 w-8 border border-border/40 shadow-sm">
+                              <AvatarImage src={agent.avatar} alt="" />
+                              <AvatarFallback>AI</AvatarFallback>
+                            </Avatar>
+                            <span
+                              className={cn(
+                                "absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full border-2 border-background",
+                                agent.status === "online"
+                                  ? "bg-emerald-500"
+                                  : agent.status === "busy"
+                                    ? "bg-amber-500"
+                                    : "bg-slate-400",
+                              )}
+                            />
+                          </div>
+                          <div className="flex flex-col text-left">
+                            <span className="text-sm font-medium">
+                              {agent.name}
+                            </span>
+                            <span
+                              className="text-[10px] text-muted-foreground"
+                              dir="auto"
+                            >
+                              {agent.role}
+                            </span>
+                          </div>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="min-h-10 min-w-10 rounded-full hover:bg-background/50"
+                  className="min-h-10 min-w-10 shrink-0 rounded-full hover:bg-background/50"
                   onClick={() => setIsOpen(false)}
                   aria-label="Close chat"
                 >
@@ -722,49 +771,11 @@ export function FloatingChatWidget() {
               </div>
             </div>
 
-            <div className="border-b border-border/40 p-3">
-              <Select
-                value={selectedAgent}
-                onValueChange={(value) => setSelectedAgent(value as AssistantId)}
-              >
-                <SelectTrigger className="h-auto w-full cursor-pointer border-none bg-transparent px-2 py-4 text-lg font-medium shadow-none hover:bg-transparent focus:ring-0 focus:ring-offset-0">
-                  <SelectValue placeholder="Select an agent" />
-                </SelectTrigger>
-                <SelectContent className="border-border/40 bg-background/90 backdrop-blur-xl">
-                  {AI_AGENTS.map((agent) => {
-                    const Icon = agent.icon;
-                    return (
-                      <SelectItem
-                        key={agent.id}
-                        value={agent.id}
-                        className="cursor-pointer focus:bg-primary/10"
-                      >
-                        <div className="flex items-center gap-3 py-1">
-                          <div
-                            className={cn(
-                              "flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-br",
-                              agent.gradient,
-                            )}
-                          >
-                            <Icon className="h-4 w-4 text-foreground/80" />
-                          </div>
-                          <div className="flex flex-col text-left">
-                            <span className="text-sm font-medium">
-                              {agent.name}
-                            </span>
-                            <span className="text-[10px] text-muted-foreground">
-                              {agent.role}
-                            </span>
-                          </div>
-                        </div>
-                      </SelectItem>
-                    );
-                  })}
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="floating-chat-messages flex h-[320px] flex-col gap-4 overflow-y-auto bg-gradient-to-b from-background/20 to-background/40 p-4">
+            <div
+              className="floating-chat-messages flex h-[320px] flex-col gap-4 overflow-y-auto bg-gradient-to-b from-background/20 to-background/40 p-4"
+              role="log"
+              aria-live="polite"
+            >
               <motion.div variants={messageVariants} className="flex gap-3">
                 <Avatar className="h-8 w-8 border border-border/40 shadow-sm">
                   <AvatarImage src={currentAgent.avatar} />
@@ -938,8 +949,9 @@ export function FloatingChatWidget() {
                   disabled={isSending}
                 />
                 <Button
+                  type="submit"
                   size="icon"
-                  className="h-10 w-10 rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 hover:shadow-primary/25"
+                  className="h-11 w-11 rounded-full bg-primary text-primary-foreground shadow-lg transition-transform hover:scale-105 hover:shadow-primary/25"
                   disabled={!message.trim() || isSending}
                   aria-label="Send message"
                 >

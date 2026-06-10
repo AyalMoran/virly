@@ -193,19 +193,11 @@ export default function ShaderBackground() {
       },
     };
 
-    const resizeCanvas = () => {
-      canvas.width = window.innerWidth;
-      canvas.height = window.innerHeight;
-      gl.viewport(0, 0, canvas.width, canvas.height);
-    };
-
-    window.addEventListener("resize", resizeCanvas);
-    resizeCanvas();
-
+    const reducedMotionQuery = window.matchMedia("(prefers-reduced-motion: reduce)");
     const startTime = Date.now();
     let animationFrame = 0;
 
-    const render = () => {
+    const drawFrame = () => {
       const currentTime = (Date.now() - startTime) / 1000;
 
       gl.clearColor(0.0, 0.0, 0.0, 1.0);
@@ -230,14 +222,61 @@ export default function ShaderBackground() {
       );
       gl.enableVertexAttribArray(programInfo.attribLocations.vertexPosition);
       gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+    };
 
+    const render = () => {
+      drawFrame();
       animationFrame = requestAnimationFrame(render);
     };
 
-    animationFrame = requestAnimationFrame(render);
+    const resizeCanvas = () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      gl.viewport(0, 0, canvas.width, canvas.height);
+      if (animationFrame === 0) {
+        drawFrame();
+      }
+    };
+
+    window.addEventListener("resize", resizeCanvas);
+    resizeCanvas();
+
+    const stopLoop = () => {
+      cancelAnimationFrame(animationFrame);
+      animationFrame = 0;
+    };
+
+    const startLoop = () => {
+      if (animationFrame === 0 && !document.hidden && !reducedMotionQuery.matches) {
+        animationFrame = requestAnimationFrame(render);
+      }
+    };
+
+    const handleMotionPreference = () => {
+      if (reducedMotionQuery.matches) {
+        stopLoop();
+        drawFrame();
+      } else {
+        startLoop();
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.hidden) {
+        stopLoop();
+      } else {
+        startLoop();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    reducedMotionQuery.addEventListener("change", handleMotionPreference);
+    handleMotionPreference();
 
     return () => {
-      cancelAnimationFrame(animationFrame);
+      stopLoop();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      reducedMotionQuery.removeEventListener("change", handleMotionPreference);
       window.removeEventListener("resize", resizeCanvas);
       gl.deleteBuffer(positionBuffer);
       gl.deleteProgram(shaderProgram);

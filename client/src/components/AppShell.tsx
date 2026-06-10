@@ -61,14 +61,14 @@ export function AppShell() {
       className="app-shell"
       initial={enteredFromAuth ? { opacity: 0, scale: 0.985 } : false}
       animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 1.25, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
     >
       <motion.aside
         className="sidebar"
         aria-label="Primary"
         initial={enteredFromAuth ? { opacity: 0, x: -28 } : false}
         animate={{ opacity: 1, x: 0 }}
-        transition={{ duration: 1.35, ease: [0.16, 1, 0.3, 1], delay: 0.14 }}
+        transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1], delay: 0.08 }}
       >
         <UserProfileSidebar
           user={{
@@ -94,13 +94,13 @@ export function AppShell() {
         className="shell-main"
         initial={enteredFromAuth ? { opacity: 0, y: 28 } : false}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 1.45, ease: [0.16, 1, 0.3, 1], delay: 0.18 }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
       >
         <motion.header
           className="topbar"
           initial={enteredFromAuth ? { opacity: 0, y: -16 } : false}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 1.15, ease: [0.16, 1, 0.3, 1], delay: 0.34 }}
+          transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.18 }}
         >
           <AnimatedText
             text="Virly"
