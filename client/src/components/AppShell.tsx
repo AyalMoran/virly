@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   CreditCard,
   Headphones,
@@ -10,6 +10,7 @@ import {
   Video
 } from "lucide-react";
 import { useAuth } from "../features/auth/AuthProvider";
+import { formatCurrency } from "../lib/format";
 import { hasAuthTransition } from "../lib/route-transition";
 import { getDisplayName, getUserAvatarUrl } from "../lib/user-avatar";
 import { AnimatedText } from "./ui/animated-text";
@@ -102,18 +103,32 @@ export function AppShell() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: 0.18 }}
         >
-          <AnimatedText
-            text="Virly"
-            as="span"
-            duration={0.07}
-            delay={0.08}
+          <Link
+            to="/dashboard"
             className="topbar-wordmark"
-            textClassName="topbar-wordmark-text"
-            underlineClassName="topbar-wordmark-underline"
-          />
+            aria-label="Virly home"
+          >
+            <AnimatedText
+              text="Virly"
+              as="span"
+              duration={0.07}
+              delay={0.08}
+              textClassName="topbar-wordmark-text"
+              underlineClassName="topbar-wordmark-underline"
+            />
+          </Link>
           <div className="topbar-actions">
-            <div className="avatar" aria-label="Current account">
-              {auth.user?.email.slice(0, 2).toUpperCase()}
+            <div className="topbar-user">
+              <div className="topbar-user-meta">
+                <span className="topbar-user-name">{displayName}</span>
+                <span className="topbar-user-balance">
+                  <span className="sr-only">Current balance: </span>
+                  {formatCurrency(auth.user?.balance ?? 0)}
+                </span>
+              </div>
+              <div className="avatar" aria-hidden="true">
+                {auth.user?.email.slice(0, 2).toUpperCase()}
+              </div>
             </div>
           </div>
         </motion.header>

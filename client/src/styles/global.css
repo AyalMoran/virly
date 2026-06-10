@@ -381,16 +381,60 @@ button:disabled {
   display: flex;
   align-items: center;
   gap: 10px;
+  min-width: 0;
+  margin-left: auto;
+}
+
+.topbar-user {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.topbar-user-meta {
+  display: grid;
+  gap: 2px;
+  justify-items: end;
+  min-width: 0;
+  text-align: right;
+}
+
+.topbar-user-name {
+  max-width: 10rem;
+  overflow: hidden;
+  color: var(--color-text);
+  font-size: 0.92rem;
+  font-weight: 800;
+  line-height: 1.15;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.topbar-user-balance {
+  color: var(--color-primary-deep);
+  font-size: 0.85rem;
+  font-weight: 900;
+  line-height: 1.1;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
 
 .topbar-wordmark {
   position: absolute;
+  top: 0;
+  bottom: 0;
   left: 50%;
-  align-items: flex-start;
+  display: flex;
+  align-items: center;
   justify-content: center;
   min-width: 48px;
+  border-radius: 12px;
   transform: translateX(-50%);
-  pointer-events: none;
+}
+
+.topbar-wordmark:hover .topbar-wordmark-text {
+  text-shadow: 0 6px 16px rgba(53, 133, 142, 0.28);
 }
 
 .topbar-wordmark .topbar-wordmark-text {
@@ -2693,6 +2737,10 @@ select {
     width: 38px;
     height: 38px;
     font-size: 0.78rem;
+  }
+
+  .topbar-user-name {
+    max-width: 5.5rem;
   }
 
   .topbar-wordmark .topbar-wordmark-text {

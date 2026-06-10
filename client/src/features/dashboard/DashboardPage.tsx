@@ -36,6 +36,7 @@ export function DashboardPage() {
       .then((response) => {
         if (active) {
           setSummary(response);
+          auth.updateBalance(response.balance);
           setError("");
         }
       })
