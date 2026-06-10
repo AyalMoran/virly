@@ -71,6 +71,53 @@ export type TransactionsResponse = {
   pagination: Pagination;
 };
 
+export type PublicUserProfile = {
+  id: string;
+  email: string;
+  displayName: string;
+  isVerified: boolean;
+  memberSince?: string;
+};
+
+export type RelationshipStatus =
+  | "self"
+  | "no_history"
+  | "has_history"
+  | "verified_recipient";
+
+export type UserRelationshipSummary = {
+  viewerUserId: string;
+  viewedUserId: string;
+  totalSentToUser: number;
+  totalReceivedFromUser: number;
+  netAmount: number;
+  transactionCount: number;
+  lastTransactionAt: string | null;
+  isVerifiedRecipient: boolean;
+  canTransferToUser: boolean;
+  relationshipStatus: RelationshipStatus;
+};
+
+export type RelationshipTransaction = {
+  id: string;
+  amount: number;
+  direction: "sent" | "received";
+  status: "completed";
+  createdAt?: string;
+  description?: string;
+};
+
+export type UserProfileResponse = {
+  user: PublicUserProfile;
+  relationship: UserRelationshipSummary;
+  recentTransactions: RelationshipTransaction[];
+};
+
+export type UserRelationshipTransactionsResponse = {
+  transactions: RelationshipTransaction[];
+  pagination: Pagination;
+};
+
 export type AuthSuccessResponse = {
   user: User;
   csrfToken?: string;

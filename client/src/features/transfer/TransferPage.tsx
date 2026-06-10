@@ -1,5 +1,5 @@
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import {
   Button,
   Card,
@@ -174,7 +174,14 @@ export function TransferPage() {
               <dl className="review-list">
                 <div>
                   <dt>Recipient</dt>
-                  <dd>{recipientEmail.trim().toLowerCase()}</dd>
+                  <dd>
+                    <Link
+                      className="counterparty-link"
+                      to={`/users/${encodeURIComponent(recipientEmail.trim().toLowerCase())}`}
+                    >
+                      {recipientEmail.trim().toLowerCase()}
+                    </Link>
+                  </dd>
                 </div>
                 <div>
                   <dt>Amount</dt>

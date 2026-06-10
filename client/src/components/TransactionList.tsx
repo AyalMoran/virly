@@ -43,9 +43,14 @@ export function TransactionList({
             key={transaction.id}
             role={isSelectable ? "button" : undefined}
             tabIndex={isSelectable ? 0 : undefined}
-            onClick={() => onTransactionSelect?.(transaction)}
+            onClick={(event) => {
+              if ((event.target as HTMLElement).closest("a")) {
+                return;
+              }
+              onTransactionSelect?.(transaction);
+            }}
             onKeyDown={(event) => {
-              if (!isSelectable) {
+              if (!isSelectable || (event.target as HTMLElement).closest("a")) {
                 return;
               }
 
@@ -62,7 +67,15 @@ export function TransactionList({
               {isCredit ? <ArrowDownLeft /> : <ArrowUpRight />}
             </div>
             <div className="transaction-main">
-              <strong>{transaction.counterpartyEmail}</strong>
+              <strong>
+                <Link
+                  className="counterparty-link"
+                  to={`/users/${encodeURIComponent(transaction.counterpartyEmail)}`}
+                  aria-label={`View ${transaction.counterpartyEmail}'s profile`}
+                >
+                  {transaction.counterpartyEmail}
+                </Link>
+              </strong>
               <span>{transaction.reason || formatRelativeDate(transaction.date)}</span>
             </div>
             <div className="transaction-meta">

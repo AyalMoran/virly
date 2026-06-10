@@ -18,12 +18,14 @@ import type {
   TransactionsResponse,
   TransferRequest,
   TransferResponse,
+  UserProfileResponse,
+  UserRelationshipTransactionsResponse,
   VideoSession,
   VideoSessionStatus,
   VideoSessionType
 } from "./types";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
+const API_BASE_URL = import.meta.env?.VITE_API_BASE_URL ?? "http://localhost:3000";
 
 let cachedCsrfToken: string | null = null;
 
@@ -88,6 +90,20 @@ function buildHeaders(options: RequestInit = {}) {
   return headers;
 }
 
+function safeParseJsonBody(text: string, status: number): Record<string, unknown> {
+  if (!text) {
+    return {};
+  }
+
+  try {
+    return JSON.parse(text) as Record<string, unknown>;
+  } catch {
+    // Non-JSON payload (e.g. an HTML error page from a proxy or an outdated
+    // server build): surface it as a normal ApiError instead of a SyntaxError.
+    return { message: `Unexpected server response (HTTP ${status}).` };
+  }
+}
+
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const headers = buildHeaders(options);
 
@@ -98,7 +114,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   });
 
   const text = await response.text();
-  const body = text ? JSON.parse(text) : {};
+  const body = safeParseJsonBody(text, response.status);
 
   if (typeof body.csrfToken === "string") {
     cachedCsrfToken = body.csrfToken;
@@ -144,7 +160,7 @@ async function requestEventStream(
 
   if (!response.ok) {
     const text = await response.text();
-    const body = text ? JSON.parse(text) : {};
+    const body = safeParseJsonBody(text, response.status);
 
     if (response.status === 401) {
       cachedCsrfToken = null;
@@ -290,6 +306,16 @@ export const api = {
     }
 
     return request<TransactionsResponse>(`/api/transactions?${search.toString()}`);
+  },
+  userProfile(idOrEmail: string) {
+    return request<UserProfileResponse>(
+      `/api/users/${encodeURIComponent(idOrEmail)}/profile`
+    );
+  },
+  userRelationshipTransactions(idOrEmail: string, page = 1, limit = 10) {
+    return request<UserRelationshipTransactionsResponse>(
+      `/api/users/${encodeURIComponent(idOrEmail)}/transactions?page=${page}&limit=${limit}`
+    );
   },
   transfer(payload: TransferRequest) {
     const reason = payload.reason?.trim();

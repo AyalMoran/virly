@@ -8,6 +8,7 @@ import aiRoutes from "./routes/ai.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import transactionRoutes from "./routes/transaction.routes.js";
 import userRoutes from "./routes/user.routes.js";
+import userProfileRoutes from "./routes/userProfile.routes.js";
 import videoSessionRoutes, {
   adminVideoSessionRoutes
 } from "./routes/videoSession.routes.js";
@@ -36,6 +37,7 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/auth", authRoutes);
 app.use("/api/accounts", userRoutes);
+app.use("/api/users", userProfileRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/ai", aiRoutes);
 app.use("/api/video-sessions", videoSessionRoutes);

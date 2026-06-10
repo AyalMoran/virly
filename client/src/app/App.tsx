@@ -24,6 +24,11 @@ const VideoSessionPage = lazy(() =>
     default: module.VideoSessionPage
   }))
 );
+const UserProfilePage = lazy(() =>
+  import("../features/users/UserProfilePage").then((module) => ({
+    default: module.UserProfilePage
+  }))
+);
 
 function RouteFallback() {
   return (
@@ -69,6 +74,14 @@ export function App() {
             <Route path="/dashboard" element={<DashboardPage />} />
             <Route path="/transfer" element={<TransferPage />} />
             <Route path="/transactions" element={<TransactionsPage />} />
+            <Route
+              path="/users/:userId"
+              element={
+                <Suspense fallback={<RouteFallback />}>
+                  <UserProfilePage />
+                </Suspense>
+              }
+            />
             <Route
               path="/video"
               element={

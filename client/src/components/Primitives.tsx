@@ -1,8 +1,8 @@
-import type {
-  ButtonHTMLAttributes,
-  ChangeEventHandler,
-  InputHTMLAttributes,
-  ReactNode
+import React, {
+  type ButtonHTMLAttributes,
+  type ChangeEventHandler,
+  type InputHTMLAttributes,
+  type ReactNode
 } from "react";
 import { Inbox } from "lucide-react";
 

@@ -42,5 +42,5 @@ export function createInitialAvatar(name: string) {
 }
 
 export function getUserAvatarUrl(name: string) {
-  return import.meta.env.VITE_USER_AVATAR_URL || createInitialAvatar(name);
+  return import.meta.env?.VITE_USER_AVATAR_URL || createInitialAvatar(name);
 }

@@ -1,3 +1,5 @@
+import { UserRound } from "lucide-react";
+import { Link } from "react-router-dom";
 import type { QuickContact } from "../lib/contacts";
 
 export function QuickContacts({
@@ -14,17 +16,26 @@ export function QuickContacts({
   return (
     <div className="quick-contact-list">
       {contacts.map((contact) => (
-        <button
-          className="quick-contact"
-          key={contact.email}
-          type="button"
-          onClick={() => onSelectContact(contact.email)}
-        >
-          <span className="quick-contact-avatar" aria-hidden="true">
-            {contact.avatar}
-          </span>
-          <span className="quick-contact-email">{contact.email}</span>
-        </button>
+        <div className="quick-contact-row" key={contact.email}>
+          <button
+            className="quick-contact"
+            type="button"
+            onClick={() => onSelectContact(contact.email)}
+          >
+            <span className="quick-contact-avatar" aria-hidden="true">
+              {contact.avatar}
+            </span>
+            <span className="quick-contact-email">{contact.email}</span>
+          </button>
+          <Link
+            className="quick-contact-profile-link"
+            to={`/users/${encodeURIComponent(contact.email)}`}
+            aria-label={`View ${contact.email}'s profile`}
+            title="View profile"
+          >
+            <UserRound aria-hidden="true" />
+          </Link>
+        </div>
       ))}
     </div>
   );

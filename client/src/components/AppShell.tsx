@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { motion } from "framer-motion";
 import { Link, NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
@@ -17,12 +18,30 @@ import { AnimatedText } from "./ui/animated-text";
 import { FloatingChatWidget } from "./ui/floating-chat-widget-shadcnui";
 import { UserProfileSidebar } from "./ui/menu";
 
-const baseNavItems = [
+const SIDEBAR_COLLAPSED_KEY = "virly-sidebar-collapsed";
+
+function readSidebarCollapsed() {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+type ShellNavItem = {
+  to: string;
+  label: string;
+  icon: JSX.Element;
+  isSeparator?: boolean;
+  pinToBottom?: boolean;
+};
+
+const baseNavItems: ShellNavItem[] = [
   { to: "/dashboard", label: "Dashboard", icon: <LayoutDashboard /> },
   { to: "/transfer", label: "Transfer", icon: <Send /> },
   { to: "/transactions", label: "Transactions", icon: <CreditCard /> },
   { to: "/video", label: "Video", icon: <Video /> },
-  { to: "/settings", label: "Settings", icon: <Settings />, isSeparator: true }
+  { to: "/settings", label: "Settings", icon: <Settings />, pinToBottom: true }
 ];
 
 function canUseAgentVideo(role?: string) {
@@ -40,7 +59,20 @@ export function AppShell() {
   const navigate = useNavigate();
   const displayName = getDisplayName(auth.user?.email);
   const enteredFromAuth = hasAuthTransition(location.state);
-  const navItems = canUseAgentVideo(auth.user?.role)
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(readSidebarCollapsed);
+
+  function toggleSidebar() {
+    setIsSidebarCollapsed((collapsed) => {
+      const next = !collapsed;
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        // Preference simply won't persist when storage is unavailable.
+      }
+      return next;
+    });
+  }
+  const navItems: ShellNavItem[] = canUseAgentVideo(auth.user?.role)
     ? [
         ...baseNavItems,
         {
@@ -59,7 +91,7 @@ export function AppShell() {
 
   return (
     <motion.div
-      className="app-shell"
+      className={isSidebarCollapsed ? "app-shell sidebar-collapsed" : "app-shell"}
       initial={enteredFromAuth ? { opacity: 0, scale: 0.985 } : false}
       animate={{ opacity: 1, scale: 1 }}
       transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
@@ -81,13 +113,16 @@ export function AppShell() {
             href: item.to,
             label: item.label,
             icon: item.icon,
-            isSeparator: item.isSeparator
+            isSeparator: item.isSeparator,
+            pinToBottom: item.pinToBottom
           }))}
           logoutItem={{
             label: "Log out",
             icon: <LogOut />,
             onClick: handleLogout
           }}
+          collapsed={isSidebarCollapsed}
+          onToggleCollapse={toggleSidebar}
         />
       </motion.aside>
 
