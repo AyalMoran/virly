@@ -675,6 +675,34 @@ export type ConversationMode =
   | "transfer_confirmed"
   | "transfer_denied";
 
+/**
+ * Persistent, cross-turn transfer-intent frame. Accumulates the recipient and
+ * amount slots across a transfer dialogue; unset slots are inherited from the
+ * prior turn. Rides inside the already-persisted `counterpartyMemory`
+ * (additive — absent field deserializes to an idle frame, no backfill).
+ */
+export type TransferIntentFrameRecipient = {
+  email?: string;
+  displayName?: string;
+  query?: string;
+  resolvedAtTurn?: number;
+};
+
+export type TransferIntentFrameAmount = {
+  expr?: AmountExpr;
+  value?: number;
+  currency: CurrencyCode;
+  resolvedAtTurn?: number;
+};
+
+export type TransferIntentFrame = {
+  status: "idle" | "building" | "pending_confirmation";
+  recipient?: TransferIntentFrameRecipient;
+  amount?: TransferIntentFrameAmount;
+  reason?: string;
+  lastUpdatedTurn: number;
+};
+
 export type CounterpartyMemory = {
   turn: number;
   lastCounterparty?: CounterpartyRef;
@@ -683,6 +711,7 @@ export type CounterpartyMemory = {
   answerFrames?: ConversationAnswerFrame[];
   pendingConfirmation?: PendingConfirmationMemory | null;
   clarification?: ClarificationRequest | null;
+  transferIntentFrame?: TransferIntentFrame;
   mode?: ConversationMode;
 };
 
