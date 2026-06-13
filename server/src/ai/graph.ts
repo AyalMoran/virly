@@ -61,6 +61,8 @@ import type {
   RuntimeToolResult,
   TransferDraft,
   TransferIntentFrame,
+  TurnDelta,
+  TurnDeltaAmountRef,
   CurrencyCode,
   TransferModificationService,
   TransferPreparationService,
@@ -91,7 +93,10 @@ import {
   lintPersonalityUsage,
   resolveResponseSituation
 } from "./responseStyle.js";
-import { resolveContextualAmount } from "./amountResolution.js";
+import {
+  resolveContextualAmount,
+  resolveTurnDeltaAmount
+} from "./amountResolution.js";
 import { config } from "../config.js";
 import {
   modifyAiPendingTransfer,
@@ -169,6 +174,7 @@ function getProgressPhaseForNode(
 
   if (
     nodeName === "extractTransferDraft" ||
+    nodeName === "resolveTurnContext" ||
     nodeName === "resolveCounterpartyReference" ||
     nodeName === "resolveContextualAmounts"
   ) {
@@ -940,6 +946,253 @@ function buildTransferDraftExtractor(llmProvider?: AssistantLlmProvider) {
         }
       ]
     );
+  };
+}
+
+/**
+ * Function type: Anti-invention helper function.
+ *
+ * @brief True only when the email literally appears in the user's message.
+ *
+ * Recipient emails from the model are accepted only when the user actually typed
+ * them — the model never introduces an authoritative recipient address.
+ */
+function emailAppearsInMessage(message: string, email: string): boolean {
+  return new RegExp(escapeRegExp(email), "i").test(message);
+}
+
+/**
+ * Function type: Source-counterparty resolver helper.
+ *
+ * @brief Resolves the amount's source counterparty email for an AmountExpr,
+ * accepting an email only when it is in the message or a known counterparty.
+ */
+function resolveSourceCounterpartyEmail(
+  memory: CounterpartyMemory,
+  source: TurnDeltaAmountRef["sourceCounterparty"],
+  message: string
+): string | undefined {
+  if (!source) {
+    return undefined;
+  }
+
+  if (source.email) {
+    const email = source.email.toLowerCase();
+    if (emailAppearsInMessage(message, source.email)) {
+      return email;
+    }
+    const known = memory.mentionedCounterparties.find(
+      (counterparty) => counterparty.email.toLowerCase() === email
+    );
+    if (known) {
+      return known.email.toLowerCase();
+    }
+  }
+
+  if (source.query) {
+    const query = source.query.trim().toLowerCase();
+    const known = memory.mentionedCounterparties.find(
+      (counterparty) =>
+        counterparty.email.toLowerCase() === query ||
+        counterparty.displayName?.toLowerCase() === query ||
+        counterparty.aliases?.includes(query)
+    );
+    if (known) {
+      return known.email.toLowerCase();
+    }
+  }
+
+  return undefined;
+}
+
+/**
+ * Function type: Frame reducer function.
+ *
+ * @brief Folds resolved recipient/amount into the transfer-intent frame.
+ */
+function applyTurnDeltaToFrame(
+  frame: TransferIntentFrame,
+  resolved: {
+    recipientEmail?: string | null;
+    amountValue?: number | null;
+    currency: CurrencyCode;
+    reason?: string | null;
+    turn: number;
+  }
+): TransferIntentFrame {
+  return {
+    status: frame.status === "pending_confirmation" ? "pending_confirmation" : "building",
+    recipient: resolved.recipientEmail
+      ? { email: resolved.recipientEmail, resolvedAtTurn: resolved.turn }
+      : frame.recipient,
+    amount:
+      resolved.amountValue != null
+        ? {
+            value: resolved.amountValue,
+            currency: resolved.currency,
+            resolvedAtTurn: resolved.turn
+          }
+        : frame.amount,
+    reason: resolved.reason ?? frame.reason,
+    lastUpdatedTurn: resolved.turn
+  };
+}
+
+/**
+ * Function type: Turn-delta application function.
+ *
+ * @brief Applies a validated TurnDelta to the draft/frame deterministically.
+ *
+ * The LLM decides what the user MEANS (references/expressions); this code
+ * decides what is TRUE: recipient emails are accepted only if the user typed
+ * them, and every money value is produced by deterministic resolution +
+ * `evaluateAmountExpr`. An email inside an amount clause never becomes the
+ * recipient (F2).
+ */
+function applyTurnDeltaToState(
+  state: AssistantGraphState,
+  delta: TurnDelta
+): Partial<AssistantGraphState> {
+  const message = getUserMessage(state);
+  const memory = state.counterpartyMemory;
+  const frame = memory.transferIntentFrame ?? createEmptyTransferIntentFrame();
+  const draft: TransferDraft = { ...(state.transferDraft ?? {}) };
+  let resolvedCounterparty = state.resolvedCounterparty;
+
+  const recipientRef = delta.recipientRef;
+  if (recipientRef) {
+    if (
+      recipientRef.kind === "explicit_email" &&
+      recipientRef.email &&
+      emailAppearsInMessage(message, recipientRef.email)
+    ) {
+      draft.recipientEmail = recipientRef.email.toLowerCase();
+      draft.recipientReference = null;
+    } else if (
+      recipientRef.kind === "current_pending_recipient" &&
+      memory.pendingConfirmation?.status === "pending"
+    ) {
+      draft.recipientEmail = memory.pendingConfirmation.recipientEmail.toLowerCase();
+      draft.recipientReference = null;
+    } else if (recipientRef.kind === "last_counterparty" && memory.lastCounterparty) {
+      draft.recipientEmail = memory.lastCounterparty.email.toLowerCase();
+      draft.recipientReference = null;
+      resolvedCounterparty = memory.lastCounterparty;
+    } else if (recipientRef.query) {
+      draft.recipientReference = recipientRef.query;
+      draft.recipientEmail = null;
+      resolvedCounterparty = undefined;
+    }
+  } else if (frame.recipient?.email) {
+    // No recipient change: keep the established recipient and discard any
+    // recipient the deterministic extractor grabbed from an amount clause (F2).
+    draft.recipientEmail = frame.recipient.email.toLowerCase();
+    draft.recipientReference = null;
+  }
+
+  const amountRef = delta.amountRef;
+  if (amountRef?.kind === "reference" && amountRef.expr) {
+    const sourceEmail = resolveSourceCounterpartyEmail(
+      memory,
+      amountRef.sourceCounterparty,
+      message
+    );
+    const resolvedAmount = resolveTurnDeltaAmount(memory, amountRef.expr, sourceEmail);
+    if (resolvedAmount != null) {
+      draft.amount = resolvedAmount;
+      draft.currency = "ILS";
+      draft.currencyMentioned = draft.currencyMentioned ?? false;
+      draft.currencySupported = true;
+      draft.amountText = draft.amountText ?? `${resolvedAmount.toFixed(2)} ILS`;
+      draft.amountReferenceText = null;
+    } else {
+      // Unresolved reference: clear it so the slot-aware clarification asks for
+      // the amount rather than re-parsing the raw message text.
+      draft.amount = null;
+      draft.amountReferenceText = null;
+    }
+  }
+
+  if (delta.reason) {
+    draft.reason = delta.reason;
+  }
+
+  const missingFields: TransferDraft["missingFields"] = [];
+  if (!draft.recipientEmail && !draft.recipientReference) {
+    missingFields.push("recipient");
+  }
+  if (!draft.amount && !draft.amountReferenceText) {
+    missingFields.push("amount");
+  }
+  if (draft.currencyMentioned && !draft.currencySupported) {
+    missingFields.push("currency");
+  }
+  draft.missingFields = missingFields;
+
+  const nextFrame = applyTurnDeltaToFrame(frame, {
+    recipientEmail: draft.recipientEmail,
+    amountValue: typeof draft.amount === "number" ? draft.amount : null,
+    currency: "ILS",
+    reason: draft.reason,
+    turn: state.currentTurn
+  });
+
+  return {
+    transferDraft: draft,
+    ...(resolvedCounterparty ? { resolvedCounterparty } : {}),
+    counterpartyMemory: { ...memory, transferIntentFrame: nextFrame }
+  };
+}
+
+/**
+ * Function type: LangGraph node factory function.
+ *
+ * @brief Creates the LLM turn-context resolver node.
+ *
+ * Resolves multi-turn coreference/intent into a TurnDelta and applies it
+ * deterministically. When the provider lacks `resolveTurnContext` or it fails,
+ * the node is a no-op and the deterministic pipeline (buildAiUserRequest +
+ * extractTransferDraft) stands as the fallback.
+ */
+function buildTurnContextResolver(llmProvider?: AssistantLlmProvider) {
+  return async function resolveTurnContext(
+    state: AssistantGraphState
+  ): Promise<Partial<AssistantGraphState>> {
+    if (
+      state.refusalReason ||
+      state.clarificationMessage ||
+      (state.detectedIntent !== "transfer_prepare" &&
+        state.detectedIntent !== "transfer_modify_pending")
+    ) {
+      return {};
+    }
+
+    if (!llmProvider?.resolveTurnContext) {
+      return {};
+    }
+
+    try {
+      const delta = await llmProvider.resolveTurnContext({
+        userMessage: getUserMessage(state),
+        messages: toProviderMessages(state.messages),
+        counterpartyMemory: state.counterpartyMemory
+      });
+
+      return applyTurnDeltaToState(state, delta);
+    } catch (error) {
+      return withDebugEvents(state, {}, [
+        {
+          type: "fallback",
+          nodeName: "resolveTurnContext",
+          failureClass: "deterministic_fallback_used",
+          fallbackUsed: true,
+          fallbackReason: "turn_context_resolver_failed",
+          details: {
+            error: sanitizeErrorReason(error)
+          }
+        }
+      ]);
+    }
   };
 }
 
@@ -3471,6 +3724,14 @@ function buildRequestParsingSubgraph(options: GraphOptions) {
         options.onProgress
       )
     )
+    .addNode(
+      "resolveTurnContext",
+      withNodeTrace(
+        "resolveTurnContext",
+        buildTurnContextResolver(options.llmProvider),
+        options.onProgress
+      )
+    )
     .addEdge(START, "normalizeUserMessage")
     .addEdge("normalizeUserMessage", "classifyIntent")
     .addEdge("classifyIntent", "extractRequestSlots")
@@ -3478,7 +3739,8 @@ function buildRequestParsingSubgraph(options: GraphOptions) {
       transfer_related: "extractTransferDraft",
       non_transfer: END
     })
-    .addEdge("extractTransferDraft", END)
+    .addEdge("extractTransferDraft", "resolveTurnContext")
+    .addEdge("resolveTurnContext", END)
     .compile();
 }
 

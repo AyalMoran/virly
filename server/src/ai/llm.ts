@@ -15,8 +15,10 @@ import {
     type CounterpartyReferenceResolution,
     type ExtractTransferDraftInput,
     type ResolveCounterpartyReferenceInput,
+    type ResolveTurnContextInput,
     type StoredChatMessage,
-    type TransferDraftExtraction
+    type TransferDraftExtraction,
+    type TurnDelta
 } from "./state.js";
 
 const intentValues = assistantIntentValues;
@@ -117,10 +119,53 @@ const referenceResolutionSchema = z.object({
     query : z.string().min(1).max(120).nullable()
 });
 
+const amountExprSchema = z.object({
+    base : z.enum([
+        "literal", "pending_amount", "discussed_amount",
+        "last_received_from", "last_sent_to", "answer_total"
+    ]),
+    op : z.enum([ "mul", "div", "add", "sub" ]).nullable(),
+    operand : z.number().nullable()
+});
+
+const turnDeltaSchema = z.object({
+    action : z.enum([
+        "new_transfer", "change_recipient", "modify_amount", "set_reason",
+        "read_only", "confirm", "cancel", "other"
+    ]),
+    recipientRef : z
+        .object({
+            kind : z.enum([
+                "explicit_email", "pronoun", "name", "ordinal",
+                "current_pending_recipient", "last_counterparty"
+            ]),
+            email : z.string().nullable(),
+            query : z.string().nullable(),
+            ordinal : z.number().int().nullable()
+        })
+        .nullable(),
+    amountRef : z
+        .object({
+            kind : z.enum([ "literal", "reference" ]),
+            expr : amountExprSchema.nullable(),
+            value : z.number().nullable(),
+            sourceCounterparty : z
+                .object({
+                    email : z.string().nullable(),
+                    query : z.string().nullable()
+                })
+                .nullable()
+        })
+        .nullable(),
+    reason : z.string().nullable(),
+    confidence : z.enum([ "low", "medium", "high" ])
+});
+
 type ClassificationOutput = z.infer<typeof classificationSchema>;
 type ResponseOutput = z.infer<typeof responseSchema>;
 type TransferDraftRawOutput = z.infer<typeof transferDraftRawSchema>;
 type ReferenceResolutionOutput = z.infer<typeof referenceResolutionSchema>;
+type TurnDeltaOutput = z.infer<typeof turnDeltaSchema>;
 
 function rawValueType(raw: unknown)
 {
@@ -204,6 +249,48 @@ function normalizeReferenceResolution(result: ReferenceResolutionOutput):
     }
 
     return {kind : "none", confidence : result.confidence};
+}
+
+function normalizeTurnDelta(result: TurnDeltaOutput): TurnDelta
+{
+    const recipientRef = result.recipientRef
+        ? {
+              kind : result.recipientRef.kind,
+              email : result.recipientRef.email ?? undefined,
+              query : result.recipientRef.query ?? undefined,
+              ordinal : result.recipientRef.ordinal ?? undefined
+          }
+        : undefined;
+    const amountExpr = result.amountRef?.expr
+        ? {
+              base : result.amountRef.expr.base,
+              op : result.amountRef.expr.op ?? undefined,
+              operand : result.amountRef.expr.operand ?? undefined
+          }
+        : undefined;
+    const amountRef = result.amountRef
+        ? {
+              kind : result.amountRef.kind,
+              expr : amountExpr,
+              value : result.amountRef.value ?? undefined,
+              sourceCounterparty : result.amountRef.sourceCounterparty
+                  ? {
+                        email :
+                            result.amountRef.sourceCounterparty.email ?? undefined,
+                        query :
+                            result.amountRef.sourceCounterparty.query ?? undefined
+                    }
+                  : undefined
+          }
+        : undefined;
+
+    return {
+        action : result.action,
+        recipientRef,
+        amountRef,
+        reason : result.reason ?? undefined,
+        confidence : result.confidence
+    };
 }
 
 function createChatModel(temperature: number)
@@ -700,6 +787,72 @@ export function buildReferenceResolverPrompt(input: ResolveCounterpartyReference
     ].join("\n");
 }
 
+export function buildTurnContextPrompt(input: ResolveTurnContextInput)
+{
+    const memory = input.counterpartyMemory;
+    const frame = memory.transferIntentFrame;
+    const pending = memory.pendingConfirmation;
+    const knownCounterparties = memory.mentionedCounterparties.map(
+        (counterparty, index) => ({
+            ordinal : index + 1,
+            maskedLabel : counterparty.maskedLabel,
+            isLastCounterparty :
+                memory.lastCounterparty?.email === counterparty.email
+        }));
+    const recentMessages =
+        sanitizeMessagesForLlm(input.messages)
+            .slice(-8)
+            .map((message) =>
+                     ({role : message.role, content : message.content}));
+    const frameContext = {
+        status : frame?.status ?? "idle",
+        hasRecipient : Boolean(frame?.recipient?.email),
+        recipientMasked : frame?.recipient?.email
+                              ? maskEmail(frame.recipient.email)
+                              : null,
+        hasAmount : typeof frame?.amount?.value === "number"
+    };
+    const pendingContext = pending?.status === "pending"
+                               ? {
+                                     recipientMasked :
+                                         maskEmail(pending.recipientEmail),
+                                     hasAmount : pending.amount > 0
+                                 }
+                               : null;
+
+    return [
+        assistantSystemPolicy,
+        "You resolve what the user MEANS in a multi-turn money-transfer dialogue.",
+        "You emit references and expressions ONLY. You never output an authoritative recipient email or money amount; deterministic code resolves and validates those.",
+        "The user may write in Hebrew, English, or mixed Hebrew/English.",
+        "",
+        "Output schema fields (every field required; use null where not applicable):",
+        "- action: one of new_transfer, change_recipient, modify_amount, set_reason, read_only, confirm, cancel, other.",
+        "- recipientRef: who the transfer is TO. Set it only when the user names or refers to a recipient. Use null to keep the current recipient.",
+        "  kind explicit_email with email when the user typed an email; pronoun or name with query for references; current_pending_recipient or last_counterparty for context; ordinal with ordinal for 'the second one'.",
+        "- amountRef: the amount. kind literal for a number the user typed; kind reference with expr for contextual amounts.",
+        "  expr.base: pending_amount (this/it/the active card), discussed_amount (the amount we discussed), last_received_from or last_sent_to (a specific counterparty), answer_total, or literal.",
+        "  expr.op and expr.operand: arithmetic, for example double -> op mul operand 2, half -> op div operand 2, times 3 -> op mul operand 3.",
+        "  amountRef.sourceCounterparty: the counterparty the amount is drawn from when it is DIFFERENT from the recipient.",
+        "- reason: a transfer reason if explicitly stated, otherwise null.",
+        "- confidence: low, medium, or high.",
+        "",
+        "CRITICAL RULE (recipient vs amount counterparty):",
+        "An email or name inside a phrase that describes an AMOUNT (for example 'the same amount sga@x.com sent me', or 'אותו סכום ש... שלח לי') is the AMOUNT'S counterparty, NOT the recipient.",
+        "In that case set recipientRef to null (keep the current recipient) and put that counterparty in amountRef.sourceCounterparty. Never make it the recipient.",
+        "Only set recipientRef when the user explicitly redirects the transfer to someone else.",
+        "",
+        "Do not invent recipients, emails, names, or amounts. Use only what the user said and the context below.",
+        "Return only the structured output.",
+        "",
+        `Conversation mode: ${memory.mode ?? "idle"}`,
+        `Transfer-intent frame: ${JSON.stringify(frameContext)}`,
+        `Active pending confirmation: ${JSON.stringify(pendingContext)}`,
+        `Known counterparties: ${JSON.stringify(knownCounterparties)}`,
+        `Recent messages: ${JSON.stringify(recentMessages)}`
+    ].join("\n");
+}
+
 export function createConfiguredAssistantLlmProvider():
     AssistantLlmProvider | undefined
 {
@@ -719,6 +872,9 @@ export function createConfiguredAssistantLlmProvider():
     const referenceResolver =
         createChatModel(0).withStructuredOutput<ReferenceResolutionOutput>(
             referenceResolutionSchema, {method : "jsonSchema"});
+    const turnContextResolver =
+        createChatModel(0).withStructuredOutput<TurnDeltaOutput>(
+            turnDeltaSchema, {method : "jsonSchema"});
 
     return {
         async classifyIntent(input: ClassifyAssistantIntentInput) {
@@ -756,6 +912,14 @@ export function createConfiguredAssistantLlmProvider():
             ]);
 
             return result.message.trim();
+        },
+        async resolveTurnContext(input: ResolveTurnContextInput) {
+            const result = await turnContextResolver.invoke([
+                [ "system", buildTurnContextPrompt(input) ],
+                [ "human", input.userMessage ]
+            ]);
+
+            return normalizeTurnDelta(result);
         }
     };
 }

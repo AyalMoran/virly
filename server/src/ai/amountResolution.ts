@@ -126,6 +126,76 @@ function resolveExprBaseValue(
   return undefined;
 }
 
+/**
+ * Resolves the most recent positive total entity for a direction, optionally
+ * scoped to a counterparty email. Used by the turn-context resolver to value
+ * "last_received_from"/"last_sent_to"/"answer_total" bases deterministically.
+ */
+function scopedTotalAmount(
+  memory: CounterpartyMemory,
+  direction: "received" | "sent" | "any",
+  counterpartyEmail?: string
+): number | undefined {
+  const scopedEmail = counterpartyEmail
+    ? normalizeCounterpartyEmail(counterpartyEmail)
+    : undefined;
+  const totals = (memory.entities ?? [])
+    .filter(
+      (entity) =>
+        entity.type === "total" &&
+        typeof entity.amount === "number" &&
+        Number.isFinite(entity.amount) &&
+        entity.amount > 0 &&
+        (direction === "any" || entity.direction === direction) &&
+        (!scopedEmail ||
+          (entity.counterpartyEmail &&
+            normalizeCounterpartyEmail(entity.counterpartyEmail) === scopedEmail))
+    )
+    .sort((left, right) => right.turnLastReferenced - left.turnLastReferenced);
+
+  return totals[0]?.amount;
+}
+
+/**
+ * Resolves the base value of a TurnDelta amount expression purely from memory
+ * (no DB), then applies `evaluateAmountExpr`. Returns null when the base cannot
+ * be valued. Every money value here is computed by deterministic code — the
+ * model only supplied the base/op/operand and an optional source counterparty.
+ */
+export function resolveTurnDeltaAmount(
+  memory: CounterpartyMemory,
+  expr: AmountExpr,
+  sourceCounterpartyEmail?: string
+): number | null {
+  let baseValue: number | undefined;
+
+  if (expr.base === "pending_amount") {
+    const pending = memory.pendingConfirmation;
+    baseValue =
+      pending?.status === "pending" && pending.amount > 0
+        ? pending.amount
+        : undefined;
+  } else if (expr.base === "discussed_amount") {
+    baseValue = getSalientDiscussedAmount(memory);
+  } else if (expr.base === "answer_total") {
+    baseValue = scopedTotalAmount(memory, "any", sourceCounterpartyEmail);
+  } else if (expr.base === "last_received_from") {
+    baseValue = scopedTotalAmount(memory, "received", sourceCounterpartyEmail);
+  } else if (expr.base === "last_sent_to") {
+    baseValue = scopedTotalAmount(memory, "sent", sourceCounterpartyEmail);
+  }
+
+  if (baseValue == null) {
+    return null;
+  }
+
+  try {
+    return evaluateAmountExpr(baseValue, expr);
+  } catch {
+    return null;
+  }
+}
+
 function resolveAmountExpression(
   input: AmountResolutionInput,
   expr: AmountExpr
