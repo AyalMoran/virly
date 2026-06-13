@@ -295,6 +295,73 @@ test('"the amount we discussed" resolves to the anchor amount', async () => {
   assert.equal(result.confirmation?.amount, ANCHOR_AMOUNT);
 });
 
+test("an unresolvable amount reference self-corrects in one repair pass", async () => {
+  const memory: CounterpartyMemory = {
+    ...createEmptyCounterpartyMemory(),
+    entities: [
+      {
+        id: "total:received:sga@thunder.com",
+        type: "total",
+        turnIntroduced: 1,
+        turnLastReferenced: 1,
+        source: "tool_result",
+        confidence: "high",
+        counterpartyEmail: SGA_EMAIL,
+        direction: "received",
+        amount: ANCHOR_AMOUNT,
+        currency: "ILS",
+        aliases: []
+      }
+    ]
+  };
+
+  let resolveCalls = 0;
+  const repairingProvider: AssistantLlmProvider = {
+    async classifyIntent() {
+      return { intent: "transfer_prepare" };
+    },
+    async extractTransferDraft() {
+      return {};
+    },
+    async resolveCounterpartyReference() {
+      return { kind: "none", confidence: "low" };
+    },
+    async composeResponse(input) {
+      return input.fallbackMessage;
+    },
+    async resolveTurnContext(input) {
+      resolveCalls += 1;
+      // First attempt names a base that cannot be valued (no pending card);
+      // the repair pass (with repairError set) names the discussed amount.
+      const base = input.repairError ? "discussed_amount" : "pending_amount";
+      return {
+        action: "new_transfer",
+        recipientRef: { kind: "explicit_email", email: DENI_EMAIL },
+        amountRef: { kind: "reference", expr: { base } },
+        confidence: "high"
+      };
+    }
+  };
+
+  const result = await runAssistantGraph(
+    {
+      userId: USER_ID,
+      conversationId: "scenario-repair",
+      message: `send the discussed amount to ${DENI_EMAIL}`
+    },
+    {
+      conversationStore: createStore(memory),
+      llmProvider: repairingProvider,
+      transferPreparationService: preparationService,
+      transferModificationService: modificationService
+    }
+  );
+
+  assert.equal(resolveCalls, 2);
+  assert.equal(result.confirmation?.recipientEmail, DENI_EMAIL);
+  assert.equal(result.confirmation?.amount, ANCHOR_AMOUNT);
+});
+
 test("a failing resolveTurnContext falls back to deterministic extraction", async () => {
   const failingProvider: AssistantLlmProvider = {
     async classifyIntent() {

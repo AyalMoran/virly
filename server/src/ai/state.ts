@@ -893,6 +893,12 @@ export type ResolveTurnContextInput = {
   userMessage: string;
   messages: StoredChatMessage[];
   counterpartyMemory: CounterpartyMemory;
+  /**
+   * Set on a one-shot repair pass when the prior delta could not be resolved
+   * deterministically (e.g. an unresolvable amount reference). The resolver is
+   * asked once more with this hint before the graph falls back to clarifying.
+   */
+  repairError?: string;
 };
 
 export type AssistantLlmProvider = {

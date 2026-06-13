@@ -1178,7 +1178,47 @@ function buildTurnContextResolver(llmProvider?: AssistantLlmProvider) {
         counterpartyMemory: state.counterpartyMemory
       });
 
-      return applyTurnDeltaToState(state, delta);
+      const applied = applyTurnDeltaToState(state, delta);
+
+      // One-shot repair: if the delta named an amount reference that could not
+      // be valued deterministically, ask the resolver once more with the error
+      // before falling through to clarification.
+      const amountReferenceFailed =
+        delta.amountRef?.kind === "reference" &&
+        Boolean(delta.amountRef.expr) &&
+        applied.transferDraft?.amount == null;
+
+      if (!amountReferenceFailed) {
+        return applied;
+      }
+
+      try {
+        const repairDelta = await llmProvider.resolveTurnContext({
+          userMessage: getUserMessage(state),
+          messages: toProviderMessages(state.messages),
+          counterpartyMemory: state.counterpartyMemory,
+          repairError: "amount_reference_unresolved"
+        });
+        const repaired = applyTurnDeltaToState(state, repairDelta);
+
+        if (repaired.transferDraft?.amount != null) {
+          return withDebugEvents(state, repaired, [
+            {
+              type: "fallback",
+              nodeName: "resolveTurnContext",
+              fallbackUsed: false,
+              fallbackReason: "turn_context_repair_applied",
+              details: {
+                repairError: "amount_reference_unresolved"
+              }
+            }
+          ]);
+        }
+      } catch {
+        // Keep the first attempt; the deterministic clarification path follows.
+      }
+
+      return applied;
     } catch (error) {
       return withDebugEvents(state, {}, [
         {
