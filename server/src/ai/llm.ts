@@ -844,6 +844,9 @@ export function buildTurnContextPrompt(input: ResolveTurnContextInput)
         "",
         "Do not invent recipients, emails, names, or amounts. Use only what the user said and the context below.",
         "Return only the structured output.",
+        input.repairError
+            ? `\nThe previous attempt could not be resolved (${input.repairError}). Re-read the message and context and choose a base/source that exists in the context above.`
+            : "",
         "",
         `Conversation mode: ${memory.mode ?? "idle"}`,
         `Transfer-intent frame: ${JSON.stringify(frameContext)}`,
