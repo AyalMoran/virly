@@ -3753,6 +3753,93 @@ test("conversation store trims saved messages to the last twenty", async () => {
   assert.equal(loaded.messages[0].content, "message-2");
 });
 
+test("two sequential turns save each user turn exactly once and alternate roles", async () => {
+  const conversationStore = createFakeConversationStore();
+  const llmProvider = createFakeLlmProvider({
+    async classifyIntent() {
+      return { intent: "unsupported" };
+    }
+  });
+  const runTurn = (message: string) =>
+    runAssistantGraph(
+      {
+        userId: "507f1f77bcf86cd799439011",
+        conversationId: "test-multi-turn-dedup",
+        message
+      },
+      { conversationStore, llmProvider }
+    );
+
+  await runTurn("first question");
+
+  // First turn: the seeded HumanMessage and the loader-appended user message
+  // must not double-count under the last-value channel (R1 duplicate trap).
+  const firstSave = conversationStore.saved.at(-1);
+  assert.ok(firstSave);
+  assert.deepEqual(
+    firstSave.messages.map((message) => message.getType()),
+    ["human", "ai"]
+  );
+  assert.equal(String(firstSave.messages[0].content), "first question");
+
+  await runTurn("second question");
+
+  const secondSave = conversationStore.saved.at(-1);
+  assert.ok(secondSave);
+  const roles = secondSave.messages.map((message) => message.getType());
+  const contents = secondSave.messages.map((message) => String(message.content));
+
+  // Each user turn is persisted exactly once across the two runs.
+  assert.equal(contents.filter((content) => content === "first question").length, 1);
+  assert.equal(contents.filter((content) => content === "second question").length, 1);
+  // History alternates human/ai with no duplicated or dropped turn.
+  assert.deepEqual(roles, ["human", "ai", "human", "ai"]);
+  assert.equal(contents[0], "first question");
+  assert.equal(contents[2], "second question");
+});
+
+test("clarification resume turn does not re-append the prior user message", async () => {
+  const executed: string[] = [];
+  const conversationStore = createFakeConversationStore();
+
+  await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-clarification-resume-dedup",
+      message: "Tell me more about which transaction"
+    },
+    { tools: createFakePhaseThreeTransactionTools(executed), conversationStore }
+  );
+
+  await runAssistantGraph(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-clarification-resume-dedup",
+      message: "the second one"
+    },
+    { tools: createFakePhaseThreeTransactionTools(executed), conversationStore }
+  );
+
+  const finalSave = conversationStore.saved.at(-1);
+  assert.ok(finalSave);
+  const roles = finalSave.messages.map((message) => message.getType());
+  const contents = finalSave.messages.map((message) => String(message.content));
+
+  // The resumed turn must persist each user message exactly once.
+  assert.equal(
+    contents.filter((content) => content === "Tell me more about which transaction").length,
+    1
+  );
+  assert.equal(contents.filter((content) => content === "the second one").length, 1);
+  // No two consecutive human turns => the prior user message was not re-appended.
+  for (let index = 1; index < roles.length; index += 1) {
+    assert.ok(
+      !(roles[index] === "human" && roles[index - 1] === "human"),
+      "consecutive human turns indicate a duplicated user message"
+    );
+  }
+});
+
 test("send money request prepares a transfer confirmation and executes no tool", async () => {
   const executed: string[] = [];
   const transferPreparations: Array<Parameters<TransferPreparationService>[0]> = [];
