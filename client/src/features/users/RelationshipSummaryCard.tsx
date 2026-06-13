@@ -1,7 +1,8 @@
 import React from "react";
 import { ArrowDownLeft, ArrowUpRight, Scale } from "lucide-react";
-import { formatCurrency, formatDate } from "../../lib/format";
+import { formatDate } from "../../lib/format";
 import type { UserRelationshipSummary } from "../../lib/types";
+import { useCurrency } from "../currency/CurrencyProvider";
 
 export function RelationshipSummaryCard({
   relationship,
@@ -10,6 +11,7 @@ export function RelationshipSummaryCard({
   relationship: UserRelationshipSummary;
   viewedName: string;
 }) {
+  const { formatAmount } = useCurrency();
   const net = relationship.netAmount;
   const netLabel =
     net > 0
@@ -30,7 +32,7 @@ export function RelationshipSummaryCard({
           </span>
           <span className="relationship-stat-label">You sent</span>
           <strong className="relationship-stat-value">
-            {formatCurrency(relationship.totalSentToUser)}
+            {formatAmount(relationship.totalSentToUser)}
           </strong>
         </div>
         <div className="relationship-stat">
@@ -39,7 +41,7 @@ export function RelationshipSummaryCard({
           </span>
           <span className="relationship-stat-label">You received</span>
           <strong className="relationship-stat-value">
-            {formatCurrency(relationship.totalReceivedFromUser)}
+            {formatAmount(relationship.totalReceivedFromUser)}
           </strong>
         </div>
         <div className="relationship-stat">
@@ -48,7 +50,7 @@ export function RelationshipSummaryCard({
           </span>
           <span className="relationship-stat-label">{netLabel}</span>
           <strong className="relationship-stat-value">
-            {formatCurrency(Math.abs(net))}
+            {formatAmount(Math.abs(net))}
           </strong>
         </div>
       </div>

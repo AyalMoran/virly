@@ -4,11 +4,20 @@ import { Transaction } from "../models/Transaction.js";
 import { User } from "../models/User.js";
 import { toTransactionDto } from "../utils/transaction-dto.js";
 
+export type TransferFxMetadata = {
+  enteredCurrency: "USD" | "EUR";
+  enteredAmount: number;
+  exchangeRateUsed: number;
+  exchangeRateFetchedAt: Date;
+};
+
 export type ExecuteTransferInput = {
   senderId: string;
   recipientEmail: string;
+  /** Always the authoritative ILS amount, regardless of the entered currency. */
   amount: number;
   reason?: string | null;
+  fx?: TransferFxMetadata | null;
 };
 
 export type ExecuteTransferResult = {
@@ -53,6 +62,15 @@ export async function executeTransferWithSession(
   await sender.save({ session });
   await recipient.save({ session });
 
+  const fxMetadata = input.fx
+    ? {
+        enteredCurrency: input.fx.enteredCurrency,
+        enteredAmount: input.fx.enteredAmount,
+        exchangeRateUsed: input.fx.exchangeRateUsed,
+        exchangeRateFetchedAt: input.fx.exchangeRateFetchedAt
+      }
+    : {};
+
   const createdTransactions = await Transaction.create(
     [
       {
@@ -61,7 +79,8 @@ export async function executeTransferWithSession(
         amount: input.amount,
         type: "debit",
         directionLabel: "Sent",
-        reason: input.reason?.trim() || undefined
+        reason: input.reason?.trim() || undefined,
+        ...fxMetadata
       },
       {
         ownerId: recipient.id,
@@ -69,7 +88,8 @@ export async function executeTransferWithSession(
         amount: input.amount,
         type: "credit",
         directionLabel: "Received",
-        reason: input.reason?.trim() || undefined
+        reason: input.reason?.trim() || undefined,
+        ...fxMetadata
       }
     ],
     { session, ordered: true }

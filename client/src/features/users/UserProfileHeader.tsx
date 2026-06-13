@@ -55,7 +55,7 @@ export function UserProfileHeader({
         <div className="user-profile-actions">
           <Button type="button" onClick={onSendMoney}>
             <Send aria-hidden="true" className="user-profile-action-icon" />
-            Send money
+            Transfer
           </Button>
         </div>
       ) : null}

@@ -9,10 +9,10 @@ import { TransactionDetailsDialog } from "../../components/TransactionDetailsDia
 import { TransactionList } from "../../components/TransactionList";
 import { api } from "../../lib/api";
 import { getQuickContacts } from "../../lib/contacts";
-import { formatCurrency } from "../../lib/format";
 import { clearAuthTransition, hasAuthTransition } from "../../lib/route-transition";
 import type { AccountSummary, Transaction } from "../../lib/types";
 import { useAuth } from "../auth/AuthProvider";
+import { useCurrency } from "../currency/CurrencyProvider";
 
 function getUsername(email?: string) {
   return email?.split("@")[0] || "user";
@@ -20,6 +20,7 @@ function getUsername(email?: string) {
 
 export function DashboardPage() {
   const auth = useAuth();
+  const { formatAmount } = useCurrency();
   const location = useLocation();
   const navigate = useNavigate();
   const [summary, setSummary] = useState<AccountSummary | null>(null);
@@ -119,7 +120,7 @@ export function DashboardPage() {
       <motion.div variants={itemAnimation}>
         <PageHeader eyebrow="" title={`Hello, ${greetingName}`}>
           <Link className="button button-primary" to="/transfer">
-            Transfer Funds
+            Transfer
           </Link>
         </PageHeader>
       </motion.div>
@@ -144,7 +145,7 @@ export function DashboardPage() {
               <div className="figma-balance-top">
                 <div>
                   <p>Available Balance</p>
-                  <strong>{formatCurrency(summary?.balance ?? 0)}</strong>
+                  <strong>{formatAmount(summary?.balance ?? 0)}</strong>
                 </div>
                 <span className="trend-badge" aria-hidden="true">
                   <TrendingUp />
@@ -153,11 +154,11 @@ export function DashboardPage() {
               <div className="figma-balance-stats">
                 <div>
                   <span>Received</span>
-                  <strong>{formatCurrency(totals.received)}</strong>
+                  <strong>{formatAmount(totals.received)}</strong>
                 </div>
                 <div>
                   <span>Sent</span>
-                  <strong>{formatCurrency(totals.sent)}</strong>
+                  <strong>{formatAmount(totals.sent)}</strong>
                 </div>
               </div>
             </motion.section>
@@ -205,7 +206,7 @@ export function DashboardPage() {
                     </span>
                     <div>
                       <strong>Received</strong>
-                      <span>{formatCurrency(totals.received)}</span>
+                      <span>{formatAmount(totals.received)}</span>
                     </div>
                   </div>
                   <div className="activity-stat">
@@ -214,7 +215,7 @@ export function DashboardPage() {
                     </span>
                     <div>
                       <strong>Sent</strong>
-                      <span>{formatCurrency(totals.sent)}</span>
+                      <span>{formatAmount(totals.sent)}</span>
                     </div>
                   </div>
                 </div>

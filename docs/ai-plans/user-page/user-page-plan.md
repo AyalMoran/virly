@@ -79,7 +79,7 @@ Display name
 Username or handle
 Verified badge
 Short user status, if relevant
-Primary action: Send money
+Primary action: Transfer
 Secondary action: View transactions
 ```
 
@@ -90,7 +90,7 @@ Example UI:
           @danielc
           Recipient since: March 2026
 
-[Send Money] [View Transactions]
+[Transfer] [View Transactions]
 ```
 
 ---
@@ -168,7 +168,7 @@ Example messages:
 
 ```txt
 Daniel is a verified recipient.
-You can send money to this user.
+You can Transfer to this user.
 ```
 
 or:
@@ -182,12 +182,12 @@ Start by creating a new transfer.
 
 ### E. Transfer Entry Point
 
-Add a “Send Money” button that opens the existing transfer flow pre-filled with the viewed user as recipient.
+Add a “Transfer” button that opens the existing transfer flow pre-filled with the viewed user as recipient.
 
 Possible behavior:
 
 ```txt
-/users/:userId -> click Send Money
+/users/:userId -> click Transfer
 /transfers/new?recipientId=:userId
 ```
 
@@ -577,7 +577,7 @@ Use this only if there is a real authorization restriction.
 ```txt
 You and Daniel have no transactions yet.
 
-[Send Money]
+[Transfer]
 ```
 
 ---
@@ -625,7 +625,7 @@ Example:
 ```txt
 | Main content               | Sidebar          |
 |----------------------------|------------------|
-| User header                | Send money       |
+| User header                | Transfer       |
 | Relationship summary       | Recipient status |
 | Recent transactions        | Metadata         |
 ```
@@ -651,7 +651,7 @@ No horizontal overflow
 Tap targets at least 44px
 Transaction table becomes cards
 Summary cards use 1-column or 2-column grid depending on width
-Sticky bottom action can be considered for Send Money
+Sticky bottom action can be considered for Transfer
 ```
 
 ---
@@ -794,10 +794,10 @@ Every counterparty display should eventually be clickable.
 
 ## Phase 6: Transfer Integration
 
-Add “Send Money” behavior:
+Add “Transfer” behavior:
 
 ```txt
-Click Send Money
+Click Transfer
 Navigate to transfer page with recipient preselected
 Do not submit transfer automatically
 User still enters amount
@@ -852,7 +852,7 @@ Renders user profile
 Renders no-history state
 Renders relationship summary
 Renders recent transactions
-Send Money button routes correctly
+Transfer button routes correctly
 Mobile layout does not depend on table-only rendering
 ```
 
@@ -937,7 +937,7 @@ Create a page where User A can open User B’s profile and see:
 - Transaction summary between User A and User B only
 - Recent shared transactions between User A and User B
 - Whether User B is a verified or available recipient
-- A safe “Send Money” action that starts the existing transfer flow with User B preselected, without executing or confirming a transfer automatically
+- A safe “Transfer” action that starts the existing transfer flow with User B preselected, without executing or confirming a transfer automatically
 
 The page must not expose User B’s private financial data, balances, unrelated transactions, account numbers, other counterparties, private recipient list, loans, limits, or internal metadata.
 
@@ -1009,7 +1009,7 @@ Desktop should use available space well, preferably with a main content area and
 
 Add navigation links to this page from relevant places, such as transaction counterparties, recipient lists, verified recipients, transfer screens, and recent counterparty displays.
 
-The “Send Money” button should navigate to the existing transfer flow with the viewed user preselected, for example:
+The “Transfer” button should navigate to the existing transfer flow with the viewed user preselected, for example:
 
 /transfers/new?recipientId=:userId
 

@@ -39,12 +39,48 @@ export type PersonalDetails = {
   updatedAt?: string;
 };
 
+export type DisplayCurrency = "ILS" | "USD" | "EUR";
+
+export type TransactionFxMetadata = {
+  enteredCurrency: DisplayCurrency;
+  enteredAmount?: number;
+  exchangeRateUsed?: number;
+  exchangeRateFetchedAt?: string;
+};
+
 export type Transaction = {
   id: string;
   amount: number;
   counterpartyEmail: string;
   reason?: string | null;
   date?: string;
+  fx?: TransactionFxMetadata;
+};
+
+export type ExchangeRatesResponse = {
+  baseCurrency: "ILS";
+  supportedCurrencies: DisplayCurrency[];
+  rates: Record<DisplayCurrency, number>;
+  provider: string;
+  fetchedAt: string;
+  validForDate: string;
+  expiresAt: string;
+  isStale: boolean;
+};
+
+export type TransferQuote = {
+  enteredAmount: number;
+  enteredCurrency: DisplayCurrency;
+  amountIls: number;
+  rate: number;
+  rateFetchedAt: string | null;
+  rateValidForDate: string | null;
+  baseCurrency: "ILS";
+  provider: string | null;
+};
+
+export type TransferQuoteResponse = {
+  quote: TransferQuote;
 };
 
 export type Pagination = {
@@ -156,6 +192,11 @@ export type PersonalDetailsResponse = {
 export type TransferRequest = {
   recipientEmail: string;
   amount: number;
+  currency?: DisplayCurrency;
+  quote?: {
+    rate: number;
+    fetchedAt: string;
+  };
   reason?: string;
 };
 

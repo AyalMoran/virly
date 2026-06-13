@@ -76,7 +76,8 @@ import {
 import {
   assistantResponseFormatVersion,
   buildAssistantResponseBlocks,
-  buildStructuredResponseFallbackMessage
+  buildStructuredResponseFallbackMessage,
+  stripMarkdownArtifacts
 } from "./responseBlocks.js";
 import {
   buildPersonalityLintFeedback,
@@ -2934,6 +2935,12 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
               structuredIntroFallbackMessage ?? userFallbackMessage
           }
         : undefined;
+    // With structured blocks present, the cards render any rich formatting, so
+    // the plain fallback message must not carry raw Markdown from tool
+    // summaries while still stating the required facts.
+    const fallbackResponseMessage = structuredResponse
+      ? stripMarkdownArtifacts(userFallbackMessage)
+      : userFallbackMessage;
     const responseStyleContext =
       state.responseStyleContext ??
       buildResponseStyleContext(
@@ -2962,7 +2969,7 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
       state.detectedIntent === "transfer_prepare" ||
       state.detectedIntent === "transfer_modify_pending"
     ) {
-      return { responseMessage: userFallbackMessage };
+      return { responseMessage: fallbackResponseMessage };
     }
 
     try {
@@ -2970,9 +2977,9 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
 
       const hydratedMessage =
         hydrateUserVisibleResponse(
-          responseMessage.trim() || userFallbackMessage,
+          responseMessage.trim() || fallbackResponseMessage,
           state
-        ) || userFallbackMessage;
+        ) || fallbackResponseMessage;
       const postCheckFailure = getResponsePostCheckFailure(
         hydratedMessage,
         state,
@@ -2983,7 +2990,7 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
       if (postCheckFailure) {
         return withDebugEvents(
           state,
-          { responseMessage: userFallbackMessage },
+          { responseMessage: fallbackResponseMessage },
           [
             {
               type: "fallback",
@@ -3008,9 +3015,9 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
         });
         const hydratedRetryMessage =
           hydrateUserVisibleResponse(
-            retryMessage.trim() || userFallbackMessage,
+            retryMessage.trim() || fallbackResponseMessage,
             state
-          ) || userFallbackMessage;
+          ) || fallbackResponseMessage;
         const retryPostCheckFailure = getResponsePostCheckFailure(
           hydratedRetryMessage,
           state,
@@ -3027,7 +3034,7 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
           return withDebugEvents(
             state,
             {
-              responseMessage: userFallbackMessage,
+              responseMessage: fallbackResponseMessage,
               responsePersonalityLint: retryPersonalityLint
             },
             [
@@ -3067,7 +3074,7 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
     } catch (error) {
       return withDebugEvents(
         state,
-        { responseMessage: userFallbackMessage },
+        { responseMessage: fallbackResponseMessage },
         [
           {
             type: "fallback",

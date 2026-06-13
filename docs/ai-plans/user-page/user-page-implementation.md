@@ -66,7 +66,7 @@ grants. Self-profile returns `relationshipStatus: "self"`, zeroed totals,
   `AppShell`; lazy-loaded with a skeleton fallback (own build chunk).
 - Components (`client/src/features/users/`):
   - `UserProfilePage` — fetch, state machine (loading / 404 / error+retry /
-    self / empty / normal), Send Money handoff.
+    self / empty / normal), Transfer handoff.
   - `UserProfileHeader` — avatar, name, verified badge, email, member-since.
   - `RelationshipSummaryCard` — you-sent / you-received / net, count, last
     interaction (tabular numerals).
@@ -76,7 +76,7 @@ grants. Self-profile returns `relationshipStatus: "self"`, zeroed totals,
     viewer-relative direction; "View all" switches to the paginated endpoint.
   - `EmptyRelationshipState` — no-history CTA.
 - API client: `api.userProfile`, `api.userRelationshipTransactions`.
-- Send Money: writes the existing `virly-prefill-recipient` sessionStorage key
+- Transfer: writes the existing `virly-prefill-recipient` sessionStorage key
   and navigates to `/transfer` — recipient preselected only; the user still
   enters the amount, reviews, and confirms; the backend still validates
   everything. No transfer is created by viewing or by the button itself.

@@ -15,6 +15,15 @@ export function toTransactionDto(transaction: TransactionDocument) {
     counterpartyEmail: transaction.counterpartyEmail,
     amount: signedAmount,
     reason: transaction.reason ?? undefined,
-    date: transaction.createdAt?.toISOString()
+    date: transaction.createdAt?.toISOString(),
+    fx:
+      transaction.enteredCurrency && transaction.enteredCurrency !== "ILS"
+        ? {
+            enteredCurrency: transaction.enteredCurrency,
+            enteredAmount: transaction.enteredAmount ?? undefined,
+            exchangeRateUsed: transaction.exchangeRateUsed ?? undefined,
+            exchangeRateFetchedAt: transaction.exchangeRateFetchedAt?.toISOString()
+          }
+        : undefined
   };
 }

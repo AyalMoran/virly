@@ -1,6 +1,7 @@
 import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import { formatCurrency, formatRelativeDate } from "../lib/format";
+import { useCurrency } from "../features/currency/CurrencyProvider";
+import { formatRelativeDate } from "../lib/format";
 import type { Pagination, Transaction } from "../lib/types";
 import { Button, EmptyState } from "./Primitives";
 
@@ -19,6 +20,8 @@ export function TransactionList({
   compact?: boolean;
   onTransactionSelect?: (transaction: Transaction) => void;
 }) {
+  const { formatAmount } = useCurrency();
+
   if (!transactions.length) {
     return (
       <EmptyState
@@ -26,7 +29,7 @@ export function TransactionList({
         message="Money you send or receive will show up here. Start by sending your first transfer."
       >
         <Link className="button button-primary" to="/transfer">
-          Send money
+          Transfer
         </Link>
       </EmptyState>
     );
@@ -81,7 +84,7 @@ export function TransactionList({
             <div className="transaction-meta">
               <strong className={isCredit ? "amount-credit" : "amount-debit"}>
                 {isCredit ? "+" : ""}
-                {formatCurrency(transaction.amount)}
+                {formatAmount(transaction.amount)}
               </strong>
               <span>Completed</span>
             </div>

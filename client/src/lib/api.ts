@@ -10,12 +10,15 @@ import type {
   AuthSuccessResponse,
   AgentVideoSession,
   CreateVideoSessionRequest,
+  DisplayCurrency,
+  ExchangeRatesResponse,
   JitsiJoinConfig,
   LoginRequest,
   PersonalDetailsRequest,
   PersonalDetailsResponse,
   RegisterRequest,
   TransactionsResponse,
+  TransferQuoteResponse,
   TransferRequest,
   TransferResponse,
   UserProfileResponse,
@@ -325,9 +328,20 @@ export const api = {
       body: JSON.stringify({
         recipientEmail: normalizeEmail(payload.recipientEmail),
         amount: payload.amount,
+        ...(payload.currency ? { currency: payload.currency } : {}),
+        ...(payload.quote ? { quote: payload.quote } : {}),
         ...(reason ? { reason } : {})
       })
     });
+  },
+  transferQuote(payload: { amount: number; currency: DisplayCurrency }) {
+    return request<TransferQuoteResponse>("/api/transactions/quote", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  },
+  exchangeRates() {
+    return request<ExchangeRatesResponse>("/api/exchange-rates/current");
   },
   aiChat(payload: AiChatRequest) {
     return request<AiChatResponse>("/api/ai/chat", {

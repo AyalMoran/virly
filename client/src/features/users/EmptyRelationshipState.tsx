@@ -20,7 +20,7 @@ export function EmptyRelationshipState({
       >
         {canSendMoney ? (
           <Button type="button" onClick={onSendMoney}>
-            Send money
+            Transfer
           </Button>
         ) : null}
       </EmptyState>

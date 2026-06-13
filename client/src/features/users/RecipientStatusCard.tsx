@@ -19,7 +19,7 @@ function getStatusCopy(
     return {
       icon: <BadgeCheck aria-hidden="true" />,
       title: "Verified recipient",
-      message: `${viewedName} has a verified account. You can send money to this user.`
+      message: `${viewedName} has a verified account. You can Transfer to this user.`
     };
   }
 
@@ -60,7 +60,7 @@ export function RecipientStatusCard({
       {relationship.canTransferToUser ? (
         <Button type="button" onClick={onSendMoney}>
           <Send aria-hidden="true" className="user-profile-action-icon" />
-          Send money
+          Transfer
         </Button>
       ) : null}
     </section>

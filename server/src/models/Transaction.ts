@@ -30,6 +30,25 @@ const transactionSchema = new Schema(
       default: null,
       trim: true,
       maxlength: 200
+    },
+    // FX metadata for transfers entered in a non-ILS currency. Display-only:
+    // `amount` above stays the authoritative ILS ledger value.
+    enteredCurrency: {
+      type: String,
+      enum: ["ILS", "USD", "EUR"],
+      default: undefined
+    },
+    enteredAmount: {
+      type: Number,
+      default: undefined
+    },
+    exchangeRateUsed: {
+      type: Number,
+      default: undefined
+    },
+    exchangeRateFetchedAt: {
+      type: Date,
+      default: undefined
     }
   },
   {

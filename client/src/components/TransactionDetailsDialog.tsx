@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
-import { formatCurrency, formatDate } from "../lib/format";
+import { useCurrency } from "../features/currency/CurrencyProvider";
+import { formatDate } from "../lib/format";
 import type { Transaction } from "../lib/types";
 import { OrderConfirmationCard } from "./ui/order-confirmation-card";
 
@@ -15,6 +16,7 @@ export function TransactionDetailsDialog({
   transaction: Transaction | null;
   onClose: () => void;
 }) {
+  const { formatAmount } = useCurrency();
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
@@ -108,7 +110,7 @@ export function TransactionDetailsDialog({
               paymentMethod={transaction.counterpartyEmail}
               reason={transaction.reason}
               dateTime={formatDate(transaction.date)}
-              totalAmount={`${transaction.amount > 0 ? "+" : ""}${formatCurrency(
+              totalAmount={`${transaction.amount > 0 ? "+" : ""}${formatAmount(
                 transaction.amount,
               )}`}
               onGoToAccount={onClose}

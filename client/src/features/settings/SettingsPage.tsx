@@ -13,7 +13,7 @@ import {
 } from "../../components/Primitives";
 import { ApiError, api } from "../../lib/api";
 import { useAuth } from "../auth/AuthProvider";
-import { formatCurrency } from "../../lib/format";
+import { useCurrency } from "../currency/CurrencyProvider";
 import type { PersonalDetails } from "../../lib/types";
 import { validateDateOfBirth, validateRequiredText } from "../../lib/validation";
 
@@ -83,6 +83,7 @@ function formatPersonalDate(value: string | null | undefined) {
 
 export function SettingsPage() {
   const auth = useAuth();
+  const { formatAmount } = useCurrency();
   const navigate = useNavigate();
   const [details, setDetails] = useState<PersonalDetails | null>(null);
   const [form, setForm] = useState<DetailsForm>(emptyDetailsForm);
@@ -412,7 +413,7 @@ export function SettingsPage() {
               </div>
               <div>
                 <dt>Balance</dt>
-                <dd>{formatCurrency(auth.user?.balance ?? 0)}</dd>
+                <dd>{formatAmount(auth.user?.balance ?? 0)}</dd>
               </div>
             </dl>
           </Card>

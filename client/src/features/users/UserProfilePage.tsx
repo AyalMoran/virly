@@ -170,6 +170,7 @@ export function UserProfilePage() {
                 initialTransactions={recentTransactions}
                 totalCount={relationship.transactionCount}
                 viewedName={user.displayName}
+                viewedEmail={user.email}
               />
             </>
           ) : (

@@ -13,15 +13,29 @@ import {
   TextareaField
 } from "../../components/Primitives";
 import { useAuth } from "../auth/AuthProvider";
+import { useCurrency } from "../currency/CurrencyProvider";
 import { ApiError, api } from "../../lib/api";
 import { getQuickContacts } from "../../lib/contacts";
+import {
+  CURRENCY_LABELS,
+  SUPPORTED_DISPLAY_CURRENCIES,
+  convertIlsForDisplay,
+  formatMoneyIn,
+  isDisplayCurrency
+} from "../../lib/currency";
 import { formatCurrency } from "../../lib/format";
-import type { AccountSummary, TransferResponse } from "../../lib/types";
+import type {
+  AccountSummary,
+  DisplayCurrency,
+  TransferQuote,
+  TransferResponse
+} from "../../lib/types";
 import {
   validateAmount,
   validateEmail,
   validateReason
 } from "../../lib/validation";
+import { TransferQuoteSmallPrint } from "./TransferQuoteSmallPrint";
 
 type TransferErrors = {
   recipientEmail?: string;
@@ -32,14 +46,18 @@ type TransferErrors = {
 
 export function TransferPage() {
   const auth = useAuth();
+  const { currency: displayCurrency, rates, formatAmount } = useCurrency();
   const navigate = useNavigate();
   const [recipientEmail, setRecipientEmail] = useState("");
   const [amount, setAmount] = useState("");
+  const [currency, setCurrency] = useState<DisplayCurrency>(displayCurrency);
   const [reason, setReason] = useState("");
   const [errors, setErrors] = useState<TransferErrors>({});
   const [step, setStep] = useState<"form" | "review" | "success">("form");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [summary, setSummary] = useState<AccountSummary | null>(null);
+  const [quote, setQuote] = useState<TransferQuote | null>(null);
+  const [quoteNotice, setQuoteNotice] = useState("");
   const [result, setResult] = useState<TransferResponse | null>(null);
 
   useEffect(() => {
@@ -64,7 +82,37 @@ export function TransferPage() {
 
   const numericAmount = Number(amount);
   const balance = summary?.balance ?? auth.user?.balance ?? 0;
-  const projectedBalance = Number((balance - (Number.isFinite(numericAmount) ? numericAmount : 0)).toFixed(2));
+
+  // The balance is ILS; for non-ILS input compare against its converted
+  // value. This is a UX convenience only — the server validates in ILS.
+  const balanceInEnteredCurrency = useMemo(() => {
+    if (currency === "ILS") {
+      return balance;
+    }
+
+    return rates ? convertIlsForDisplay(balance, currency, rates.rates) : undefined;
+  }, [balance, currency, rates]);
+
+  // Authoritative when a server quote exists; a client-side estimate before
+  // review so the projection stays useful while typing.
+  const amountIls = useMemo(() => {
+    if (currency === "ILS") {
+      return Number.isFinite(numericAmount) ? numericAmount : 0;
+    }
+
+    if (quote && quote.enteredCurrency === currency && quote.enteredAmount === numericAmount) {
+      return quote.amountIls;
+    }
+
+    if (rates && Number.isFinite(numericAmount)) {
+      const rate = rates.rates[currency];
+      return rate > 0 ? Math.round((numericAmount / rate) * 100) / 100 : 0;
+    }
+
+    return 0;
+  }, [currency, numericAmount, quote, rates]);
+
+  const projectedBalance = Number((balance - amountIls).toFixed(2));
 
   const recentCounterparties = useMemo(
     () => getQuickContacts(summary?.transactions ?? []),
@@ -75,7 +123,7 @@ export function TransferPage() {
     const normalizedRecipient = recipientEmail.trim().toLowerCase();
     const nextErrors: TransferErrors = {
       recipientEmail: validateEmail(recipientEmail),
-      amount: validateAmount(amount, balance),
+      amount: validateAmount(amount, balanceInEnteredCurrency),
       reason: validateReason(reason)
     };
 
@@ -87,10 +135,39 @@ export function TransferPage() {
     return !nextErrors.recipientEmail && !nextErrors.amount && !nextErrors.reason;
   }
 
-  function handleReview(event: FormEvent) {
+  async function handleReview(event: FormEvent) {
     event.preventDefault();
-    if (validateDraft()) {
+    if (!validateDraft()) {
+      return;
+    }
+
+    setQuoteNotice("");
+
+    if (currency === "ILS") {
+      setQuote(null);
       setStep("review");
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      const response = await api.transferQuote({
+        amount: Number(amount),
+        currency
+      });
+      setQuote(response.quote);
+      setStep("review");
+    } catch (error) {
+      setErrors({
+        form:
+          error instanceof ApiError && error.status === 503
+            ? "Currency conversion is currently unavailable. Try again later or send the transfer in ILS."
+            : error instanceof Error
+              ? error.message
+              : "Unable to prepare the transfer quote."
+      });
+    } finally {
+      setIsSubmitting(false);
     }
   }
 
@@ -106,12 +183,37 @@ export function TransferPage() {
       const response = await api.transfer({
         recipientEmail,
         amount: Number(amount),
+        ...(currency !== "ILS" && quote?.rateFetchedAt
+          ? {
+              currency,
+              quote: { rate: quote.rate, fetchedAt: quote.rateFetchedAt }
+            }
+          : {}),
         reason
       });
       setResult(response);
       auth.updateBalance(response.newBalance);
       setStep("success");
     } catch (error) {
+      if (error instanceof ApiError && error.status === 409) {
+        // The daily rate changed between quote and confirmation: refresh the
+        // quote and ask the user to confirm the updated ILS amount.
+        try {
+          const refreshed = await api.transferQuote({
+            amount: Number(amount),
+            currency
+          });
+          setQuote(refreshed.quote);
+          setQuoteNotice(
+            "The exchange rate was updated. Review the refreshed amount below and confirm again."
+          );
+        } catch {
+          setErrors({ form: "Unable to refresh the exchange-rate quote." });
+          setStep("form");
+        }
+        return;
+      }
+
       if (error instanceof ApiError) {
         setErrors({
           recipientEmail:
@@ -158,10 +260,15 @@ export function TransferPage() {
               <SuccessBanner message={result.message} />
               <h2>Transfer complete</h2>
               <p>
-                {formatCurrency(Math.abs(result.transaction.amount))} sent to{" "}
-                {result.transaction.counterpartyEmail}.
+                {result.transaction.fx
+                  ? `${formatMoneyIn(
+                      result.transaction.fx.enteredAmount ?? Number(amount),
+                      result.transaction.fx.enteredCurrency
+                    )} (${formatCurrency(Math.abs(result.transaction.amount))})`
+                  : formatCurrency(Math.abs(result.transaction.amount))}{" "}
+                sent to {result.transaction.counterpartyEmail}.
               </p>
-              <strong>New balance: {formatCurrency(result.newBalance)}</strong>
+              <strong>New balance: {formatAmount(result.newBalance)}</strong>
               <div className="button-row">
                 <Button type="button" onClick={() => navigate("/transactions")}>
                   View transactions
@@ -174,6 +281,8 @@ export function TransferPage() {
                     setAmount("");
                     setReason("");
                     setResult(null);
+                    setQuote(null);
+                    setQuoteNotice("");
                     setStep("form");
                   }}
                 >
@@ -184,6 +293,7 @@ export function TransferPage() {
           ) : step === "review" ? (
             <div className="review-panel">
               <h2>Confirm</h2>
+              {quoteNotice ? <ErrorBanner message={quoteNotice} /> : null}
               <dl className="review-list">
                 <div>
                   <dt>Recipient</dt>
@@ -198,7 +308,13 @@ export function TransferPage() {
                 </div>
                 <div>
                   <dt>Amount</dt>
-                  <dd>{formatCurrency(Number(amount))}</dd>
+                  <dd>
+                    <span className="review-amount">
+                      {formatMoneyIn(Number(amount), currency)}
+                      {currency !== "ILS" ? ` ${currency}` : ""}
+                    </span>
+                    {quote ? <TransferQuoteSmallPrint quote={quote} /> : null}
+                  </dd>
                 </div>
                 <div>
                   <dt>Reason</dt>
@@ -217,7 +333,10 @@ export function TransferPage() {
                   type="button"
                   variant="secondary"
                   disabled={isSubmitting}
-                  onClick={() => setStep("form")}
+                  onClick={() => {
+                    setQuoteNotice("");
+                    setStep("form");
+                  }}
                 >
                   Edit
                 </Button>
@@ -254,17 +373,46 @@ export function TransferPage() {
                   ))}
                 </div>
               ) : null}
-              <Field
-                label="Amount"
-                name="amount"
-                type="number"
-                inputMode="decimal"
-                min="0.01"
-                step="0.01"
-                value={amount}
-                error={errors.amount}
-                onChange={(event) => setAmount(event.target.value)}
-              />
+              <div className="amount-currency-row">
+                <Field
+                  label="Amount"
+                  name="amount"
+                  type="number"
+                  inputMode="decimal"
+                  min="0.01"
+                  step="0.01"
+                  value={amount}
+                  error={errors.amount}
+                  onChange={(event) => setAmount(event.target.value)}
+                />
+                <label className="field" htmlFor="transfer-currency">
+                  <span className="field-label">Currency</span>
+                  <select
+                    id="transfer-currency"
+                    name="currency"
+                    value={currency}
+                    onChange={(event) => {
+                      const next = event.target.value;
+                      if (isDisplayCurrency(next)) {
+                        setCurrency(next);
+                        setQuote(null);
+                      }
+                    }}
+                  >
+                    {SUPPORTED_DISPLAY_CURRENCIES.map((code) => (
+                      <option key={code} value={code}>
+                        {CURRENCY_LABELS[code]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              {currency !== "ILS" && !rates ? (
+                <p className="field-hint">
+                  Currency conversion is unavailable right now; the exact ILS
+                  amount will be quoted before you confirm.
+                </p>
+              ) : null}
               <TextareaField
                 label="Reason"
                 name="reason"
@@ -274,7 +422,9 @@ export function TransferPage() {
                 hint={`${reason.length}/200 characters`}
                 onChange={(event) => setReason(event.target.value)}
               />
-              <Button type="submit">Review transfer</Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Preparing quote..." : "Review transfer"}
+              </Button>
             </form>
           )}
             </motion.div>
@@ -282,11 +432,11 @@ export function TransferPage() {
         </Card>
         <Card className="balance-aside figma-balance-aside">
           <p className="eyebrow">Balance</p>
-          <strong>{formatCurrency(balance)}</strong>
+          <strong>{formatAmount(balance)}</strong>
           {step !== "success" ? (
             <div className="projection">
               <span>After transfer</span>
-              <strong>{formatCurrency(Math.max(projectedBalance, 0))}</strong>
+              <strong>{formatAmount(Math.max(projectedBalance, 0))}</strong>
             </div>
           ) : null}
         </Card>

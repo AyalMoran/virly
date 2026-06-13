@@ -116,6 +116,22 @@ export const config = {
       defaultValue: false
     })
   },
+  fx: {
+    provider: getStringEnv("VIRLY_FX_PROVIDER", "exchangerate-api", {
+      aliases: ["FX_PROVIDER"]
+    }),
+    apiKey: getOptionalStringEnv("VIRLY_FX_API_KEY", {
+      aliases: ["EXCHANGE_RATE_API_KEY", "FX_API_KEY"]
+    }),
+    baseUrl: getOptionalStringEnv("VIRLY_FX_BASE_URL", {
+      aliases: ["FX_BASE_URL"]
+    }),
+    cacheTtlHours: getIntEnv("VIRLY_FX_CACHE_TTL_HOURS", {
+      defaultValue: 48,
+      min: 1,
+      max: 24 * 14
+    })
+  },
   video: {
     provider: videoProvider as VideoProvider,
     jitsi: {

@@ -995,6 +995,14 @@ export function buildAssistantResponseBlocks(
   }
 }
 
+export function stripMarkdownArtifacts(message: string) {
+  return message
+    .replace(/\*\*([^*]*)\*\*/g, "$1")
+    .replace(/\*\*/g, "")
+    .replace(/`{1,3}([^`]*)`{1,3}/g, "$1")
+    .replace(/^(\s*)[-*]\s+/gm, "$1");
+}
+
 export function buildStructuredResponseFallbackMessage(
   state: AssistantGraphState,
   blocks: AssistantResponseBlock[]
@@ -1016,20 +1024,20 @@ export function buildStructuredResponseFallbackMessage(
 
   if (firstType === "transfer_quote") {
     return isHebrewState(state)
-      ? "זה ציטוט ההעברה לפי הנתונים הקיימים."
-      : "Here is the transfer quote from the available data.";
+      ? "זה ציטוט ההעברה הנוכחי מהחשבון שלך."
+      : "Here is the transfer quote from your account.";
   }
 
   if (firstType === "transfer_status") {
     return isHebrewState(state)
-      ? "זה סטטוס ההעברה לפי הנתונים הקיימים."
-      : "Here is the transfer status from the available data.";
+      ? "זה סטטוס ההעברה הנוכחי בחשבון שלך."
+      : "Here is the current transfer status for your account.";
   }
 
   if (firstType === "transfer_limits") {
     return isHebrewState(state)
-      ? "אלה מגבלות ההעברה לפי הנתונים הקיימים."
-      : "Here are the transfer limits from the available data.";
+      ? "אלה מגבלות ההעברה הנוכחיות בחשבון שלך."
+      : "Here are your current transfer limits.";
   }
 
   return isHebrewState(state)

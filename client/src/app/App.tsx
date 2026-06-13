@@ -4,6 +4,7 @@ import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
 import { Skeleton } from "../components/Primitives";
 import { GuestRoute, ProtectedRoute } from "../components/RouteGuards";
+import { CurrencyProvider } from "../features/currency/CurrencyProvider";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { LoginPage } from "../features/auth/LoginPage";
 import { RegisterPage } from "../features/auth/RegisterPage";
@@ -67,7 +68,9 @@ export function App() {
           <Route
             element={
               <ProtectedRoute>
-                <AppShell />
+                <CurrencyProvider>
+                  <AppShell />
+                </CurrencyProvider>
               </ProtectedRoute>
             }
           >

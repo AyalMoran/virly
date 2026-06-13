@@ -63,7 +63,7 @@ test("profile header shows identity, verification badge, and send action", () =>
   assert.match(html, /daniel@example\.com/);
   assert.match(html, /Verified/);
   assert.match(html, /Member since March 2026/);
-  assert.match(html, /Send money/);
+  assert.match(html, /Transfer/);
 });
 
 test("relationship summary renders viewer-relative totals", () => {
@@ -97,6 +97,9 @@ test("shared transactions render direction relative to the viewer", () => {
   assert.match(html, /Completed/);
   assert.match(html, /amount-debit/);
   assert.match(html, /amount-credit/);
+  // Rows open the shared transaction details dialog, so they expose button semantics.
+  assert.match(html, /transaction-row selectable/);
+  assert.match(html, /role="button"/);
 });
 
 test("recipient status renders verified copy with transfer action", () => {
@@ -109,7 +112,7 @@ test("recipient status renders verified copy with transfer action", () => {
   );
 
   assert.match(html, /Verified recipient/);
-  assert.match(html, /Send money/);
+  assert.match(html, /Transfer/);
 });
 
 test("recipient status for self profile hides the transfer action", () => {
@@ -126,7 +129,7 @@ test("recipient status for self profile hides the transfer action", () => {
   );
 
   assert.match(html, /Your account/);
-  assert.doesNotMatch(html, /Send money/);
+  assert.doesNotMatch(html, /Transfer/);
 });
 
 test("empty relationship state offers a safe send-money entry point", () => {
@@ -135,5 +138,5 @@ test("empty relationship state offers a safe send-money entry point", () => {
   );
 
   assert.match(html, /You and Daniel have no transactions yet/);
-  assert.match(html, /Send money/);
+  assert.match(html, /Transfer/);
 });
