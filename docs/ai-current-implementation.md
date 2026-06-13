@@ -23,6 +23,9 @@ milestone logs.
   `executeTransferWithSession()` in `server/src/services/transfer.service.ts`.
 - Mongo conversation memory through
   `server/src/services/aiConversation.service.ts`.
+- Continuous-context transfer resolution: a persistent `TransferIntentFrame`,
+  compositional `AmountExpr` resolution, and the optional `resolveTurnContext`
+  LLM node with a deterministic fallback (see Continuous-Context Resolution).
 - Deterministic eval mode plus guarded live-LLM and seeded-Mongo eval modes.
 
 ### Partially Implemented
@@ -117,7 +120,8 @@ The route helpers live in `server/src/ai/graphRoutes.ts`:
 
 - `buildRequestParsingSubgraph()`:
   `normalizeUserMessage -> classifyIntent -> extractRequestSlots ->
-  getParseRoute -> extractTransferDraft when transfer_related`.
+  getParseRoute -> extractTransferDraft -> resolveTurnContext when
+  transfer_related`.
 - `buildClarificationSubgraph()`:
   `resolveClarificationReply`.
 - `buildReadOnlyAnswerSubgraph()`:
@@ -141,6 +145,9 @@ The graph now has conditional routing, but node-level guards still exist:
 - `classifyIntent()` exits if refusal or intent already exists.
 - `extractTransferDraft()` runs only for `transfer_prepare` and
   `transfer_modify_pending`.
+- `resolveTurnContext()` runs only for transfer intents and only when the
+  provider implements the optional `resolveTurnContext` method; otherwise it is
+  a no-op and the deterministic pipeline stands.
 - `resolveCounterpartyReference()` exits unless the current intent needs a
   counterparty resolution.
 - `resolveContextualAmounts()` runs only for transfer intents with
@@ -300,10 +307,14 @@ Unsupported/planned tool behavior:
 - `answerFrames`, capped at `MAX_ANSWER_FRAMES = 8`;
 - `pendingConfirmation`;
 - `clarification`;
+- `transferIntentFrame` (see Continuous-Context Resolution);
 - `mode`.
 
 `AiConversation` persists this memory by authenticated `userId` and
-`conversationId`, with a 30-day TTL refresh on save.
+`conversationId`, with a 30-day TTL refresh on save. The `transferIntentFrame`
+field is additive (`Schema.Types.Mixed`); legacy documents without it
+deserialize to an idle frame via `normalizeTransferIntentFrame`, so no backfill
+or migration is required.
 
 Memory sources:
 
@@ -424,6 +435,13 @@ Contextual amount resolution:
 - `resolveContextualAmount()` handles latest received transaction, latest sent
   transaction, latest answer total, active pending transfer amount, and
   ambiguity between same-amount scopes.
+- `parseAmountExpression()` additionally recognizes compositional expressions —
+  arithmetic (`double`, `half`, `×N`, `כפול`, `חצי`, `פי N`) and the discourse
+  reference `the amount we discussed` / `הסכום שדיברנו עליו` — and resolves the
+  `pending_amount`/`discussed_amount` bases from memory.
+- All arithmetic is performed by `evaluateAmountExpr()` (`server/src/ai/amountExpr.ts`);
+  it rounds to two decimals and rejects non-positive bases/results and
+  division by zero.
 - Only resolved positive ILS amounts are written into the transfer draft.
 - Unresolved amounts ask for clarification and create no pending confirmation.
 
@@ -448,6 +466,55 @@ Stale, expired, superseded, and version behavior:
   `error: "confirmation_superseded"` and optional `supersededById`.
 - Expired confirmations are unavailable by `expiresAt`; code does not
   proactively write `status: "expired"` before rejection.
+
+## Continuous-Context Resolution
+
+Multi-turn transfer dialogues hold context across turns through three pieces.
+The guiding split: **the LLM decides what the user MEANS (coreference, intent,
+arithmetic); deterministic code decides what is TRUE and ALLOWED (recipient
+existence, amount value, confirmation).** The model emits references and
+expressions only — never an authoritative recipient email or money value.
+
+Persistent transfer-intent frame:
+
+- `TransferIntentFrame` (`status`, `recipient`, `amount`, `reason`,
+  `lastUpdatedTurn`) rides inside the persisted `counterpartyMemory`.
+- `deriveTransferIntentFrame()` recomputes it each turn in `saveConversation()`:
+  a created/active confirmation promotes it to `pending_confirmation`; a
+  transfer turn without a card leaves it `building`; non-transfer turns carry it
+  untouched. Unset slots inherit from the prior frame.
+- `inheritUnsetSlotsFromFrame()` fills an unset draft amount from an active
+  pending card, so "change the recipient" keeps the established amount.
+
+Compositional amounts:
+
+- `AmountExpr` (`base` + optional `op`/`operand`) names a source and an
+  operation. Bases: `literal`, `pending_amount`, `discussed_amount`,
+  `last_received_from`, `last_sent_to`, `answer_total`.
+- `evaluateAmountExpr()` owns all arithmetic; `resolveTurnDeltaAmount()` values a
+  base from memory (no DB) and applies it.
+
+LLM turn-context resolver:
+
+- `resolveTurnContext` is the optional 5th `AssistantLlmProvider` method. It
+  returns a zod-validated `TurnDelta` (`action`, `recipientRef`, `amountRef`,
+  `reason`, `confidence`).
+- The graph node `resolveTurnContext` sits at the end of the request-parsing
+  subgraph and applies the delta with `applyTurnDeltaToState()`:
+  - recipient emails are accepted only when the user actually typed them
+    (`emailAppearsInMessage`); `current_pending_recipient`/`last_counterparty`
+    resolve from memory;
+  - every amount value comes from `resolveTurnDeltaAmount` + `evaluateAmountExpr`;
+    `amountRef.value` from the model is never trusted;
+  - an email inside an amount clause (`amountRef.sourceCounterparty`) scopes the
+    amount lookup and never becomes the recipient (F2). With no `recipientRef`,
+    the frame recipient is kept and any recipient the deterministic extractor
+    grabbed from the amount clause is discarded.
+- On an unresolvable amount reference the node runs one repair pass
+  (`repairError` hint) before the slot-aware clarification path.
+- When the provider lacks `resolveTurnContext` or it throws, the node is a no-op
+  and the deterministic `buildAiUserRequest` + `extractTransferDraft` pipeline is
+  the fallback. Deterministic evals therefore never invoke it.
 
 ## Response Behavior
 
