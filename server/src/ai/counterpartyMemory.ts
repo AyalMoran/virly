@@ -1,5 +1,5 @@
+import type { BaseMessage } from "@langchain/core/messages";
 import type {
-  ChatMessage,
   ConversationAnswerFrame,
   ConversationEntity,
   CounterpartyMemory,
@@ -114,7 +114,7 @@ export function normalizeCounterpartyMemory(
   };
 }
 
-export function trimConversationMessages(messages: ChatMessage[]) {
+export function trimConversationMessages(messages: BaseMessage[]) {
   return messages.slice(-MAX_CONVERSATION_MESSAGES);
 }
 

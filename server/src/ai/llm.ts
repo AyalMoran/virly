@@ -10,12 +10,12 @@ import {
     type AssistantIntent,
     assistantIntentValues,
     type AssistantLlmProvider,
-    type ChatMessage,
     type ClassifyAssistantIntentInput,
     type ComposeAssistantResponseInput,
     type CounterpartyReferenceResolution,
     type ExtractTransferDraftInput,
     type ResolveCounterpartyReferenceInput,
+    type StoredChatMessage,
     type TransferDraftExtraction
 } from "./state.js";
 
@@ -27,7 +27,7 @@ export function maskEmailsInText(text: string)
                         (email) => maskEmail(email));
 }
 
-export function sanitizeMessagesForLlm(messages: ChatMessage[])
+export function sanitizeMessagesForLlm(messages: StoredChatMessage[])
 {
     return messages.map((message) => ({
                             ...message,
@@ -217,7 +217,7 @@ function createChatModel(temperature: number)
     });
 }
 
-function buildClassifierPrompt(input: ClassifyAssistantIntentInput)
+export function buildClassifierPrompt(input: ClassifyAssistantIntentInput)
 {
     const recentMessages =
         sanitizeMessagesForLlm(input.messages)
@@ -563,7 +563,7 @@ function buildClassifierPrompt(input: ClassifyAssistantIntentInput)
     ].join("\n");
 }
 
-function buildTransferDraftPrompt(input: ExtractTransferDraftInput)
+export function buildTransferDraftPrompt(input: ExtractTransferDraftInput)
 {
     const recentMessages =
         sanitizeMessagesForLlm(input.messages)
@@ -662,7 +662,7 @@ function buildResponsePrompt(input: ComposeAssistantResponseInput)
     ].join("\n");
 }
 
-function buildReferenceResolverPrompt(input: ResolveCounterpartyReferenceInput)
+export function buildReferenceResolverPrompt(input: ResolveCounterpartyReferenceInput)
 {
     const knownCounterparties = input.memory.mentionedCounterparties.map(
         (counterparty, index) => ({
