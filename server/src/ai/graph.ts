@@ -1388,6 +1388,27 @@ function buildTransferConfirmationPreparer(
 }
 
 /**
+ * Function type: Slot lookup helper function.
+ *
+ * @brief Returns the frame-carried recipient label for slot-aware repair, but
+ * only when no recipient was established this turn.
+ *
+ * When a recipient resolves this turn the established preparation flow handles
+ * the missing amount; this is for the F5 case where the recipient is known only
+ * from the frame, so we ask just for the amount instead of dropping both slots.
+ */
+function getFrameRecipientLabelForRepair(
+  state: AssistantGraphState
+): string | undefined {
+  if (state.resolvedCounterparty || state.transferDraft?.recipientEmail) {
+    return undefined;
+  }
+
+  const recipient = state.counterpartyMemory.transferIntentFrame?.recipient;
+  return recipient?.displayName ?? recipient?.email ?? undefined;
+}
+
+/**
  * Function type: LangGraph node factory function.
  *
  * @brief Creates the contextual amount resolver node.
@@ -1426,6 +1447,7 @@ function buildContextualAmountResolver(
     });
 
     if (result.status !== "resolved") {
+      const knownRecipientLabel = getFrameRecipientLabelForRepair(state);
       const clarification =
         result.reason === "ambiguous_amount_scope"
           ? buildClarificationRequest(
@@ -1452,7 +1474,22 @@ function buildContextualAmountResolver(
                 ]
               }
             )
-          : {};
+          : knownRecipientLabel
+            ? // Slot-aware repair: the recipient is known in the frame, so ask
+              // only for the amount rather than dropping both slots (F5).
+              buildClarificationRequest(
+                state,
+                "missing_amount",
+                state.normalizedMessage?.containsHebrew
+                  ? `כמה לשלוח ל-${knownRecipientLabel}?`
+                  : `How much should I send to ${knownRecipientLabel}?`,
+                "amount",
+                {
+                  resumeIntent: "transfer_prepare",
+                  resumeDraft: state.transferDraft
+                }
+              )
+            : {};
 
       return withDebugEvents(
         state,
