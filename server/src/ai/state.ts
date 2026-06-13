@@ -836,6 +836,65 @@ export type ComposeAssistantResponseInput = {
   personalityLintFeedback?: string;
 };
 
+/**
+ * The structured turn-context delta the LLM resolver emits. It expresses *what
+ * the user means* (coreference, intent, arithmetic) as references and
+ * expressions only — never an authoritative email or money value. Deterministic
+ * code resolves and validates every recipient and amount.
+ */
+export type TurnDeltaAction =
+  | "new_transfer"
+  | "change_recipient"
+  | "modify_amount"
+  | "set_reason"
+  | "read_only"
+  | "confirm"
+  | "cancel"
+  | "other";
+
+export type TurnDeltaRecipientRef = {
+  kind:
+    | "explicit_email"
+    | "pronoun"
+    | "name"
+    | "ordinal"
+    | "current_pending_recipient"
+    | "last_counterparty";
+  email?: string;
+  query?: string;
+  ordinal?: number;
+};
+
+export type TurnDeltaAmountRef = {
+  kind: "literal" | "reference";
+  expr?: AmountExpr;
+  value?: number;
+  /**
+   * The counterparty an amount expression's base draws from, when that is
+   * distinct from the transfer recipient. This is the structural F2 fix:
+   * "the same amount sga@… sent me" names sga as the *amount's* counterparty,
+   * never the recipient.
+   */
+  sourceCounterparty?: {
+    email?: string;
+    query?: string;
+  };
+};
+
+export type TurnDelta = {
+  action: TurnDeltaAction;
+  recipientRef?: TurnDeltaRecipientRef;
+  amountRef?: TurnDeltaAmountRef;
+  reason?: string;
+  confidence: "low" | "medium" | "high";
+};
+
+export type ResolveTurnContextInput = {
+  userMessage: string;
+  messages: StoredChatMessage[];
+  counterpartyMemory: CounterpartyMemory;
+};
+
 export type AssistantLlmProvider = {
   classifyIntent(input: ClassifyAssistantIntentInput): Promise<IntentClassification>;
   extractTransferDraft(input: ExtractTransferDraftInput): Promise<TransferDraftExtraction>;
@@ -843,6 +902,12 @@ export type AssistantLlmProvider = {
     input: ResolveCounterpartyReferenceInput
   ): Promise<CounterpartyReferenceResolution>;
   composeResponse(input: ComposeAssistantResponseInput): Promise<string>;
+  /**
+   * Optional 5th method: resolves multi-turn coreference/intent into a
+   * TurnDelta. When absent or on failure, the deterministic pipeline
+   * (buildAiUserRequest + extractTransferDraft) is the fallback.
+   */
+  resolveTurnContext?(input: ResolveTurnContextInput): Promise<TurnDelta>;
 };
 
 export type ConversationContext = {
