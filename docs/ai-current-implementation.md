@@ -325,6 +325,41 @@ Memory supports:
 - pending-transfer list follow-ups such as `what about the first one`;
 - clarification options and resume metadata.
 
+## Conversation History Representation
+
+In-graph conversation history (`AssistantGraphState.messages`,
+`ConversationStore`) is `BaseMessage[]` from `@langchain/core/messages`:
+`HumanMessage` for user turns, `AIMessage` for assistant turns. No
+`SystemMessage` or `ToolMessage` is persisted — the system policy is a
+prompt prefix and tool results live in `toolResults` (the authoritative
+record). The `messages` channel uses last-value semantics: the loader
+replaces the array and the saver appends one message, so the lifecycle
+cannot duplicate a turn.
+
+Structured business state (`detectedIntent`, `transferDraft`,
+`confirmation`, `toolResults`, `counterpartyMemory`, …) stays separate and
+authoritative; messages are a conversational record only and are never the
+source of truth for balances, transfers, or authorization.
+
+Persistence is unchanged on disk. `AiConversation.messages` remains
+`{ role, content, createdAt }`; `server/src/ai/messageMapping.ts` converts
+at the store boundary (`fromStored` on load, `toStored` on save), so legacy
+documents load directly and no backfill/migration is required. LLM prompt
+builders receive a `{ role, content }` projection via `toProviderMessages`,
+keeping prompts byte-identical to the pre-migration baseline (asserted in
+`server/src/ai/messageMigration.test.ts`).
+
+LangGraph Studio input must supply messages in LangChain form, e.g.:
+
+```json
+{
+  "userId": "507f1f77bcf86cd799439011",
+  "conversationId": "studio-1",
+  "assistantId": "oshri",
+  "messages": [{ "type": "human", "content": "what's my balance?" }]
+}
+```
+
 ## Clarification And Resume
 
 `ClarificationRequest` in `server/src/ai/state.ts` includes:
