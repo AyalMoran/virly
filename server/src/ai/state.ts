@@ -200,13 +200,23 @@ export type AiToolResult<TData> = {
   };
 };
 
-export type ChatRole = "user" | "assistant";
+export type StoredChatRole = "user" | "assistant";
 
-export type ChatMessage = {
-  role: ChatRole;
+/**
+ * The persisted/on-disk + provider-projection message shape.
+ * MongoDB stores conversation history as `{ role, content, createdAt }`;
+ * this type is the boundary representation, distinct from the in-graph
+ * `BaseMessage[]` history introduced by the messages migration.
+ */
+export type StoredChatMessage = {
+  role: StoredChatRole;
   content: string;
   createdAt?: Date;
 };
+
+// Temporary aliases retained during the BaseMessage migration; removed in Phase 4.
+export type ChatRole = StoredChatRole;
+export type ChatMessage = StoredChatMessage;
 
 export type ToolResultMetadata = {
   recordCount?: number;
