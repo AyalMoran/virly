@@ -95,6 +95,10 @@ const aiConversationSchema = new Schema(
         type: Schema.Types.Mixed,
         default: null
       },
+      transferIntentFrame: {
+        type: Schema.Types.Mixed,
+        default: null
+      },
       mode: {
         type: String,
         enum: [

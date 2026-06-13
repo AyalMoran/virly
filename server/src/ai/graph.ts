@@ -9,6 +9,7 @@ import {
 } from "./assistants.js";
 import {
   createEmptyCounterpartyMemory,
+  createEmptyTransferIntentFrame,
   maskEmail,
   rememberCounterparty,
   normalizeCounterpartyMemory,
@@ -59,6 +60,8 @@ import type {
   PendingConfirmationMemory,
   RuntimeToolResult,
   TransferDraft,
+  TransferIntentFrame,
+  CurrencyCode,
   TransferModificationService,
   TransferPreparationService,
   RunAssistantInput,
@@ -694,6 +697,40 @@ function resolveClarificationReplyNode(
 }
 
 /**
+ * Function type: Frame inheritance helper function.
+ *
+ * @brief Fills unset draft slots from the persisted transfer-intent frame.
+ *
+ * Inheritance is gated to an active pending card (`status:"pending_confirmation"`)
+ * so a partially-specified follow-up ("send it to maya instead") keeps the
+ * established amount, while a fresh transfer still requires its own slots. The
+ * value is the frame's already-resolved number — deterministic, never invented.
+ */
+function inheritUnsetSlotsFromFrame(
+  draft: TransferDraft,
+  frame?: TransferIntentFrame
+): void {
+  if (!frame || frame.status !== "pending_confirmation") {
+    return;
+  }
+
+  const hasAmount =
+    typeof draft.amount === "number" && Number.isFinite(draft.amount);
+  if (
+    !hasAmount &&
+    !draft.amountReferenceText &&
+    typeof frame.amount?.value === "number" &&
+    frame.amount.value > 0
+  ) {
+    draft.amount = frame.amount.value;
+    draft.amountText =
+      draft.amountText ?? `${frame.amount.value} ${frame.amount.currency}`;
+    draft.currency = draft.currency ?? frame.amount.currency;
+    draft.currencySupported = draft.currencySupported ?? true;
+  }
+}
+
+/**
  * Function type: Draft merge helper function.
  *
  * @brief Applies extracted slots to a transfer draft.
@@ -720,6 +757,8 @@ function applySlotDataToDraft(
       draft.currencySupported ?? amount?.currencySupported ?? true,
     reason: draft.reason
   };
+
+  inheritUnsetSlotsFromFrame(nextDraft, state.counterpartyMemory.transferIntentFrame);
 
   const missingFields: TransferDraft["missingFields"] = [];
   if (!nextDraft.recipientEmail && !nextDraft.recipientReference) {
@@ -3096,6 +3135,109 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
  *
  * @brief Creates the conversation saver node.
  */
+/**
+ * Function type: Frame derivation helper function.
+ *
+ * @brief Computes the next persistent transfer-intent frame from graph state.
+ *
+ * Unset slots inherit from the prior frame; a created/active confirmation
+ * promotes the frame to `pending_confirmation`; a transfer turn without a card
+ * leaves it `building`; non-transfer turns carry the frame untouched.
+ */
+function deriveTransferIntentFrame(
+  state: AssistantGraphState
+): TransferIntentFrame {
+  const prior =
+    state.counterpartyMemory.transferIntentFrame ??
+    createEmptyTransferIntentFrame();
+  const turn = state.currentTurn;
+
+  if (state.confirmation) {
+    return {
+      status: "pending_confirmation",
+      recipient: {
+        email: state.confirmation.recipientEmail.toLowerCase(),
+        displayName: state.confirmation.recipient?.displayName,
+        resolvedAtTurn: turn
+      },
+      amount: {
+        value: state.confirmation.amount,
+        currency: state.confirmation.currency,
+        resolvedAtTurn: turn
+      },
+      reason: state.confirmation.reason ?? prior.reason,
+      lastUpdatedTurn: turn
+    };
+  }
+
+  const pending = state.counterpartyMemory.pendingConfirmation;
+  if (pending?.status === "pending") {
+    return {
+      status: "pending_confirmation",
+      recipient: {
+        email: pending.recipientEmail.toLowerCase(),
+        displayName: prior.recipient?.displayName,
+        resolvedAtTurn: prior.recipient?.resolvedAtTurn ?? pending.turnCreated
+      },
+      amount: {
+        value: pending.amount,
+        currency: pending.currency,
+        resolvedAtTurn: prior.amount?.resolvedAtTurn ?? pending.turnCreated
+      },
+      reason: pending.reason ?? prior.reason,
+      lastUpdatedTurn: turn
+    };
+  }
+
+  const isTransferTurn =
+    state.detectedIntent === "transfer_prepare" ||
+    state.detectedIntent === "transfer_modify_pending";
+  if (isTransferTurn) {
+    const draft = state.transferDraft;
+    const draftEmail =
+      draft?.recipientEmail?.toLowerCase() ??
+      state.resolvedCounterparty?.email?.toLowerCase();
+    const recipientEmail = draftEmail ?? prior.recipient?.email;
+    const draftAmount =
+      typeof draft?.amount === "number" && Number.isFinite(draft.amount)
+        ? draft.amount
+        : undefined;
+    const amountValue = draftAmount ?? prior.amount?.value;
+    const amountCurrency: CurrencyCode =
+      (draft?.currency && draft.currency !== "UNKNOWN"
+        ? (draft.currency as CurrencyCode)
+        : undefined) ??
+      prior.amount?.currency ??
+      "ILS";
+
+    return {
+      status: "building",
+      recipient: recipientEmail
+        ? {
+            email: recipientEmail,
+            displayName:
+              state.resolvedCounterparty?.displayName ??
+              prior.recipient?.displayName,
+            resolvedAtTurn: draftEmail ? turn : prior.recipient?.resolvedAtTurn
+          }
+        : prior.recipient,
+      amount:
+        amountValue != null
+          ? {
+              value: amountValue,
+              currency: amountCurrency,
+              resolvedAtTurn:
+                draftAmount != null ? turn : prior.amount?.resolvedAtTurn
+            }
+          : prior.amount,
+      reason: draft?.reason ?? prior.reason,
+      lastUpdatedTurn: turn
+    };
+  }
+
+  return prior;
+}
+
 function buildConversationSaver(conversationStore?: ConversationStore) {
   /**
    * Function type: Memory helper function.
@@ -3154,6 +3296,7 @@ function buildConversationSaver(conversationStore?: ConversationStore) {
               ? "answering_read_only"
               : "idle",
       clarification: state.clarificationRequest ?? null,
+      transferIntentFrame: deriveTransferIntentFrame(state),
       pendingConfirmation: state.confirmation
         ? {
             confirmationId: state.confirmation.id,

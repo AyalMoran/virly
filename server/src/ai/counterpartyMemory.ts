@@ -5,7 +5,8 @@ import type {
   CounterpartyMemory,
   CounterpartyRef,
   CounterpartyReferenceResolution,
-  ToolResultMetadata
+  ToolResultMetadata,
+  TransferIntentFrame
 } from "./state.js";
 
 export const MAX_CONVERSATION_MESSAGES = 20;
@@ -70,6 +71,40 @@ export function counterpartyAliases(input: {
   ])];
 }
 
+export function createEmptyTransferIntentFrame(): TransferIntentFrame {
+  return {
+    status: "idle",
+    lastUpdatedTurn: 0
+  };
+}
+
+/**
+ * Tolerates an absent or malformed frame by falling back to an idle frame.
+ * This keeps the persistence change additive: legacy memory documents without
+ * a `transferIntentFrame` deserialize to an idle frame with no migration.
+ */
+export function normalizeTransferIntentFrame(
+  frame?: Partial<TransferIntentFrame> | null
+): TransferIntentFrame {
+  if (
+    !frame ||
+    (frame.status !== "idle" &&
+      frame.status !== "building" &&
+      frame.status !== "pending_confirmation")
+  ) {
+    return createEmptyTransferIntentFrame();
+  }
+
+  return {
+    status: frame.status,
+    recipient: frame.recipient,
+    amount: frame.amount,
+    reason: frame.reason,
+    lastUpdatedTurn:
+      typeof frame.lastUpdatedTurn === "number" ? frame.lastUpdatedTurn : 0
+  };
+}
+
 export function createEmptyCounterpartyMemory(): CounterpartyMemory {
   return {
     turn: 0,
@@ -78,7 +113,8 @@ export function createEmptyCounterpartyMemory(): CounterpartyMemory {
     answerFrames: [],
     mode: "idle",
     pendingConfirmation: null,
-    clarification: null
+    clarification: null,
+    transferIntentFrame: createEmptyTransferIntentFrame()
   };
 }
 
@@ -110,6 +146,7 @@ export function normalizeCounterpartyMemory(
     answerFrames: normalizeAnswerFrames(memory?.answerFrames),
     pendingConfirmation: memory?.pendingConfirmation ?? null,
     clarification: memory?.clarification ?? null,
+    transferIntentFrame: normalizeTransferIntentFrame(memory?.transferIntentFrame),
     mode: memory?.mode ?? "idle"
   };
 }
@@ -234,6 +271,7 @@ export function rememberCounterparty(
     answerFrames: memory.answerFrames ?? [],
     pendingConfirmation: memory.pendingConfirmation ?? null,
     clarification: memory.clarification ?? null,
+    transferIntentFrame: memory.transferIntentFrame,
     mode: memory.mode ?? "idle"
   };
 }
