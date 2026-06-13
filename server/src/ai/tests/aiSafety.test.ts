@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import http from "node:http";
+import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { app } from "../../app.js";
 import { config } from "../../config.js";
 import { Transaction } from "../../models/Transaction.js";
@@ -36,7 +37,6 @@ import {
   AssistantToolExecutors,
   AmountResolutionService,
   AuditLogInput,
-  ChatMessage,
   clarificationReasonValues,
   clarificationReplyTypeValues,
   confirmationActionMethodValues,
@@ -3194,10 +3194,7 @@ test("hebrew total-sent follow-up is read-only and calls total counterparty tool
   let classifierSawConversationContext = false;
   const conversationStore = createFakeConversationStore({
     messages: [
-      {
-        role: "assistant",
-        content: "האחרון שאליו העברת כסף היה alex@example.com."
-      }
+      new AIMessage("האחרון שאליו העברת כסף היה alex@example.com.")
     ],
     memory: createMemoryWithCounterparties(["alex@example.com"])
   });
@@ -3438,10 +3435,7 @@ test("llm sees masked assistant context and masked tool summaries while the user
   ]);
   const conversationStore = createFakeConversationStore({
     messages: [
-      {
-        role: "assistant",
-        content: "The last person you sent money to was alex@example.com."
-      }
+      new AIMessage("The last person you sent money to was alex@example.com.")
     ],
     memory: createMemoryWithCounterparties(["alex@example.com"])
   });
@@ -3736,10 +3730,11 @@ test("deterministic counterparty resolver handles english pronouns from memory",
 
 test("conversation store trims saved messages to the last twenty", async () => {
   const conversationStore = createFakeConversationStore();
-  const messages: ChatMessage[] = Array.from({ length: 22 }, (_, index) => ({
-    role: index % 2 === 0 ? "user" : "assistant",
-    content: `message-${index}`
-  }));
+  const messages: BaseMessage[] = Array.from({ length: 22 }, (_, index) =>
+    index % 2 === 0
+      ? new HumanMessage(`message-${index}`)
+      : new AIMessage(`message-${index}`)
+  );
 
   await conversationStore.save({
     userId: "507f1f77bcf86cd799439011",
@@ -5745,10 +5740,7 @@ test("hebrew transfer request resolves לו from last counterparty and returns c
   const transferPreparations: Array<Parameters<TransferPreparationService>[0]> = [];
   const conversationStore = createFakeConversationStore({
     messages: [
-      {
-        role: "assistant",
-        content: "האדם האחרון שהעברת אליו היה alex@example.com."
-      }
+      new AIMessage("האדם האחרון שהעברת אליו היה alex@example.com.")
     ],
     memory: createMemoryWithCounterparties(["alex@example.com"])
   });

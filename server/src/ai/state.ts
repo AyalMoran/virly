@@ -1,3 +1,4 @@
+import type { BaseMessage } from "@langchain/core/messages";
 import type { AssistantId } from "./assistants.js";
 import type {
   AssistantResponseBlock,
@@ -214,10 +215,6 @@ export type StoredChatMessage = {
   createdAt?: Date;
 };
 
-// Temporary aliases retained during the BaseMessage migration; removed in Phase 4.
-export type ChatRole = StoredChatRole;
-export type ChatMessage = StoredChatMessage;
-
 export type ToolResultMetadata = {
   recordCount?: number;
   accountLabel?: string;
@@ -301,7 +298,7 @@ export type SafeToolSummary = {
 
 export type SafeConversationSummary = {
   recentMessages: Array<{
-    role: ChatRole;
+    role: StoredChatRole;
     content: string;
   }>;
 };
@@ -503,7 +500,7 @@ export type ResolvedAmountRef = {
 
 export type ClassifyAssistantIntentInput = {
   userMessage: string;
-  messages: ChatMessage[];
+  messages: StoredChatMessage[];
   counterpartyMemory: CounterpartyMemory;
 };
 
@@ -684,14 +681,14 @@ export type CounterpartyReferenceResolution =
 export type ResolveCounterpartyReferenceInput = {
   userMessage: string;
   intent: AssistantIntent;
-  messages: ChatMessage[];
+  messages: StoredChatMessage[];
   memory: CounterpartyMemory;
   transferDraft?: TransferDraft;
 };
 
 export type ExtractTransferDraftInput = {
   userMessage: string;
-  messages: ChatMessage[];
+  messages: StoredChatMessage[];
   counterpartyMemory: CounterpartyMemory;
 };
 
@@ -792,7 +789,7 @@ export type AssistantLlmProvider = {
 };
 
 export type ConversationContext = {
-  messages: ChatMessage[];
+  messages: BaseMessage[];
   memory: CounterpartyMemory;
 };
 
@@ -800,7 +797,7 @@ export type ConversationSaveInput = {
   userId: string;
   conversationId: string;
   assistantId: AssistantId;
-  messages: ChatMessage[];
+  messages: BaseMessage[];
   memory: CounterpartyMemory;
 };
 
@@ -814,7 +811,7 @@ export type AssistantGraphState = {
   conversationId: string;
   requestId?: string;
   assistantId: AssistantId;
-  messages: ChatMessage[];
+  messages: BaseMessage[];
   counterpartyMemory: CounterpartyMemory;
   currentTurn: number;
   detectedIntent?: AssistantIntent;

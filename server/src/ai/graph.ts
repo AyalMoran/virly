@@ -1,4 +1,5 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
+import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import mongoose from "mongoose";
 import { connectDb } from "../db.js";
 import {
@@ -15,6 +16,7 @@ import {
   resolveReferenceAgainstMemory,
   trimConversationMessages
 } from "./counterpartyMemory.js";
+import { toProviderMessages } from "./messageMapping.js";
 import {
   buildAiUserRequest,
   extractRequestSlots,
@@ -453,8 +455,8 @@ function withNodeTrace(
 function getUserMessage(state: AssistantGraphState) {
   for (let index = state.messages.length - 1; index >= 0; index -= 1) {
     const message = state.messages[index];
-    if (message.role === "user") {
-      return message.content;
+    if (message.getType() === "human") {
+      return String(message.content);
     }
   }
 
@@ -511,7 +513,7 @@ function buildConversationLoader(conversationStore?: ConversationStore) {
     return {
       messages: trimConversationMessages([
         ...context.messages,
-        { role: "user", content: currentMessage, createdAt: new Date() }
+        new HumanMessage(currentMessage)
       ]),
       counterpartyMemory,
       currentTurn: counterpartyMemory.turn
@@ -542,7 +544,7 @@ function buildIntentClassifier(llmProvider?: AssistantLlmProvider) {
       getUserMessage(state),
       llmProvider,
       {
-        messages: state.messages,
+        messages: toProviderMessages(state.messages),
         counterpartyMemory: state.counterpartyMemory,
         diagnostics: (event) => {
           diagnosticEvents.push(event);
@@ -825,7 +827,7 @@ function buildTransferDraftExtractor(llmProvider?: AssistantLlmProvider) {
       try {
         const rawTransferDraft = await llmProvider.extractTransferDraft({
           userMessage: getUserMessage(state),
-          messages: state.messages,
+          messages: toProviderMessages(state.messages),
           counterpartyMemory: state.counterpartyMemory
         });
         const transferDraft = normalizeTransferDraftOutput(rawTransferDraft);
@@ -1119,7 +1121,7 @@ function buildCounterpartyResolver(llmProvider?: AssistantLlmProvider) {
         const resolution = await llmProvider.resolveCounterpartyReference({
           userMessage: getUserMessage(state),
           intent: state.detectedIntent ?? "unsupported",
-          messages: state.messages,
+          messages: toProviderMessages(state.messages),
           memory: state.counterpartyMemory,
           transferDraft: state.transferDraft
         });
@@ -2904,7 +2906,7 @@ function buildResponseComposer(llmProvider?: AssistantLlmProvider) {
     const assistantToolResults = state.toolResults.map(toAssistantToolResult);
     const safeToolSummaries = state.toolResults.map(toSafeToolSummary);
     const safeConversationSummary = {
-      recentMessages: sanitizeMessagesForLlm(state.messages)
+      recentMessages: sanitizeMessagesForLlm(toProviderMessages(state.messages))
         .slice(-6)
         .map((message) => ({
           role: message.role,
@@ -3239,11 +3241,9 @@ function buildConversationSaver(conversationStore?: ConversationStore) {
       assistantId: state.assistantId,
       messages: trimConversationMessages([
         ...state.messages,
-        {
-          role: "assistant",
-          content: state.responseMessage ?? "I could not process that request.",
-          createdAt: new Date()
-        }
+        new AIMessage(
+          state.responseMessage ?? "I could not process that request."
+        )
       ]),
       memory
     });
@@ -3615,7 +3615,7 @@ export async function runAssistantGraph(
     conversationId: input.conversationId,
     requestId: input.requestId,
     assistantId: input.assistantId ?? DEFAULT_ASSISTANT_ID,
-    messages: [{ role: "user", content: input.message }],
+    messages: [new HumanMessage(input.message)],
     counterpartyMemory: emptyMemory,
     currentTurn: emptyMemory.turn + 1,
     requestedToolNames: [],
