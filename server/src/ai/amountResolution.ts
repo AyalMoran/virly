@@ -1,7 +1,10 @@
 import { Transaction } from "../models/Transaction.js";
+import { evaluateAmountExpr } from "./amountExpr.js";
 import type {
+  AmountExpr,
   AmountResolutionInput,
   AmountResolutionResult,
+  CounterpartyMemory,
   ResolvedAmountRef
 } from "./state.js";
 import { normalizeCounterpartyEmail } from "./tools/counterpartyHelpers.js";
@@ -12,6 +15,157 @@ type AmountReferenceKind =
   | "last_received_transaction"
   | "last_answer_total"
   | "unknown";
+
+/**
+ * Recognizes compositional amount expressions in free text: arithmetic on the
+ * active pending amount ("double it", "half", "×3", "כפול", "חצי", "פי 3") and
+ * the discourse reference "the amount we discussed" / "הסכום שדיברנו עליו".
+ *
+ * Returns null for the legacy contextual vocabulary ("same amount",
+ * "that amount", "what he sent me", ...) so the existing classifier handles it.
+ * The model never produces a money value; this only names a source + operation.
+ */
+export function parseAmountExpression(rawText: string): AmountExpr | null {
+  const text = rawText.trim();
+  if (!text) {
+    return null;
+  }
+  const lower = text.toLowerCase();
+
+  if (
+    /\b(the\s+)?amount\s+(we|you|i)\s+(discussed|talked\s+about|spoke\s+about|agreed\s+on)\b/i.test(
+      lower
+    ) ||
+    /\b(the\s+)?(discussed|agreed)\s+amount\b/i.test(lower) ||
+    /(הסכום שדיברנו(?: עליו)?|הסכום שעליו דיברנו|הסכום שסיכמנו|הסכום שהוזכר)/.test(
+      text
+    )
+  ) {
+    return { base: "discussed_amount" };
+  }
+
+  if (
+    /\b(half(?:\s+of)?(?:\s+(?:it|that|the\s+amount))?|halve(?:\s+it)?)\b/i.test(
+      lower
+    ) ||
+    /(חצי(?:\s+(?:מ?זה|מהסכום|ממנו))?)/.test(text)
+  ) {
+    return { base: "pending_amount", op: "div", operand: 2 };
+  }
+
+  if (
+    /\b(double(?:\s+(?:it|that|the\s+amount))?|twice(?:\s+(?:it|that|the\s+amount))?|two\s+times)\b/i.test(
+      lower
+    ) ||
+    /(כפול(?:\s+(?:שתיים|2))?|פי\s*2|פעמיים)/.test(text)
+  ) {
+    return { base: "pending_amount", op: "mul", operand: 2 };
+  }
+
+  const mulMatch =
+    lower.match(/(?:[x×*]\s*|times\s+)(\d+(?:\.\d+)?)/i) ??
+    text.match(/פי\s*(\d+(?:\.\d+)?)/);
+  if (mulMatch) {
+    const operand = Number(mulMatch[1]);
+    if (Number.isFinite(operand) && operand > 0) {
+      return { base: "pending_amount", op: "mul", operand };
+    }
+  }
+
+  return null;
+}
+
+/**
+ * Resolves the salient "amount we discussed" from memory: the most recently
+ * referenced positive total/amount entity, or the active pending amount.
+ */
+function getSalientDiscussedAmount(
+  memory: CounterpartyMemory
+): number | undefined {
+  const candidates: Array<{ amount: number; recency: number }> = [];
+
+  for (const entity of memory.entities ?? []) {
+    if (
+      (entity.type === "total" || entity.type === "amount") &&
+      typeof entity.amount === "number" &&
+      Number.isFinite(entity.amount) &&
+      entity.amount > 0
+    ) {
+      candidates.push({ amount: entity.amount, recency: entity.turnLastReferenced });
+    }
+  }
+
+  const pending = memory.pendingConfirmation;
+  if (pending?.status === "pending" && pending.amount > 0) {
+    candidates.push({ amount: pending.amount, recency: pending.turnCreated });
+  }
+
+  candidates.sort((left, right) => right.recency - left.recency);
+  return candidates[0]?.amount;
+}
+
+/**
+ * Resolves the base value an AmountExpr draws from before arithmetic.
+ * Only the bases producible by `parseAmountExpression` are handled here.
+ */
+function resolveExprBaseValue(
+  input: AmountResolutionInput,
+  base: AmountExpr["base"]
+): number | undefined {
+  if (base === "pending_amount") {
+    const pending = input.counterpartyMemory.pendingConfirmation;
+    return pending?.status === "pending" && pending.amount > 0
+      ? pending.amount
+      : undefined;
+  }
+
+  if (base === "discussed_amount") {
+    return getSalientDiscussedAmount(input.counterpartyMemory);
+  }
+
+  return undefined;
+}
+
+function resolveAmountExpression(
+  input: AmountResolutionInput,
+  expr: AmountExpr
+): AmountResolutionResult {
+  const baseValue = resolveExprBaseValue(input, expr.base);
+  if (baseValue == null) {
+    return {
+      status: "unresolved",
+      reason:
+        expr.base === "pending_amount"
+          ? "no_pending_amount"
+          : "no_discussed_amount"
+    };
+  }
+
+  try {
+    const amount = evaluateAmountExpr(baseValue, expr);
+    return {
+      status: "resolved",
+      amount: {
+        amount,
+        currency: "ILS",
+        source:
+          expr.base === "discussed_amount"
+            ? "discussed_amount"
+            : "pending_confirmation",
+        confidence: "high",
+        explanation:
+          expr.base === "discussed_amount"
+            ? "Resolved amount from the discussed amount in memory."
+            : "Resolved amount from the active pending transfer."
+      }
+    };
+  } catch {
+    return {
+      status: "unresolved",
+      reason: "invalid_amount_expression"
+    };
+  }
+}
 
 export function classifyAmountReference(rawText: string): AmountReferenceKind {
   const normalized = rawText.toLowerCase();
@@ -193,6 +347,11 @@ export async function resolveContextualAmount(
       status: "unresolved",
       reason: "missing_amount_reference"
     };
+  }
+
+  const expr = parseAmountExpression(amountReferenceText);
+  if (expr) {
+    return resolveAmountExpression(input, expr);
   }
 
   const kind = classifyAmountReference(amountReferenceText);

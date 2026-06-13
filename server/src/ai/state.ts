@@ -514,6 +514,8 @@ export type ResolvedAmountRef = {
   source:
     | "literal_user_message"
     | "last_pending_transfer"
+    | "pending_confirmation"
+    | "discussed_amount"
     | "last_sent_transaction"
     | "last_received_transaction"
     | "last_answer_total_sent"
