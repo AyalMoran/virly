@@ -482,6 +482,32 @@ export type TransferDraftExtraction = TransferDraft & {
   debugEvents?: AiGraphDebugEventInput[];
 };
 
+/**
+ * The base value an amount expression draws from before deterministic
+ * arithmetic is applied. The LLM only ever names a source; deterministic code
+ * resolves it to a concrete number.
+ */
+export type AmountSource =
+  | "literal"
+  | "pending_amount"
+  | "discussed_amount"
+  | "last_received_from"
+  | "last_sent_to"
+  | "answer_total";
+
+export type AmountExprOp = "mul" | "div" | "add" | "sub";
+
+/**
+ * A compositional amount expression: a base source plus an optional arithmetic
+ * operation. All arithmetic is performed by `evaluateAmountExpr`; the model
+ * never emits the resulting money value.
+ */
+export type AmountExpr = {
+  base: AmountSource;
+  op?: AmountExprOp;
+  operand?: number;
+};
+
 export type ResolvedAmountRef = {
   amount: number;
   currency: "ILS";
