@@ -32,7 +32,8 @@ export function buildAgentNode(model: ChatOpenAI) {
       knownCounterparties: cfg.knownCounterparties,
       pendingConfirmation: cfg.pendingConfirmation,
       now: cfg.now,
-      timezone: cfg.timezone
+      timezone: cfg.timezone,
+      runningSummary: cfg.runningSummary
     });
 
     const aiMessage = await boundModel.invoke(

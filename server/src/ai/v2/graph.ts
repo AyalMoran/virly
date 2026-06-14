@@ -31,6 +31,18 @@ import type {
 } from "../state.js";
 
 import { buildAgentNode } from "./agent.js";
+import {
+  resolveLongTermStore,
+  readConversationSummary,
+  saveConversationSummary,
+  upsertInteractedCounterparties,
+  withLongTermCounterparties
+} from "./memory/loop.js";
+import {
+  foldRollingSummary,
+  SUMMARY_BUDGET_MESSAGES,
+  trimToWindow
+} from "./memory/summary.js";
 import { createV2ChatModel, isV2ModelConfigured } from "./model.js";
 import { finalizeNode } from "./nodes/finalize.js";
 import { persistNode } from "./nodes/persist.js";
@@ -139,6 +151,21 @@ export async function runAssistantGraphV2(
   const memory = loaded.memory ?? createEmptyCounterpartyMemory();
   const priorMessages = loaded.messages ?? [];
 
+  // Phase 6: long-term memory + rolling summary (all no-ops without a store).
+  const longTermStore = resolveLongTermStore();
+  const priorSummary = longTermStore
+    ? await readConversationSummary(longTermStore, userId, input.conversationId)
+    : undefined;
+  const folded =
+    priorMessages.length > SUMMARY_BUDGET_MESSAGES
+      ? await foldRollingSummary(priorMessages, priorSummary, createV2ChatModel())
+      : { runningSummary: priorSummary, recentMessages: priorMessages };
+  const knownCounterparties = await withLongTermCounterparties(
+    longTermStore,
+    userId,
+    buildKnownCounterparties(memory)
+  );
+
   const turnOutcome: V2TurnOutcome = { uiBlocks: [] };
   const configurable: V2Configurable = {
     userId,
@@ -153,14 +180,15 @@ export async function runAssistantGraphV2(
     transferModificationService,
     pendingConfirmation: memory.pendingConfirmation ?? null,
     turnOutcome,
-    knownCounterparties: buildKnownCounterparties(memory)
+    knownCounterparties,
+    runningSummary: folded.runningSummary
   };
 
   const turnMessage = new HumanMessage(input.message);
   let finalState: V2AgentStateType;
   try {
     finalState = (await getGraph().invoke(
-      { messages: [...priorMessages, turnMessage] },
+      { messages: [...folded.recentMessages, turnMessage] },
       { configurable, recursionLimit: 25 }
     )) as V2AgentStateType;
   } catch {
@@ -185,15 +213,32 @@ export async function runAssistantGraphV2(
       turn: nextTurn,
       pendingConfirmation: nextPending
     };
-    // Persist a compact, OpenAI-valid transcript (user + final assistant text),
-    // never raw tool round-trips, so a naive trim window can't orphan a tool pair.
+    // Persist a compact, OpenAI-valid, BOUNDED transcript (recent window + this
+    // turn's user + final assistant text); never raw tool round-trips.
     await store.save({
       userId,
       conversationId: input.conversationId,
       assistantId,
-      messages: [...priorMessages, turnMessage, new AIMessage(responseMessage)],
+      messages: trimToWindow([
+        ...folded.recentMessages,
+        turnMessage,
+        new AIMessage(responseMessage)
+      ]),
       memory: nextMemory
     });
+
+    // Phase 6: persist long-term memory (counterparties + rolling summary).
+    if (longTermStore) {
+      await upsertInteractedCounterparties(longTermStore, userId, nextMemory);
+      if (folded.runningSummary) {
+        await saveConversationSummary(
+          longTermStore,
+          userId,
+          input.conversationId,
+          folded.runningSummary
+        );
+      }
+    }
   }
 
   if (userId && options.auditLogger) {
