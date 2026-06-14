@@ -5,7 +5,11 @@ import { assistantIds, DEFAULT_ASSISTANT_ID } from "../ai/assistants.js";
 import { config } from "../config.js";
 import { runAssistantGraph } from "../ai/graph.js";
 import { runAssistant } from "../ai/runAssistant.js";
-import { invokeV2Resumable, resumeV2Confirmation } from "../ai/v2/hitl.js";
+import {
+  invokeV2Resumable,
+  resumeV2Confirmation,
+  streamAssistantV2
+} from "../ai/v2/hitl.js";
 import { AiPendingTransfer } from "../models/AiPendingTransfer.js";
 import { createConfiguredAssistantLlmProvider } from "../ai/llm.js";
 import {
@@ -165,23 +169,50 @@ router.post("/chat/stream", requireAuth, async (req, res, next) => {
 
     sendStatusPhase("accepted");
 
-    const result = await runAssistant(
-      {
-        userId: req.userId,
-        conversationId,
-        requestId,
-        assistantId: payload.assistantId,
-        message: payload.message
-      },
-      {
-        auditLogger: writeAiAuditLog,
-        llmProvider: assistantLlmProvider,
-        conversationStore: mongoConversationStore,
-        onProgress: async ({ phase }) => {
-          sendStatusPhase(phase);
+    const streamInput = {
+      userId: req.userId,
+      conversationId,
+      requestId,
+      assistantId: payload.assistantId,
+      message: payload.message
+    };
+    const streamOptions = {
+      auditLogger: writeAiAuditLog,
+      llmProvider: assistantLlmProvider,
+      conversationStore: mongoConversationStore
+    };
+
+    if (config.ai.graphVersion === "v2") {
+      // v2: stream the graph (token + semantic status + block events), then a
+      // final result. Additive to the existing accepted/status/result/completed.
+      for await (const envelope of streamAssistantV2(streamInput, streamOptions)) {
+        if (envelope.event === "result") {
+          const responseResult = await withVideoSessionCta(
+            req,
+            envelope.data,
+            payload.message
+          );
+          writeSseEvent(res, "result", {
+            type: "result",
+            conversationId,
+            assistantId: responseResult.assistantId,
+            result: toChatResponse(responseResult)
+          });
+        } else {
+          writeSseEvent(res, envelope.event, { type: envelope.event, ...envelope.data });
         }
       }
-    );
+      sendStatusPhase("completed");
+      res.end();
+      return;
+    }
+
+    const result = await runAssistant(streamInput, {
+      ...streamOptions,
+      onProgress: async ({ phase }) => {
+        sendStatusPhase(phase);
+      }
+    });
     const responseResult = await withVideoSessionCta(req, result, payload.message);
 
     writeSseEvent(res, "result", {

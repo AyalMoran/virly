@@ -18,6 +18,7 @@ import { config } from "../../../config.js";
 import { getToolDisplayData } from "../../toolResults.js";
 import type { TransferDraft } from "../../state.js";
 import { transferConfirmationBlock } from "../blocks.js";
+import { statusWriter } from "../streamEvents.js";
 
 /**
  * Enforce the per-transfer limit in the single money path (closes the v1 gap
@@ -62,6 +63,7 @@ async function resolveRecipientEmail(
 export const prepareTransferTool = tool(
   async (args, config) => {
     const cfg = getConfigurable(config);
+    statusWriter(config)?.({ kind: "status", label: "Preparing your confirmation" });
     const service = cfg.transferPreparationService;
     if (!service) {
       return "Transfer preparation is unavailable right now.";
