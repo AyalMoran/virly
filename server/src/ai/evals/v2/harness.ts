@@ -9,7 +9,7 @@
  * current graph; when the V2 graph ships behind `VIRLY_AI_GRAPH_VERSION`, only
  * this function changes and the whole suite re-targets v2.
  */
-import { runAssistantGraph } from "../../graph.js";
+import { runAssistant } from "../../runAssistant.js";
 import { trimConversationMessages } from "../../counterpartyMemory.js";
 import {
   parseAmountExpression,
@@ -90,12 +90,16 @@ function createSeededStore(emails: string[]): ConversationStore {
   };
 }
 
-/** The single entrypoint indirection for the V1 -> V2 cutover. */
+/**
+ * The single entrypoint indirection for the V1 -> V2 cutover. `runAssistant`
+ * dispatches on `VIRLY_AI_GRAPH_VERSION`, so setting the flag to `v2`
+ * re-targets this whole suite at the V2 graph with no other change.
+ */
 export function runAssistantUnderTest(
   input: RunAssistantInput,
   options: RunAssistantOptions
 ): Promise<RunAssistantResult> {
-  return runAssistantGraph(input, options);
+  return runAssistant(input, options);
 }
 
 export type V2TurnRun = {

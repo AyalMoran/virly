@@ -3,6 +3,7 @@ import { Router, type Response } from "express";
 import { z } from "zod";
 import { assistantIds, DEFAULT_ASSISTANT_ID } from "../ai/assistants.js";
 import { runAssistantGraph } from "../ai/graph.js";
+import { runAssistant } from "../ai/runAssistant.js";
 import { createConfiguredAssistantLlmProvider } from "../ai/llm.js";
 import {
   buildVideoSessionCtaBlock,
@@ -106,7 +107,7 @@ router.post("/chat", requireAuth, async (req, res, next) => {
     const requestIdHeader = req.header("x-request-id");
     const requestId = requestIdHeader?.trim() || randomUUID();
 
-    const result = await runAssistantGraph(
+    const result = await runAssistant(
       {
         userId: req.userId,
         conversationId,
@@ -157,7 +158,7 @@ router.post("/chat/stream", requireAuth, async (req, res, next) => {
 
     sendStatusPhase("accepted");
 
-    const result = await runAssistantGraph(
+    const result = await runAssistant(
       {
         userId: req.userId,
         conversationId,

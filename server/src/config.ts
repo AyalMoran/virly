@@ -114,7 +114,14 @@ export const config = {
     }),
     debugTrace: getBooleanEnv("VIRLY_AI_DEBUG_TRACE", {
       defaultValue: false
-    })
+    }),
+    // Selects the assistant graph implementation. "v1" is the deterministic-first
+    // graph (server/src/ai/graph.ts); "v2" is the LLM-first agent loop
+    // (server/src/ai/v2/). Defaults to v1 so v2 ships dark behind the flag.
+    graphVersion: (() => {
+      const raw = getStringEnv("VIRLY_AI_GRAPH_VERSION", "v1").trim().toLowerCase();
+      return raw === "v2" ? "v2" : "v1";
+    })() as "v1" | "v2"
   },
   fx: {
     provider: getStringEnv("VIRLY_FX_PROVIDER", "exchangerate-api", {
