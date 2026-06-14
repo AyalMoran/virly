@@ -139,7 +139,7 @@ export async function runAssistantGraphV2(
   const memory = loaded.memory ?? createEmptyCounterpartyMemory();
   const priorMessages = loaded.messages ?? [];
 
-  const turnOutcome: V2TurnOutcome = {};
+  const turnOutcome: V2TurnOutcome = { uiBlocks: [] };
   const configurable: V2Configurable = {
     userId,
     conversationId: input.conversationId,
@@ -213,6 +213,7 @@ export async function runAssistantGraphV2(
     message: responseMessage,
     responseMessage,
     responseFormatVersion: assistantResponseFormatVersion,
+    ...(turnOutcome.uiBlocks.length > 0 ? { responseBlocks: turnOutcome.uiBlocks } : {}),
     conversationId: input.conversationId,
     assistantId,
     intent,

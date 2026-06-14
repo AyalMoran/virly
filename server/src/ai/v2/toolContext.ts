@@ -19,6 +19,7 @@ import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { maskEmail } from "../counterpartyMemory.js";
 import { getToolDisplayData } from "../toolResults.js";
 import type { AssistantId } from "../assistants.js";
+import type { AssistantResponseBlock } from "../responseBlocks.js";
 import type {
   AssistantToolExecutors,
   ClarificationRequest,
@@ -41,6 +42,8 @@ export type V2TurnOutcome = {
   confirmation?: TransferConfirmation;
   clarification?: ClarificationRequest;
   supersededConfirmationId?: string;
+  /** Structured UI cards the tools produced this turn (design §5.2, Phase 8). */
+  uiBlocks: AssistantResponseBlock[];
 };
 
 /** Everything a v2 node/tool needs for one turn, carried in config.configurable. */
