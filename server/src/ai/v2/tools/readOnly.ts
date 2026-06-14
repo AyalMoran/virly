@@ -14,6 +14,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
 import type { AssistantToolName } from "../../state.js";
+import { buildBlocksFromResult } from "../blocks.js";
 import {
   baseToolContext,
   getConfigurable,
@@ -34,6 +35,8 @@ async function callExecutor(
   }
   try {
     const result = await executor({ ...baseToolContext(cfg), ...overrides });
+    // Structured cards render the figures authoritatively (Phase 8).
+    cfg.turnOutcome.uiBlocks.push(...buildBlocksFromResult(name, result));
     return renderToolResult(result);
   } catch (error) {
     return `That lookup failed: ${error instanceof Error ? error.message : "unknown error"}.`;

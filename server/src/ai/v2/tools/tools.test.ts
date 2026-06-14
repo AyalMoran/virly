@@ -21,7 +21,7 @@ import {
 } from "./readOnly.js";
 import { modifyPendingTransferTool, prepareTransferTool } from "./money.js";
 
-function makeConfig(message: string, outcome: V2TurnOutcome = {}) {
+function makeConfig(message: string, outcome: V2TurnOutcome = { uiBlocks: [] }) {
   const configurable: V2Configurable = {
     userId: WORLD.userId,
     conversationId: "tools-test",
@@ -94,7 +94,7 @@ describe("v2 read-only tool wrappers (DB-free world)", () => {
 
 describe("v2 money tools build cards without executing (DB-free world)", () => {
   test("prepareTransfer records a confirmation card in the turn outcome", async () => {
-    const outcome: V2TurnOutcome = {};
+    const outcome: V2TurnOutcome = { uiBlocks: [] };
     const config = makeConfig("send Dan 320", outcome);
     const text = await prepareTransferTool.invoke(
       { recipientEmail: "dan@example.com", amount: 320 },
@@ -107,7 +107,7 @@ describe("v2 money tools build cards without executing (DB-free world)", () => {
   });
 
   test("prepareTransfer without a recipient asks for clarification, no card", async () => {
-    const outcome: V2TurnOutcome = {};
+    const outcome: V2TurnOutcome = { uiBlocks: [] };
     const config = makeConfig("send 250", outcome);
     await prepareTransferTool.invoke({ amount: 250 }, config);
 
@@ -116,7 +116,7 @@ describe("v2 money tools build cards without executing (DB-free world)", () => {
   });
 
   test("modifyPendingTransfer supersedes the active card with the new amount", async () => {
-    const outcome: V2TurnOutcome = {};
+    const outcome: V2TurnOutcome = { uiBlocks: [] };
     const config = makeConfig("make it 400", outcome);
     config.configurable.pendingConfirmation = {
       confirmationId: "pending-transfer-1",

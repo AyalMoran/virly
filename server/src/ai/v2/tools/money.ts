@@ -16,6 +16,7 @@ import { z } from "zod";
 
 import { getToolDisplayData } from "../../toolResults.js";
 import type { TransferDraft } from "../../state.js";
+import { transferConfirmationBlock } from "../blocks.js";
 import {
   baseToolContext,
   getConfigurable,
@@ -83,6 +84,7 @@ export const prepareTransferTool = tool(
     }
 
     cfg.turnOutcome.confirmation = result.confirmation;
+    cfg.turnOutcome.uiBlocks.push(transferConfirmationBlock(result.confirmation));
     return (
       `Prepared a confirmation card: ₪${result.confirmation.amount} to ` +
       `${result.confirmation.recipientEmail} (card ${result.confirmation.id}). ` +
@@ -154,6 +156,7 @@ export const modifyPendingTransferTool = tool(
 
     cfg.turnOutcome.confirmation = result.confirmation;
     cfg.turnOutcome.supersededConfirmationId = result.supersededConfirmationId;
+    cfg.turnOutcome.uiBlocks.push(transferConfirmationBlock(result.confirmation));
     return (
       `Updated the card: ₪${result.confirmation.amount} to ` +
       `${result.confirmation.recipientEmail} (card ${result.confirmation.id}, ` +
