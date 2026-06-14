@@ -281,6 +281,7 @@ export type ToolResultMetadata = {
 export type ToolDisplayData = {
   summary: string;
   userSummary?: string;
+  userSummaryHe?: string;
   metadata: ToolResultMetadata;
 };
 

@@ -2202,8 +2202,9 @@ function composeDeterministicResponse(state: AssistantGraphState) {
     intent === "pending_confirmation_status"
   ) {
     if (intent === "pending_confirmation_status" && state.toolResults.length > 0) {
+      const locale = isHebrew ? "he" as const : undefined;
       const summary = state.toolResults
-        .map((result) => getUserVisibleSummary(result))
+        .map((result) => getUserVisibleSummary(result, locale))
         .join(" ");
       return isHebrew ? `מצאתי את פרטי האישור הממתין: ${summary}` : summary;
     }
@@ -2255,8 +2256,9 @@ function composeDeterministicResponse(state: AssistantGraphState) {
       : "I could not find account information for that request. Please try again from your authenticated session.";
   }
 
+  const locale = isHebrew ? "he" as const : undefined;
   const summary = state.toolResults
-    .map((result) => getUserVisibleSummary(result))
+    .map((result) => getUserVisibleSummary(result, locale))
     .join(" ");
   return isHebrew ? `מצאתי: ${summary}` : summary;
 }

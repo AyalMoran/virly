@@ -58,6 +58,7 @@ export function createToolResult<TData>(input: {
   data: TData | null;
   summary: string;
   userSummary?: string;
+  userSummaryHe?: string;
   metadata?: ToolResultMetadata;
   memoryUpdates?: RuntimeToolResult<TData>["memoryUpdates"];
 }): RuntimeToolResult<TData> {
@@ -68,6 +69,7 @@ export function createToolResult<TData>(input: {
     displayData: {
       summary: input.summary,
       userSummary: input.userSummary,
+      userSummaryHe: input.userSummaryHe,
       metadata: input.metadata ?? {}
     },
     memoryUpdates: input.memoryUpdates
@@ -146,8 +148,11 @@ export function toSafeToolSummary(
   };
 }
 
-export function getUserVisibleSummary(result: RuntimeToolResult) {
+export function getUserVisibleSummary(result: RuntimeToolResult, locale?: "he") {
   const displayData = getToolDisplayData(result);
+  if (locale === "he" && displayData.userSummaryHe) {
+    return displayData.userSummaryHe;
+  }
   return displayData.userSummary ?? displayData.summary;
 }
 

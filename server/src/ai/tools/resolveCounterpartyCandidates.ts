@@ -98,6 +98,7 @@ function createResolvedMemoryCounterpartyResult(
     },
     summary: `Resolved counterparty from conversation memory: ${displayName} (${maskedLabel}).`,
     userSummary: `Resolved counterparty: ${userLabel}.`,
+    userSummaryHe: `נמצא נמען: ${userLabel}.`,
     metadata: {
       recordCount: 1,
       resolutionStatus: "resolved",
@@ -300,6 +301,7 @@ export async function resolveCounterpartyCandidates(
       },
       summary: `Resolved counterparty: ${resolved.displayName} (${resolved.maskedLabel}).`,
       userSummary: `Resolved counterparty: ${resolved.userLabel}.`,
+      userSummaryHe: `נמצא נמען: ${resolved.userLabel}.`,
       metadata: {
         recordCount: 1,
         resolutionStatus: "resolved",

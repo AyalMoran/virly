@@ -83,6 +83,7 @@ export async function getCounterpartySummary(
   );
   const lastTransaction = transactions[0];
   const lastDirection = lastTransaction?.type === "debit" ? "sent" : "received";
+  const lastDirectionHe = lastTransaction?.type === "debit" ? "שלחת" : "קיבלת";
   const net = totals.totalReceived - totals.totalSent;
 
   return createToolResult({
@@ -107,6 +108,12 @@ export async function getCounterpartySummary(
       `${totals.receivedCount} transfer${totals.receivedCount === 1 ? "" : "s"}, ` +
       `net ${net.toFixed(2)} ILS. Last interaction: ${lastDirection} ` +
       `${(lastTransaction?.amount ?? 0).toFixed(2)} ILS.`,
+    userSummaryHe:
+      `היסטוריה מול ${display.userLabel}: שלחת ${totals.totalSent.toFixed(2)} ₪ ` +
+      `ב-${totals.sentCount} העברות, ` +
+      `קיבלת ${totals.totalReceived.toFixed(2)} ₪ ב-${totals.receivedCount} העברות, ` +
+      `נטו ${net.toFixed(2)} ₪. אינטראקציה אחרונה: ${lastDirectionHe} ` +
+      `${(lastTransaction?.amount ?? 0).toFixed(2)} ₪.`,
     metadata: {
       recordCount: transactions.length,
       amount: net,
