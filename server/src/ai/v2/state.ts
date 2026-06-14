@@ -22,7 +22,17 @@ export const V2AgentState = Annotation.Root({
   /** A clarifying question to surface, if the turn needs more from the user. */
   clarification: Annotation<ClarificationRequest | undefined>(),
   /** The id of a card this turn's modification superseded. */
-  supersededConfirmationId: Annotation<string | undefined>()
+  supersededConfirmationId: Annotation<string | undefined>(),
+
+  // --- Phase 5: human-in-the-loop transfer execution (resumable graph only) ---
+  /** Filled on resume from the confirmation card's Confirm/Deny click. */
+  confirmationOutcome: Annotation<"confirmed" | "denied" | undefined>(),
+  /** The resume payload (version + idempotency) carried to executeTransfer. */
+  resumeMeta: Annotation<
+    { version: number; idempotencyKey?: string } | undefined
+  >(),
+  /** The backend transfer-execution result, surfaced back to the API. */
+  transferResult: Annotation<unknown | undefined>()
 });
 
 export type V2AgentStateType = typeof V2AgentState.State;

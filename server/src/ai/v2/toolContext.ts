@@ -60,6 +60,14 @@ export type V2Configurable = {
   executors: AssistantToolExecutors;
   transferPreparationService?: TransferPreparationService;
   transferModificationService?: TransferModificationService;
+  /** Executes a confirmed/denied transfer on resume (Phase 5); default = backend service. */
+  transferResponseService?: (input: {
+    userId: string;
+    pendingTransferId: string;
+    action: "confirm" | "deny";
+    version: number;
+    idempotencyKey?: string;
+  }) => Promise<unknown>;
   /** The active pending confirmation card from memory, if a transfer is in flight. */
   pendingConfirmation?: PendingConfirmationMemory | null;
   /** Mutable per-turn sink for money-tool outcomes. */

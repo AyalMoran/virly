@@ -14,9 +14,25 @@
 import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
+import { config } from "../../../config.js";
 import { getToolDisplayData } from "../../toolResults.js";
 import type { TransferDraft } from "../../state.js";
 import { transferConfirmationBlock } from "../blocks.js";
+
+/**
+ * Enforce the per-transfer limit in the single money path (closes the v1 gap
+ * where limits were informational). Returns a localized refusal message when the
+ * amount is over the limit, otherwise null.
+ */
+function overPerTransferLimit(amount: number, locale: string): string | null {
+  const limit = config.ai.perTransferLimit;
+  if (amount > limit) {
+    return locale === "he"
+      ? `הסכום ₪${amount} חורג מהמגבלה לפעולה (₪${limit}). בקש/י סכום נמוך יותר.`
+      : `₪${amount} is over the per-transfer limit of ₪${limit}. Ask the user for a lower amount.`;
+  }
+  return null;
+}
 import {
   baseToolContext,
   getConfigurable,
@@ -49,6 +65,16 @@ export const prepareTransferTool = tool(
     const service = cfg.transferPreparationService;
     if (!service) {
       return "Transfer preparation is unavailable right now.";
+    }
+
+    const overLimit = overPerTransferLimit(args.amount, cfg.locale);
+    if (overLimit) {
+      cfg.turnOutcome.clarification = {
+        reason: "ambiguous_amount",
+        message: overLimit,
+        expectedReplyType: "amount"
+      };
+      return overLimit;
     }
 
     let recipientEmail = args.recipientEmail?.trim().toLowerCase();
@@ -119,6 +145,18 @@ export const modifyPendingTransferTool = tool(
     }
     if (!pending) {
       return "There is no active confirmation card to modify. Prepare a transfer first.";
+    }
+
+    if (typeof args.amount === "number") {
+      const overLimit = overPerTransferLimit(args.amount, cfg.locale);
+      if (overLimit) {
+        cfg.turnOutcome.clarification = {
+          reason: "ambiguous_amount",
+          message: overLimit,
+          expectedReplyType: "amount"
+        };
+        return overLimit;
+      }
     }
 
     let recipientEmail = args.recipientEmail?.trim().toLowerCase();

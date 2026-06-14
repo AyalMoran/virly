@@ -2,8 +2,11 @@ import { randomUUID } from "crypto";
 import { Router, type Response } from "express";
 import { z } from "zod";
 import { assistantIds, DEFAULT_ASSISTANT_ID } from "../ai/assistants.js";
+import { config } from "../config.js";
 import { runAssistantGraph } from "../ai/graph.js";
 import { runAssistant } from "../ai/runAssistant.js";
+import { invokeV2Resumable, resumeV2Confirmation } from "../ai/v2/hitl.js";
+import { AiPendingTransfer } from "../models/AiPendingTransfer.js";
 import { createConfiguredAssistantLlmProvider } from "../ai/llm.js";
 import {
   buildVideoSessionCtaBlock,
@@ -107,20 +110,24 @@ router.post("/chat", requireAuth, async (req, res, next) => {
     const requestIdHeader = req.header("x-request-id");
     const requestId = requestIdHeader?.trim() || randomUUID();
 
-    const result = await runAssistant(
-      {
-        userId: req.userId,
-        conversationId,
-        requestId,
-        assistantId: payload.assistantId,
-        message: payload.message
-      },
-      {
-        auditLogger: writeAiAuditLog,
-        llmProvider: assistantLlmProvider,
-        conversationStore: mongoConversationStore
-      }
-    );
+    const runInput = {
+      userId: req.userId,
+      conversationId,
+      requestId,
+      assistantId: payload.assistantId,
+      message: payload.message
+    };
+    const runOptions = {
+      auditLogger: writeAiAuditLog,
+      llmProvider: assistantLlmProvider,
+      conversationStore: mongoConversationStore
+    };
+    // v2 routes the turn through the resumable HITL graph (transfers pause via
+    // interrupt()); v1 keeps its existing graph. Response contract is identical.
+    const result =
+      config.ai.graphVersion === "v2"
+        ? await invokeV2Resumable(runInput, runOptions)
+        : await runAssistant(runInput, runOptions);
     const responseResult = await withVideoSessionCta(req, result, payload.message);
 
     return res.json(toChatResponse(responseResult));
@@ -208,12 +215,44 @@ router.post("/confirmations/:id", requireAuth, async (req, res, next) => {
     const payload = confirmationSchema.parse(req.body);
     const idempotencyHeader = req.header("idempotency-key")?.trim();
     const pendingTransferId = confirmationIdSchema.parse(req.params.id);
+    const idempotencyKey = payload.idempotencyKey ?? idempotencyHeader;
+
+    // v2: resume the checkpointed graph with the user's Confirm/Deny (the only
+    // path to money execution). Falls back to the direct service if no paused
+    // graph exists for this card. Response shape is unchanged.
+    if (config.ai.graphVersion === "v2") {
+      const pending = await AiPendingTransfer.findOne({
+        _id: pendingTransferId,
+        userId: req.userId
+      })
+        .select("conversationId")
+        .lean();
+      if (pending?.conversationId) {
+        try {
+          const resumed = await resumeV2Confirmation({
+            userId: req.userId,
+            conversationId: pending.conversationId,
+            payload: {
+              action: payload.action,
+              version: payload.version,
+              idempotencyKey
+            }
+          });
+          if (resumed) {
+            return res.json(resumed);
+          }
+        } catch {
+          // No resumable checkpoint for this card — fall through to the service.
+        }
+      }
+    }
+
     const result = await respondToAiPendingTransfer({
       userId: req.userId,
       pendingTransferId,
       action: payload.action,
       version: payload.version,
-      idempotencyKey: payload.idempotencyKey ?? idempotencyHeader
+      idempotencyKey
     });
 
     return res.json(result);
