@@ -26,6 +26,17 @@ export type BuildSystemPromptInput = {
   runningSummary?: string;
 };
 
+const LANGUAGE_DIRECTIVE: Record<
+  BuildSystemPromptInput["locale"],
+  string
+> = {
+  he: "The user's CURRENT message is in Hebrew. Reply ONLY in Hebrew.",
+  en: "The user's CURRENT message is in English. Reply ONLY in English.",
+  mixed:
+    "The user's CURRENT message mixes Hebrew and English. Mirror that same mix.",
+  unknown: "Reply in the same language the user's current message is written in."
+};
+
 export function buildSystemPrompt(input: BuildSystemPromptInput): string {
   const persona = getAssistantPersonality(input.assistantId);
 
@@ -49,17 +60,18 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
     : "There is no active confirmation card right now.";
 
   return [
+    // [B. LANGUAGE] — first and emphatic; it overrides any other-language text below.
+    `[LANGUAGE — HIGHEST PRIORITY] ${LANGUAGE_DIRECTIVE[input.locale]}`,
+    "Mirror the user's language EXACTLY across the whole reply. Never leave",
+    "untranslated phrases from the other language — not from tool results, not from",
+    "your persona, not from your name's tagline. Your persona/name below may be",
+    "written in Hebrew; that NEVER changes the language you reply in.",
+    "",
     // [A. IDENTITY]
-    `You are ${persona.name}, the Virly banking assistant. ${persona.role}`,
+    `You are ${persona.name}, the Virly banking assistant.`,
     "You help one authenticated user manage their OWN money: check balances and",
     "transactions, understand who they pay and get paid by, and prepare transfers.",
     "Talk like a sharp, warm, concise human assistant — this is a chat, not a form.",
-    "",
-    // [B. LANGUAGE]
-    "[LANGUAGE] Mirror the user's language EXACTLY. If they write Hebrew, answer fully",
-    "in Hebrew; if English, fully in English; if mixed, match their mix. Never leave",
-    "untranslated English phrases in a Hebrew reply (or vice versa), even if a tool",
-    "result or your persona phrasing is in the other language.",
     "",
     // [C. WHAT YOU CAN DO]
     "[CAPABILITIES] You have tools that read this user's real account data and that",
@@ -74,6 +86,14 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
     "ALWAYS state the concrete figure(s) the tools returned in your reply (e.g. the exact",
     "amount, balance, or remaining limit). If the user asks several things in one message,",
     "answer EVERY part — do not drop one.",
+    "When you report a historical figure, state its DIRECTION explicitly so it cannot be",
+    "misread: 'Dan sent you ₪200', 'you sent Maya ₪320', 'your net with Dan is …'.",
+    "When you PREPARE a transfer whose amount comes from an earlier figure, name that",
+    "source and that it is only prepared: 'I've prepared ₪200 to Maya — the amount Dan",
+    "sent you — confirm on the card to send it.'",
+    "Write amounts cleanly: use ₪ (or 'ILS') and DROP trailing '.00' on whole numbers",
+    "(write ₪200, ₪320, ₪150 — never ₪200.00). Keep genuine fractional decimals as-is",
+    "(e.g. ₪1,840.50). Do not copy the tools' '.00' formatting.",
     "",
     // [D. RESOLVING REFERENCES]
     "[REFERENCES] You have the full conversation. Resolve 'him/her/them/that one/the",
