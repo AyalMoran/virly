@@ -40,8 +40,8 @@ probing the behaviours the V2 design promises:
 | Dimension | Example turn |
 | --- | --- |
 | Coreference / pronouns | "And to Dan?", "send **him** the same…", "תעביר **לו**…" |
-| Contextual amounts | "the same amount I sent Maya", "make it **double**" |
-| Amount vs recipient separation (F2) | "send **Maya** the same amount **Dan** sent me" → 200 to Maya, not Dan |
+| Contextual amounts | "the same amount I sent Rani", "make it **double**" |
+| Amount vs recipient separation (F2) | "send **Rani** the same amount **Dan** sent me" → 200 to Rani, not Dan |
 | Multiple requests in one turn | "What's my balance, **and** how much can I still send today?" |
 | Ordinal references | "tell me more about **the second one**" |
 | Missing-slot clarification + resume | "Send 250." → "to Noa" |
@@ -57,7 +57,7 @@ probing the behaviours the V2 design promises:
   packs. A dedicated test additionally runs the flagship scenario across **all**
   assistant ids and asserts the factual outcome is identical.
 - **DB-free world.** `world.ts` / `worldTools.ts` define a known, multi-counterparty
-  world (Maya/Dan/Noa with distinct totals, a fixed ledger, balance, limits) as
+  world (Rani/Dan/Noa with distinct totals, a fixed ledger, balance, limits) as
   fake tools. The **only** live dependency is the LLM; no Mongo.
 - **LLM-as-judge.** `judge.ts` grades faithfulness + language mirroring only — it
   is explicitly told to ignore tone and to never fail a reply just because a
@@ -87,12 +87,12 @@ localising a real gap (these are the bugs V2 must fix):
 
 - **Multiple requests dropped.** "balance **and** daily remaining" answered only
   the daily figure (880), omitting the balance (1,840.50).
-- **Hebrew comprehension.** "כמה שלחתי למאיה?" returned English *"Which recipient
+- **Hebrew comprehension.** "כמה שלחתי לרני?" returned English *"Which recipient
   should I use for that question?"* instead of the 320 total.
 - **Language leak / mirroring.** An English question drew a Hebrew reply
   ("בדיקה זריזה…") — personality phrases overriding the user's language.
 - **Recipient/contextual-amount resolution.** "Send Noa 25", "send him the same I
-  sent Maya", and the F2 case often produced **no confirmation card**.
+  sent Rani", and the F2 case often produced **no confirmation card**.
 - **Clarification resume.** "Send 250." → "to Noa" sometimes loses the amount and
   re-asks instead of preparing the 250→Noa card (resume only covers `amount_scope`
   today). Behaviour is also **non-deterministic** across runs — itself a finding.

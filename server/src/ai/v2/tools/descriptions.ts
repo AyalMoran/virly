@@ -35,19 +35,19 @@ export const FIND_COUNTERPARTY_DESC =
   "to one or more known counterparties. Call this BEFORE counterparty-specific tools " +
   "when you don't already have the email from context or the known-counterparties list. " +
   "Returns 0, 1, or several candidates. If several or none, ASK the user which one — " +
-  "never guess. Examples: 'Maya', 'the second person we discussed', 'him', 'dan@x.com'.";
+  "never guess. Examples: 'Rani', 'the second person we discussed', 'him', 'dan@x.com'.";
 
 export const GET_COUNTERPARTY_SUMMARY_DESC =
   "Overall relationship with one counterparty: total sent, total received, net, count, " +
-  "last interaction. Use for 'what's my history with Maya', 'summarize my activity with Dan'.";
+  "last interaction. Use for 'what's my history with Rani', 'summarize my activity with Dan'.";
 
 export const GET_COUNTERPARTY_TRANSACTIONS_DESC =
-  "List transactions with one counterparty. Use for 'show transfers to Maya', 'payments " +
+  "List transactions with one counterparty. Use for 'show transfers to Rani', 'payments " +
   "with Dan', 'show me those' after naming a person.";
 
 export const GET_TOTALS_DESC =
   "Total money sent to / received from / net with one counterparty. Use for 'how much " +
-  "did I send Dan', 'how much did Maya send me', 'what's the net between us', " +
+  "did I send Dan', 'how much did Rani send me', 'what's the net between us', " +
   "'כמה העברתי לו', 'מה הנטו בינינו'. net = received - sent. Pass the counterparty's " +
   "email (from the known-counterparties list or findCounterparty) and the direction.";
 

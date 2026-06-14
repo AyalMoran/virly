@@ -43,8 +43,8 @@ const WORLD_FACTS = {
   account: WORLD.account,
   limits: WORLD.limits,
   totals: {
-    sentToMaya: WORLD.counterparties.maya.totalSent,
-    receivedFromMaya: WORLD.counterparties.maya.totalReceived,
+    sentToRani: WORLD.counterparties.rani.totalSent,
+    receivedFromRani: WORLD.counterparties.rani.totalReceived,
     sentToDan: WORLD.counterparties.dan.totalSent,
     receivedFromDan: WORLD.counterparties.dan.totalReceived,
     netWithDan: WORLD.counterparties.dan.totalReceived - WORLD.counterparties.dan.totalSent,
@@ -99,7 +99,7 @@ describe("V2 live conformance (LLM)", { skip }, () => {
     "personality independence: factual outcome identical across all assistants",
     { timeout: 360_000 },
     async () => {
-      const scenario = v2Scenarios[0]; // ends in: "send him the same I sent Maya" -> Dan, 320
+      const scenario = v2Scenarios[0]; // ends in: "send him the same I sent Rani" -> Dan, 320
       const outcomes: Record<string, string> = {};
 
       for (const id of assistantIds) {

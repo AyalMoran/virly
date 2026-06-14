@@ -2060,7 +2060,7 @@ Implementation summary:
   - requires `VIRLY_AI_EVAL_MONGO_URI`
   - seeds a minimal dataset with:
     - one authenticated eval user
-    - named counterparties for Alex, Daniel, Sarah, and Maya
+    - named counterparties for Alex, Daniel, Sarah, and Rani
     - personal details used by label/display helpers
     - transactions that satisfy the current eval fixtures, including:
       - Alex total received = `35.00`

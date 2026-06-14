@@ -48,8 +48,8 @@ describe("v2 read-only tool wrappers (DB-free world)", () => {
 
   test("getTotals(sent) reads the resolved counterparty email from args", async () => {
     const out = await getTotalsTool.invoke(
-      { counterpartyEmail: "maya@example.com", direction: "sent" },
-      makeConfig("how much did I send Maya")
+      { counterpartyEmail: "rani@example.com", direction: "sent" },
+      makeConfig("how much did I send Rani")
     );
     assert.match(String(out), /320/);
   });
@@ -64,10 +64,10 @@ describe("v2 read-only tool wrappers (DB-free world)", () => {
 
   test("findCounterparty resolves a name to an authoritative email", async () => {
     const out = await findCounterpartyTool.invoke(
-      { query: "Maya", relationHint: "any" },
-      makeConfig("Maya")
+      { query: "Rani", relationHint: "any" },
+      makeConfig("Rani")
     );
-    assert.match(String(out), /maya@example\.com/);
+    assert.match(String(out), /rani@example\.com/);
   });
 
   test("searchTransactions(list) exposes rows with ids for ordinal follow-ups", async () => {
@@ -124,7 +124,7 @@ describe("v2 money tools build cards without executing (DB-free world)", () => {
       status: "pending",
       createdAt: new Date().toISOString(),
       expiresAt: new Date().toISOString(),
-      recipientEmail: "maya@example.com",
+      recipientEmail: "rani@example.com",
       amount: 200,
       currency: "ILS",
       turnCreated: 1,
@@ -135,7 +135,7 @@ describe("v2 money tools build cards without executing (DB-free world)", () => {
 
     assert.equal(outcome.confirmation?.amount, 400);
     // recipient carries over from the active card
-    assert.equal(outcome.confirmation?.recipientEmail, "maya@example.com");
+    assert.equal(outcome.confirmation?.recipientEmail, "rani@example.com");
     assert.equal(outcome.supersededConfirmationId, "pending-transfer-1");
   });
 });

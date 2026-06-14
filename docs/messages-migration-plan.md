@@ -90,7 +90,7 @@ Seven compiled subgraphs (added as nodes via `.addNode(name, compiledSubgraph)`)
 | `buildPendingStatusSubgraph` (3444) | routeReadOnlyTools |
 | `buildResponseSubgraph` (3464) | buildResponseBlocks, buildResponseStyle, composeResponse |
 
-Entry points: `assistantGraph` (static export for LangGraph Studio, line 3599, `langgraph.json` → `./src/ai/graph.ts:assistantGraph`) and `runAssistantGraph(input, options)` (line 3606, used by the HTTP route, evals, and tests).
+Entry points: `assistantGraphV1` (static export for LangGraph Studio, line 3599, `langgraph.json` → `./src/ai/graph.ts:assistantGraphV1`) and `runAssistantGraph(input, options)` (line 3606, used by the HTTP route, evals, and tests).
 
 ### 2.4 Execution & persistence model **[VERIFIED]**
 
@@ -336,7 +336,7 @@ export function toProviderMessages(messages: BaseMessage[]): StoredChatMessage[]
 
 **[RECOMMENDATION]** Phases are keyed on **node names**, which do not change → streaming behavior is preserved with zero edits. The progress mapping does not read `messages`. (Optional future: with `BaseMessage` history and `ChatOpenAI.stream`, real token streaming via `streamMode: "messages"` becomes possible — out of scope.)
 
-**LangGraph Studio:** the static `assistantGraph` export and `langgraph.json` are unchanged. **[RECOMMENDATION]** Studio "input" for the graph currently expects the raw state (incl. `messages`). After migration, Studio input must provide messages in LangChain form; provide a documented sample input (e.g. `{ "userId": "...", "conversationId": "studio-1", "assistantId": "oshri", "messages": [{ "type": "human", "content": "what's my balance?" }] }`). Verify the graph still loads in `langgraph dev` (Phase 9 validation).
+**LangGraph Studio:** the static `assistantGraphV1` export and `langgraph.json` are unchanged. **[RECOMMENDATION]** Studio "input" for the graph currently expects the raw state (incl. `messages`). After migration, Studio input must provide messages in LangChain form; provide a documented sample input (e.g. `{ "userId": "...", "conversationId": "studio-1", "assistantId": "oshri", "messages": [{ "type": "human", "content": "what's my balance?" }] }`). Verify the graph still loads in `langgraph dev` (Phase 9 validation).
 
 ---
 
@@ -502,7 +502,7 @@ The plan must add/keep coverage for each item below. **[VERIFIED]** existing tes
 
 ### Phase 8 — Studio / static-graph verification
 
-- **Objective:** Confirm `assistantGraph` still loads in LangGraph Studio with message input.
+- **Objective:** Confirm `assistantGraphV1` still loads in LangGraph Studio with message input.
 - **Files:** none (verification) or a `docs/` sample input file.
 - **Dependencies:** Phase 4.
 - **Validation commands:**
@@ -580,7 +580,7 @@ The plan must add/keep coverage for each item below. **[VERIFIED]** existing tes
 - [ ] `npm test --workspace server` green, including: new mapping test, store round-trip + legacy-compat test, duplicate-prevention multi-turn test, updated trim test.
 - [ ] `--mode deterministic` (and `seeded-mongo` where available) evals report `failedTurns: 0`, matching Phase 0.
 - [ ] `npx tsc -p server/tsconfig.json --noEmit` clean; `grep -rn "ChatMessage" server/src` shows only `StoredChatMessage`.
-- [ ] `assistantGraph` loads and runs in LangGraph Studio with documented message input (§12).
+- [ ] `assistantGraphV1` loads and runs in LangGraph Studio with documented message input (§12).
 - [ ] Structured business state (intent, draft, confirmation, tool results, memory) remains authoritative; documented invariant present in code review.
 - [ ] (If Stage B done) reducer append/dedup + `RemoveMessage` trimming covered by tests; no duplicate turns; subgraph delta audit complete.
 

@@ -708,7 +708,7 @@ function resolveClarificationReplyNode(
  * @brief Fills unset draft slots from the persisted transfer-intent frame.
  *
  * Inheritance is gated to an active pending card (`status:"pending_confirmation"`)
- * so a partially-specified follow-up ("send it to maya instead") keeps the
+ * so a partially-specified follow-up ("send it to rani instead") keeps the
  * established amount, while a fresh transfer still requires its own slots. The
  * value is the frame's already-resolved number — deterministic, never invented.
  */
@@ -4080,7 +4080,7 @@ export function createAssistantGraph(
  * Static graph entrypoint for LangGraph Studio / LangSmith.
  * This should use normal default dependencies.
  */
-export const assistantGraph = createAssistantGraph({ autoConnectDb: true });
+export const assistantGraphV1 = createAssistantGraph({ autoConnectDb: true });
 
 /**
  * Function type: Public API function.

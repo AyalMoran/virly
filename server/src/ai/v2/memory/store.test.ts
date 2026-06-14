@@ -19,8 +19,8 @@ describe("v2 long-term Store (in-memory adapter)", () => {
     const userId = "user-1";
 
     await upsertCounterparty(store, userId, {
-      email: "Maya@Example.com",
-      displayName: "Maya Cohen",
+      email: "Rani@Example.com",
+      displayName: "Rani Cohen",
       relation: "sent_to",
       lastInteractionAt: "2026-06-10T09:00:00.000Z"
     });
@@ -35,8 +35,8 @@ describe("v2 long-term Store (in-memory adapter)", () => {
 
     assert.equal(snapshot.counterparties.length, 1);
     // email is normalised to lower-case on write
-    assert.equal(snapshot.counterparties[0]?.email, "maya@example.com");
-    assert.equal(snapshot.counterparties[0]?.displayName, "Maya Cohen");
+    assert.equal(snapshot.counterparties[0]?.email, "rani@example.com");
+    assert.equal(snapshot.counterparties[0]?.displayName, "Rani Cohen");
     assert.equal(snapshot.preferences.preferredLanguage, "he");
     assert.equal(snapshot.facts.length, 1);
     assert.equal(snapshot.facts[0]?.text, "rent is on the 1st");

@@ -30,10 +30,10 @@ export const v2Scenarios: V2Scenario[] = [
     tags: ["coreference", "contextual-amount", "modify"],
     turns: [
       {
-        userMessage: "How much have I sent Maya in total?",
+        userMessage: "How much have I sent Rani in total?",
         probes: "named counterparty total",
         answerMustContain: ["320"],
-        judge: "States that the user has sent Maya 320 (ILS) in total; in English; invents no other figure."
+        judge: "States that the user has sent Rani 320 (ILS) in total; in English; invents no other figure."
       },
       {
         userMessage: "And to Dan?",
@@ -42,8 +42,8 @@ export const v2Scenarios: V2Scenario[] = [
         judge: "Answers the total sent to Dan = 150; understands the elliptical follow-up; in English."
       },
       {
-        userMessage: "Send him the same amount I sent Maya.",
-        probes: "pronoun 'him'=Dan + amount sourced from Maya (320), not Dan",
+        userMessage: "Send him the same amount I sent Rani.",
+        probes: "pronoun 'him'=Dan + amount sourced from Rani (320), not Dan",
         expectRecipientEmail: "dan@example.com",
         expectAmount: 320,
         answerMustNotContain: DONE_CLAIMS_EN,
@@ -98,12 +98,12 @@ export const v2Scenarios: V2Scenario[] = [
         judge: "States the user sent Dan 150; resolves 'him' to Dan; in English."
       },
       {
-        userMessage: "Send Maya the same amount Dan sent me.",
-        probes: "recipient=Maya, amount=received-from-Dan (200); recipient must not become Dan",
-        expectRecipientEmail: "maya@example.com",
+        userMessage: "Send Rani the same amount Dan sent me.",
+        probes: "recipient=Rani, amount=received-from-Dan (200); recipient must not become Dan",
+        expectRecipientEmail: "rani@example.com",
         expectAmount: 200,
         answerMustNotContain: DONE_CLAIMS_EN,
-        judge: "Prepares 200 to Maya (the amount Dan sent the user); recipient is Maya, not Dan; not yet sent."
+        judge: "Prepares 200 to Rani (the amount Dan sent the user); recipient is Rani, not Dan; not yet sent."
       },
       {
         userMessage: "make it double",
@@ -123,7 +123,7 @@ export const v2Scenarios: V2Scenario[] = [
         userMessage: "Show me my recent transactions.",
         probes: "transaction list surfaces the ledger",
         answerMustContain: ["120", "90"],
-        judge: "Lists recent transactions including a 120 to Maya and a 90 from Dan; in English."
+        judge: "Lists recent transactions including a 120 to Rani and a 90 from Dan; in English."
       },
       {
         userMessage: "Tell me more about the second one.",
@@ -146,11 +146,11 @@ export const v2Scenarios: V2Scenario[] = [
     tags: ["hebrew", "coreference", "contextual-amount", "language-mirroring"],
     turns: [
       {
-        userMessage: "כמה שלחתי למאיה?",
+        userMessage: "כמה שלחתי לרני?",
         probes: "Hebrew named total",
         expectLanguage: "he",
         answerMustContain: ["320"],
-        judge: "Answers in Hebrew that the user sent Maya 320."
+        judge: "Answers in Hebrew that the user sent Rani 320."
       },
       {
         userMessage: "ולדן?",
@@ -160,8 +160,8 @@ export const v2Scenarios: V2Scenario[] = [
         judge: "Answers in Hebrew the total sent to Dan = 150."
       },
       {
-        userMessage: "תעביר לו את אותו סכום ששלחתי למאיה",
-        probes: "Hebrew pronoun 'לו'=Dan, amount=Maya's 320",
+        userMessage: "תעביר לו את אותו סכום ששלחתי לרני",
+        probes: "Hebrew pronoun 'לו'=Dan, amount=Rani's 320",
         expectRecipientEmail: "dan@example.com",
         expectAmount: 320,
         expectLanguage: "he",
