@@ -11,32 +11,59 @@
  * come back as text, never thrown, so the model recovers conversationally.
  */
 import { tool } from "@langchain/core/tools";
+import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 import { z } from "zod";
 
-import type { AssistantToolName } from "../../state.js";
+import type { AssistantToolName, ToolContext } from "../../state.js";
 import { buildBlocksFromResult } from "../blocks.js";
+import { statusWriter } from "../streamEvents.js";
 import {
   baseToolContext,
   getConfigurable,
   minimalCounterpartyRef,
-  renderToolResult,
-  type V2Configurable
+  renderToolResult
 } from "../toolContext.js";
 import * as D from "./descriptions.js";
 
+/** Semantic progress labels emitted as `custom` stream events (Phase 7). */
+const STATUS_LABELS: Partial<Record<AssistantToolName, string>> = {
+  getUserAccounts: "Looking up your accounts",
+  getAccountBalance: "Checking your balance",
+  getRecentTransactions: "Pulling your recent transactions",
+  searchTransactions: "Searching your transactions",
+  getTransactionStats: "Crunching your transaction stats",
+  getTransactionReceipt: "Opening that transaction",
+  resolveCounterpartyCandidates: "Looking up that person",
+  getTransactionsWithCounterparty: "Gathering those transactions",
+  getTotalSentToCounterparty: "Adding up what you've sent",
+  getTotalReceivedFromCounterparty: "Adding up what you've received",
+  getNetWithCounterparty: "Working out your net",
+  getDailyTransferUsage: "Checking your daily limit",
+  getTransferLimits: "Checking your transfer limits"
+};
+
 async function callExecutor(
-  cfg: V2Configurable,
+  config: LangGraphRunnableConfig,
   name: AssistantToolName,
-  overrides: Partial<Parameters<NonNullable<V2Configurable["executors"][AssistantToolName]>>[0]> = {}
+  overrides: Partial<ToolContext> = {}
 ): Promise<string> {
+  const cfg = getConfigurable(config);
+  const writer = statusWriter(config);
+  writer?.({ kind: "status", label: STATUS_LABELS[name] ?? "Working on it" });
+
   const executor = cfg.executors[name];
   if (!executor) {
     return `The ${name} capability is unavailable right now.`;
   }
   try {
     const result = await executor({ ...baseToolContext(cfg), ...overrides });
-    // Structured cards render the figures authoritatively (Phase 8).
-    cfg.turnOutcome.uiBlocks.push(...buildBlocksFromResult(name, result));
+    // Structured cards render the figures authoritatively (Phase 8); each also
+    // streams as a `block` event so the UI can render it before the text lands.
+    const blocks = buildBlocksFromResult(name, result);
+    cfg.turnOutcome.uiBlocks.push(...blocks);
+    for (const block of blocks) {
+      writer?.({ kind: "block", block });
+    }
     return renderToolResult(result);
   } catch (error) {
     return `That lookup failed: ${error instanceof Error ? error.message : "unknown error"}.`;
@@ -44,12 +71,12 @@ async function callExecutor(
 }
 
 export const getAccountsTool = tool(
-  async (_args, config) => callExecutor(getConfigurable(config), "getUserAccounts"),
+  async (_args, config) => callExecutor(config, "getUserAccounts"),
   { name: "getAccounts", description: D.GET_ACCOUNTS_DESC, schema: z.object({}) }
 );
 
 export const getBalanceTool = tool(
-  async (_args, config) => callExecutor(getConfigurable(config), "getAccountBalance"),
+  async (_args, config) => callExecutor(config, "getAccountBalance"),
   {
     name: "getBalance",
     description: D.GET_BALANCE_DESC,
@@ -64,16 +91,15 @@ export const getBalanceTool = tool(
 
 export const searchTransactionsTool = tool(
   async (args, config) => {
-    const cfg = getConfigurable(config);
     if (args.counterpartyEmail) {
-      return callExecutor(cfg, "getTransactionsWithCounterparty", {
+      return callExecutor(config, "getTransactionsWithCounterparty", {
         resolvedCounterparty: minimalCounterpartyRef(args.counterpartyEmail)
       });
     }
     if (args.mode === "stats" || args.mode === "count") {
-      return callExecutor(cfg, "getTransactionStats");
+      return callExecutor(config, "getTransactionStats");
     }
-    return callExecutor(cfg, "getRecentTransactions");
+    return callExecutor(config, "getRecentTransactions");
   },
   {
     name: "searchTransactions",
@@ -102,7 +128,7 @@ export const searchTransactionsTool = tool(
 
 export const getTransactionReceiptTool = tool(
   async (args, config) =>
-    callExecutor(getConfigurable(config), "getTransactionReceipt", {
+    callExecutor(config, "getTransactionReceipt", {
       resolvedTransactionId: args.transactionId
     }),
   {
@@ -115,7 +141,7 @@ export const getTransactionReceiptTool = tool(
 export const findCounterpartyTool = tool(
   async (args, config) =>
     // The executor resolves from ctx.message, so the user's words go there.
-    callExecutor(getConfigurable(config), "resolveCounterpartyCandidates", {
+    callExecutor(config, "resolveCounterpartyCandidates", {
       message: args.query
     }),
   {
@@ -130,7 +156,7 @@ export const findCounterpartyTool = tool(
 
 export const getCounterpartySummaryTool = tool(
   async (args, config) =>
-    callExecutor(getConfigurable(config), "getCounterpartySummary", {
+    callExecutor(config, "getCounterpartySummary", {
       resolvedCounterparty: minimalCounterpartyRef(args.counterpartyEmail)
     }),
   {
@@ -142,7 +168,7 @@ export const getCounterpartySummaryTool = tool(
 
 export const getCounterpartyTransactionsTool = tool(
   async (args, config) =>
-    callExecutor(getConfigurable(config), "getTransactionsWithCounterparty", {
+    callExecutor(config, "getTransactionsWithCounterparty", {
       resolvedCounterparty: minimalCounterpartyRef(args.counterpartyEmail)
     }),
   {
@@ -158,14 +184,13 @@ export const getCounterpartyTransactionsTool = tool(
 
 export const getTotalsTool = tool(
   async (args, config) => {
-    const cfg = getConfigurable(config);
     const name: AssistantToolName =
       args.direction === "sent"
         ? "getTotalSentToCounterparty"
         : args.direction === "received"
           ? "getTotalReceivedFromCounterparty"
           : "getNetWithCounterparty";
-    return callExecutor(cfg, name, {
+    return callExecutor(config, name, {
       resolvedCounterparty: minimalCounterpartyRef(args.counterpartyEmail)
     });
   },
@@ -181,7 +206,7 @@ export const getTotalsTool = tool(
 
 export const getRecentSentTool = tool(
   async (_args, config) =>
-    callExecutor(getConfigurable(config), "getRecentSentCounterparties"),
+    callExecutor(config, "getRecentSentCounterparties"),
   {
     name: "getRecentSent",
     description: D.GET_RECENT_SENT_DESC,
@@ -191,7 +216,7 @@ export const getRecentSentTool = tool(
 
 export const getRecentReceivedTool = tool(
   async (_args, config) =>
-    callExecutor(getConfigurable(config), "getRecentReceivedCounterparties"),
+    callExecutor(config, "getRecentReceivedCounterparties"),
   {
     name: "getRecentReceived",
     description: D.GET_RECENT_RECEIVED_DESC,
@@ -201,13 +226,13 @@ export const getRecentReceivedTool = tool(
 
 export const getLastSentTool = tool(
   async (_args, config) =>
-    callExecutor(getConfigurable(config), "getLastSentCounterparty"),
+    callExecutor(config, "getLastSentCounterparty"),
   { name: "getLastSent", description: D.GET_LAST_SENT_DESC, schema: z.object({}) }
 );
 
 export const getVerifiedRecipientsTool = tool(
   async (_args, config) =>
-    callExecutor(getConfigurable(config), "getVerifiedRecipients"),
+    callExecutor(config, "getVerifiedRecipients"),
   {
     name: "getVerifiedRecipients",
     description: D.GET_VERIFIED_RECIPIENTS_DESC,
@@ -216,7 +241,7 @@ export const getVerifiedRecipientsTool = tool(
 );
 
 export const getTransferLimitsTool = tool(
-  async (_args, config) => callExecutor(getConfigurable(config), "getTransferLimits"),
+  async (_args, config) => callExecutor(config, "getTransferLimits"),
   {
     name: "getTransferLimits",
     description: D.GET_TRANSFER_LIMITS_DESC,
@@ -226,7 +251,7 @@ export const getTransferLimitsTool = tool(
 
 export const checkTransferEligibilityTool = tool(
   async (_args, config) =>
-    callExecutor(getConfigurable(config), "getTransferEligibility"),
+    callExecutor(config, "getTransferEligibility"),
   {
     name: "checkTransferEligibility",
     description: D.CHECK_TRANSFER_ELIGIBILITY_DESC,
@@ -236,7 +261,7 @@ export const checkTransferEligibilityTool = tool(
 
 export const getTransferQuoteTool = tool(
   async (args, config) =>
-    callExecutor(getConfigurable(config), "getTransferQuote", {
+    callExecutor(config, "getTransferQuote", {
       resolvedCounterparty: minimalCounterpartyRef(args.counterpartyEmail)
     }),
   {
@@ -248,7 +273,7 @@ export const getTransferQuoteTool = tool(
 
 export const getDailyTransferUsageTool = tool(
   async (_args, config) =>
-    callExecutor(getConfigurable(config), "getDailyTransferUsage"),
+    callExecutor(config, "getDailyTransferUsage"),
   {
     name: "getDailyTransferUsage",
     description: D.GET_DAILY_TRANSFER_USAGE_DESC,
@@ -258,7 +283,7 @@ export const getDailyTransferUsageTool = tool(
 
 export const getPendingTransfersTool = tool(
   async (_args, config) =>
-    callExecutor(getConfigurable(config), "getPendingAiTransfers"),
+    callExecutor(config, "getPendingAiTransfers"),
   {
     name: "getPendingTransfers",
     description: D.GET_PENDING_TRANSFERS_DESC,

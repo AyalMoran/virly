@@ -43,6 +43,7 @@ import type {
 import { buildAgentNode } from "./agent.js";
 import { createMongoCheckpointer } from "./memory/checkpointer.js";
 import { resolveLongTermStore, withLongTermCounterparties } from "./memory/loop.js";
+import { mapStreamChunk } from "./streamEvents.js";
 import { createV2ChatModel, isV2ModelConfigured } from "./model.js";
 import { executeTransferNode } from "./nodes/executeTransfer.js";
 import { finalizeNode } from "./nodes/finalize.js";
@@ -225,6 +226,100 @@ export async function invokeV2Resumable(
     ...(turnOutcome.supersededConfirmationId
       ? { supersededConfirmationId: turnOutcome.supersededConfirmationId }
       : {})
+  };
+}
+
+export type V2StreamEnvelope =
+  | { event: "token"; data: { text: string } }
+  | { event: "status"; data: { label: string } }
+  | { event: "block"; data: { block: unknown } }
+  | { event: "result"; data: RunAssistantResult };
+
+/**
+ * Streaming HITL turn (design §7 / Phase 7): streams the resumable graph with
+ * `streamMode: ["messages", "custom", "updates"]` and yields additive SSE
+ * envelopes — `token` (LLM deltas), `status`/`block` (semantic events from
+ * tools), then a final `result` matching the non-streaming response.
+ */
+export async function* streamAssistantV2(
+  input: RunAssistantInput,
+  options: RunAssistantOptions = {},
+  graph: ResumableGraph = getResumableGraph()
+): AsyncGenerator<V2StreamEnvelope> {
+  const assistantId = input.assistantId ?? DEFAULT_ASSISTANT_ID;
+  const locale = detectLocale(input.message);
+
+  const store = options.conversationStore;
+  const loaded = store
+    ? await store.load(input.userId ?? "", input.conversationId)
+    : { messages: [], memory: createEmptyCounterpartyMemory() };
+  const memory = loaded.memory ?? createEmptyCounterpartyMemory();
+
+  const turnOutcome: V2TurnOutcome = { uiBlocks: [] };
+  const longTermStore = resolveLongTermStore();
+  const knownCounterparties = await withLongTermCounterparties(
+    longTermStore,
+    input.userId ?? "",
+    buildKnownCounterparties(memory)
+  );
+  const configurable = configurableFor(
+    input,
+    options,
+    turnOutcome,
+    knownCounterparties,
+    memory.pendingConfirmation ?? null
+  );
+
+  let finalText = "";
+  const stream = await graph.stream(
+    { messages: [new HumanMessage(input.message)] },
+    {
+      configurable: { ...configurable, thread_id: input.conversationId },
+      streamMode: ["messages", "custom", "updates"],
+      recursionLimit: 25
+    }
+  );
+
+  for await (const chunk of stream) {
+    const [mode, payload] = chunk as [string, unknown];
+    if (mode === "updates") {
+      const update = payload as Record<string, { responseMessage?: string } | undefined>;
+      const finalized = update.finalize?.responseMessage ?? update.executeTransfer?.responseMessage;
+      if (finalized) {
+        finalText = finalized;
+      }
+    }
+    for (const sse of mapStreamChunk(mode, payload)) {
+      yield sse as V2StreamEnvelope;
+    }
+  }
+
+  const responseMessage =
+    finalText.trim() ||
+    (turnOutcome.confirmation
+      ? locale === "he"
+        ? "הכנתי העברה לאישורך."
+        : "I've prepared a transfer for your confirmation."
+      : "");
+
+  yield {
+    event: "result",
+    data: {
+      message: responseMessage,
+      responseMessage,
+      responseFormatVersion: assistantResponseFormatVersion,
+      ...(turnOutcome.uiBlocks.length > 0 ? { responseBlocks: turnOutcome.uiBlocks } : {}),
+      conversationId: input.conversationId,
+      assistantId,
+      intent: turnOutcome.confirmation ? "transfer_prepare" : "general_help",
+      toolCalls: [],
+      toolResults: [],
+      ...(turnOutcome.clarification ? { clarification: turnOutcome.clarification } : {}),
+      ...(turnOutcome.confirmation ? { confirmation: turnOutcome.confirmation } : {}),
+      ...(turnOutcome.supersededConfirmationId
+        ? { supersededConfirmationId: turnOutcome.supersededConfirmationId }
+        : {})
+    }
   };
 }
 
