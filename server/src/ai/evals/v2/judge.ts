@@ -12,9 +12,14 @@ import { ChatOpenAI } from "@langchain/openai";
 import { z } from "zod";
 import { config } from "../../../config.js";
 
+// Reason BEFORE pass: the model writes its analysis first, then commits the
+// boolean — chain-of-thought before the verdict. This is a reliability fix, not
+// a leniency change: the criteria below are unchanged and a genuinely-wrong
+// reply still fails. (A verdict emitted before reasoning made the weak grader
+// self-contradict and mis-map sent/received direction.)
 const verdictSchema = z.object({
-  pass: z.boolean(),
-  reason: z.string()
+  reason: z.string(),
+  pass: z.boolean()
 });
 
 export type JudgeVerdict = z.infer<typeof verdictSchema>;
@@ -55,7 +60,8 @@ export async function judgeAnswer(input: JudgeInput): Promise<JudgeVerdict> {
     "IMPORTANT: a transfer the user asks to PREPARE has a user-chosen amount and recipient. That amount need NOT match any historical fact. NEVER fail a reply just because a requested or prepared transfer amount differs from a historical total — that is expected and correct.",
     "Return pass=false ONLY if: a stated criterion is unmet; OR the reply misreports a historical figure; OR it invents account data; OR it is written in a different language than the user's message.",
     "Judge ONLY the criteria, faithfulness of REPORTED historical figures, and language mirroring. Do NOT judge tone, personality, warmth, humor, emoji, or phrasing. A blunt reply and a playful reply are equally acceptable.",
-    "Give a one-sentence reason citing the specific criterion or fact."
+    "Direction matters by MEANING, not keyword: 'X sent you N' / 'you received N from X' is the received-from-X total; 'you sent X N' is the sent-to-X total — map accordingly before deciding.",
+    "Reason step by step FIRST in the 'reason' field — work out the relevant direction and figures from the facts and check each criterion — and ONLY THEN set the boolean 'pass'. Cite the specific criterion or fact."
   ].join("\n");
   const human = [
     `User message:\n${input.userMessage}`,
