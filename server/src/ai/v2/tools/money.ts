@@ -172,6 +172,45 @@ export const modifyPendingTransferTool = tool(
   }
 );
 
+export const requestClarificationTool = tool(
+  async (args, config) => {
+    const cfg = getConfigurable(config);
+    const expectedReplyType =
+      args.reason === "missing_amount" || args.reason === "ambiguous_amount"
+        ? "amount"
+        : "recipient";
+    cfg.turnOutcome.clarification = {
+      reason: args.reason,
+      message: args.question,
+      expectedReplyType
+    };
+    return (
+      `Registered a clarification request (${args.reason}). Now ask the user this, ` +
+      `in their language: "${args.question}"`
+    );
+  },
+  {
+    name: "requestClarification",
+    description:
+      "Ask the user for a missing or ambiguous TRANSFER detail (recipient or amount) " +
+      "before preparing a card. Call this whenever the user wants to send money but you " +
+      "are missing the recipient or the amount, or a reference is ambiguous. A plain-text " +
+      "question alone does NOT register a clarification — you MUST call this so the app " +
+      "knows the turn is awaiting the user's answer. Then also write the question in your reply.",
+    schema: z.object({
+      reason: z.enum([
+        "missing_recipient",
+        "missing_amount",
+        "ambiguous_recipient",
+        "ambiguous_amount"
+      ]),
+      question: z
+        .string()
+        .describe("The short question to ask the user (also write it in your reply).")
+    })
+  }
+);
+
 export const cancelPendingTransferTool = tool(
   async (_args, config) => {
     const cfg = getConfigurable(config);
@@ -195,5 +234,6 @@ export const cancelPendingTransferTool = tool(
 export const moneyTools = [
   prepareTransferTool,
   modifyPendingTransferTool,
-  cancelPendingTransferTool
+  cancelPendingTransferTool,
+  requestClarificationTool
 ];
