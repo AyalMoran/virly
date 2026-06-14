@@ -18,6 +18,11 @@ import { DEFAULT_ASSISTANT_ID } from "../assistants.js";
 import type { AssistantId } from "../assistants.js";
 import { createEmptyCounterpartyMemory } from "../counterpartyMemory.js";
 import { assistantResponseFormatVersion } from "../responseBlocks.js";
+import { readOnlyToolExecutors } from "../tools/index.js";
+import {
+  modifyAiPendingTransfer,
+  prepareAiPendingTransfer
+} from "../../services/aiPendingTransfer.service.js";
 import type {
   CounterpartyMemory,
   RunAssistantInput,
@@ -109,10 +114,18 @@ export async function runAssistantGraphV2(
   const assistantId = input.assistantId ?? DEFAULT_ASSISTANT_ID;
   const locale = detectLocale(input.message);
 
-  // The agent needs a configured model and read-only executors to act.
-  if (!isV2ModelConfigured() || !options.tools) {
+  // The agent needs a configured model to act; without a key, degrade gracefully.
+  if (!isV2ModelConfigured()) {
     return fallbackResult(input, assistantId, gracefulText(locale));
   }
+
+  // Default to the real DB executors/services for the production route (which
+  // doesn't inject them); the conformance harness injects DB-free fakes instead.
+  const executors = options.tools ?? readOnlyToolExecutors;
+  const transferPreparationService =
+    options.transferPreparationService ?? prepareAiPendingTransfer;
+  const transferModificationService =
+    options.transferModificationService ?? modifyAiPendingTransfer;
 
   const userId = input.userId ?? "";
   const store = options.conversationStore;
@@ -131,9 +144,9 @@ export async function runAssistantGraphV2(
     now: new Date(),
     timezone: V2_TIMEZONE,
     locale,
-    executors: options.tools,
-    transferPreparationService: options.transferPreparationService,
-    transferModificationService: options.transferModificationService,
+    executors,
+    transferPreparationService,
+    transferModificationService,
     pendingConfirmation: memory.pendingConfirmation ?? null,
     turnOutcome,
     knownCounterparties: buildKnownCounterparties(memory)
