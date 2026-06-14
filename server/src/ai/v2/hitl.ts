@@ -55,7 +55,10 @@ import type { V2Configurable, V2TurnOutcome } from "./toolContext.js";
 import { createV2ToolNode } from "./tools/index.js";
 import {
   buildKnownCounterparties,
+  collectCalledToolNames,
+  deriveIntent,
   detectLocale,
+  mapReadToolNames,
   pendingFromConfirmation
 } from "./turn.js";
 
@@ -211,6 +214,22 @@ export async function invokeV2Resumable(
         : "I've prepared a transfer for your confirmation."
       : "");
 
+  // Phase 9: audit continuity with v1 (tools requested/executed, intent).
+  const toolCalls = mapReadToolNames(collectCalledToolNames(out.messages ?? []));
+  const intent = deriveIntent(turnOutcome);
+  if (input.userId && options.auditLogger) {
+    await options.auditLogger({
+      userId: input.userId,
+      conversationId: input.conversationId,
+      requestId: input.requestId,
+      assistantId,
+      intent,
+      toolsRequested: toolCalls,
+      toolsExecuted: toolCalls,
+      diagnostics: []
+    });
+  }
+
   return {
     message: responseMessage,
     responseMessage,
@@ -218,9 +237,9 @@ export async function invokeV2Resumable(
     ...(turnOutcome.uiBlocks.length > 0 ? { responseBlocks: turnOutcome.uiBlocks } : {}),
     conversationId: input.conversationId,
     assistantId,
-    intent: turnOutcome.confirmation ? "transfer_prepare" : "general_help",
-    toolCalls: [],
-    toolResults: [],
+    intent,
+    toolCalls,
+    toolResults: toolCalls.map((toolName) => ({ toolName, status: "ok" as const })),
     ...(turnOutcome.clarification ? { clarification: turnOutcome.clarification } : {}),
     ...(paused && turnOutcome.confirmation ? { confirmation: turnOutcome.confirmation } : {}),
     ...(turnOutcome.supersededConfirmationId

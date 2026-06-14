@@ -117,10 +117,12 @@ export const config = {
     }),
     // Selects the assistant graph implementation. "v1" is the deterministic-first
     // graph (server/src/ai/graph.ts); "v2" is the LLM-first agent loop
-    // (server/src/ai/v2/). Defaults to v1 so v2 ships dark behind the flag.
+    // (server/src/ai/v2/). Cutover: default is now "v2"; v1 + this flag remain so
+    // rollback is a single env flip (VIRLY_AI_GRAPH_VERSION=v1). v1 teardown is a
+    // later, separate change.
     graphVersion: (() => {
-      const raw = getStringEnv("VIRLY_AI_GRAPH_VERSION", "v1").trim().toLowerCase();
-      return raw === "v2" ? "v2" : "v1";
+      const raw = getStringEnv("VIRLY_AI_GRAPH_VERSION", "v2").trim().toLowerCase();
+      return raw === "v1" ? "v1" : "v2";
     })() as "v1" | "v2"
   },
   fx: {
