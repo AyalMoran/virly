@@ -55,6 +55,7 @@ function routeAgent(state: V2AgentStateType): "tools" | "finalize" {
   return toolCalls.length > 0 ? "tools" : "finalize";
 }
 
+
 function buildGraph() {
   const model = createV2ChatModel();
   return new StateGraph(V2AgentState)
@@ -83,6 +84,9 @@ function getGraph() {
   }
   return cachedGraph;
 }
+
+export const assistantGraphV2 = getGraph();
+
 
 function gracefulText(locale: "he" | "en" | "mixed" | "unknown"): string {
   return locale === "he"

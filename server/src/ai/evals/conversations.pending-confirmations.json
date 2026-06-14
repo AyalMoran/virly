@@ -72,8 +72,8 @@
             "currency": "ILS"
           },
           {
-            "recipientEmail": "maya@example.com",
-            "recipientFirstName": "Maya",
+            "recipientEmail": "rani@example.com",
+            "recipientFirstName": "Rani",
             "recipientLastName": "Example",
             "amount": 65,
             "currency": "ILS"
@@ -229,8 +229,8 @@
             "currency": "ILS"
           },
           {
-            "recipientEmail": "maya@example.com",
-            "recipientFirstName": "Maya",
+            "recipientEmail": "rani@example.com",
+            "recipientFirstName": "Rani",
             "recipientLastName": "Example",
             "amount": 75,
             "currency": "ILS"

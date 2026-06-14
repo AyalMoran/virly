@@ -471,10 +471,10 @@ function createFakePhaseTwoCounterpartyTools(
               source: "transaction"
             },
             {
-              counterpartyId: "maya@example.com",
-              emailFullForBackendOnly: "maya@example.com",
+              counterpartyId: "rani@example.com",
+              emailFullForBackendOnly: "rani@example.com",
               emailMasked: "m***@example.com",
-              displayName: "Maya Example",
+              displayName: "Rani Example",
               relation: "sent_to",
               source: "transaction"
             }
@@ -491,19 +491,19 @@ function createFakePhaseTwoCounterpartyTools(
             amount: 50
           },
           {
-            counterpartyId: "maya@example.com",
-            emailFull: "maya@example.com",
+            counterpartyId: "rani@example.com",
+            emailFull: "rani@example.com",
             emailMasked: "m***@example.com",
-            llmLabel: "Maya Example (m***@example.com)",
-            userLabel: "Maya Example (maya@example.com)",
-            displayName: "Maya Example",
+            llmLabel: "Rani Example (m***@example.com)",
+            userLabel: "Rani Example (rani@example.com)",
+            displayName: "Rani Example",
             amount: 25
           }
         ],
         summary:
-          "Recent people you sent money to: Daniel Example (d***@example.com); Maya Example (m***@example.com).",
+          "Recent people you sent money to: Daniel Example (d***@example.com); Rani Example (m***@example.com).",
         userSummary:
-          "Recent people you sent money to: Daniel Example (daniel@example.com); Maya Example (maya@example.com).",
+          "Recent people you sent money to: Daniel Example (daniel@example.com); Rani Example (rani@example.com).",
         metadata: {
           recordCount: 2,
           counterparties: [
@@ -513,9 +513,9 @@ function createFakePhaseTwoCounterpartyTools(
               displayName: "Daniel Example"
             },
             {
-              counterpartyEmail: "maya@example.com",
+              counterpartyEmail: "rani@example.com",
               maskedLabel: "m***@example.com",
-              displayName: "Maya Example"
+              displayName: "Rani Example"
             }
           ]
         }
@@ -1658,9 +1658,9 @@ test("phase 13 seeded-mongo seed data matches current fixture expectations", () 
     .reduce((total, transaction) => total + transaction.amount, 0);
   assert.equal(danielTotalReceived, 35);
 
-  const mayaTransactions = transactionsByCounterparty.get("maya@example.com") ?? [];
-  assert.equal(mayaTransactions.some((transaction) => transaction.type === "debit" && transaction.amount === 42), true);
-  assert.equal(mayaTransactions.some((transaction) => transaction.type === "credit"), true);
+  const raniTransactions = transactionsByCounterparty.get("rani@example.com") ?? [];
+  assert.equal(raniTransactions.some((transaction) => transaction.type === "debit" && transaction.amount === 42), true);
+  assert.equal(raniTransactions.some((transaction) => transaction.type === "credit"), true);
 
   const sarahTransactions = transactionsByCounterparty.get("sarah@example.com") ?? [];
   assert.equal(sarahTransactions.some((transaction) => transaction.type === "credit" && transaction.amount === 30), true);
@@ -2092,7 +2092,7 @@ test("recent sent counterparties request calls phase two sent counterparty tool"
   assert.doesNotMatch(result.message, /d\*\*\*@example\.com/);
   assert.equal(
     conversationStore.saved.at(-1)?.memory.lastCounterparty?.email,
-    "maya@example.com"
+    "rani@example.com"
   );
 });
 
@@ -2775,7 +2775,7 @@ test("pending transfer reference resolves ordinal from clarification options", a
         },
         {
           id: "pending-transfer-2",
-          label: "2. 70.00 ILS to Maya Example (maya@example.com)",
+          label: "2. 70.00 ILS to Rani Example (rani@example.com)",
           value: "pending-transfer-2"
         }
       ]
@@ -2790,7 +2790,7 @@ test("pending transfer reference resolves ordinal from clarification options", a
     candidates: [
       {
         id: "pending-transfer-2",
-        label: "2. 70.00 ILS to Maya Example (maya@example.com)",
+        label: "2. 70.00 ILS to Rani Example (rani@example.com)",
         value: "pending-transfer-2"
       }
     ]
@@ -2996,7 +2996,7 @@ test("first person reference resolves by first mention order", async () => {
     messages: [],
     memory: createMemoryWithCounterparties([
       "alex@example.com",
-      "maya@example.com"
+      "rani@example.com"
     ])
   });
 
@@ -3662,7 +3662,7 @@ test("read-only graph result exposes only minimal public tool result statuses", 
 test("counterparty memory keeps eight entries and evicts least recently referenced", async () => {
   const memory = createMemoryWithCounterparties([
     "alex@example.com",
-    "maya@example.com",
+    "rani@example.com",
     "dan@example.com",
     "noa@example.com",
     "eli@example.com"
@@ -3691,7 +3691,7 @@ test("counterparty memory keeps eight entries and evicts least recently referenc
   assert.equal(withSixth.mentionedCounterparties.length, 6);
   assert.equal(
     withSixth.mentionedCounterparties.some(
-      (counterparty) => counterparty.email === "maya@example.com"
+      (counterparty) => counterparty.email === "rani@example.com"
     ),
     true
   );
@@ -4156,14 +4156,14 @@ test("contextual amount resolver uses latest positive total answer for resolved 
   const memory = createMemoryWithCounterparties(["alex@example.com"]);
   memory.entities = [
     {
-      id: "total:received:maya@example.com",
+      id: "total:received:rani@example.com",
       type: "total",
       turnIntroduced: 2,
       turnLastReferenced: 2,
       source: "tool_result",
       confidence: "high",
       displayName: "total received from m***@example.com",
-      counterpartyEmail: "maya@example.com",
+      counterpartyEmail: "rani@example.com",
       direction: "received",
       sourceToolName: "getTotalReceivedFromCounterparty",
       amount: 200,
@@ -5063,7 +5063,7 @@ test("llm response post-check rejects contradictory pending-transfer recipient f
       return { intent: "pending_ai_transfers" };
     },
     async composeResponse() {
-      return "Pending transfer confirmations in this conversation: 1. 50.00 ILS to Maya Example (maya@example.com), expires 2026-05-24T12:00:00.000Z.";
+      return "Pending transfer confirmations in this conversation: 1. 50.00 ILS to Rani Example (rani@example.com), expires 2026-05-24T12:00:00.000Z.";
     }
   });
 
@@ -5152,7 +5152,7 @@ test("llm response post-check rejects contradictory pending confirmation memory 
       return { intent: "pending_confirmation_status" };
     },
     async composeResponse() {
-      return "Your pending transfer to maya@example.com for 70.00 ILS is pending until 2026-05-25T12:00:00.000Z.";
+      return "Your pending transfer to rani@example.com for 70.00 ILS is pending until 2026-05-25T12:00:00.000Z.";
     }
   });
 
@@ -5881,7 +5881,7 @@ test("hebrew same amount transfer can reuse recent sent counterparty memory", as
   const transferPreparations: Array<Parameters<TransferPreparationService>[0]> = [];
   const conversationStore = createFakeConversationStore();
   const amountResolutionService: AmountResolutionService = async (input) => {
-    assert.equal(input.resolvedCounterparty?.email, "maya@example.com");
+    assert.equal(input.resolvedCounterparty?.email, "rani@example.com");
     assert.equal(input.transferDraft.amountReferenceText, "אותה כמות");
 
     return {
@@ -5925,9 +5925,9 @@ test("hebrew same amount transfer can reuse recent sent counterparty memory", as
   assert.equal(firstResult.intent, "recent_sent_counterparties");
   assert.deepEqual(firstResult.toolCalls, ["getRecentSentCounterparties"]);
   assert.equal(secondResult.intent, "transfer_prepare");
-  assert.equal(secondResult.confirmation?.recipientEmail, "maya@example.com");
+  assert.equal(secondResult.confirmation?.recipientEmail, "rani@example.com");
   assert.equal(secondResult.confirmation?.amount, 25);
-  assert.equal(transferPreparations[0].resolvedCounterparty?.email, "maya@example.com");
+  assert.equal(transferPreparations[0].resolvedCounterparty?.email, "rani@example.com");
   assert.equal(transferPreparations[0].draft.amountReferenceText, "אותה כמות");
   assert.deepEqual(executed, ["getRecentSentCounterparties"]);
 });

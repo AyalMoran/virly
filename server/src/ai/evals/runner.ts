@@ -393,9 +393,9 @@ function createPhaseTwoCounterpartyTools(
       return fakeResult({
         toolName: "getRecentSentCounterparties",
         summary:
-          "Recent people you sent money to: Daniel Example (d***@example.com) (70.00 ILS last sent); Maya Example (m***@example.com) (42.00 ILS last sent).",
+          "Recent people you sent money to: Daniel Example (d***@example.com) (70.00 ILS last sent); Rani Example (m***@example.com) (42.00 ILS last sent).",
         userSummary:
-          "Recent people you sent money to: Daniel Example (daniel@example.com) (70.00 ILS last sent); Maya Example (maya@example.com) (42.00 ILS last sent).",
+          "Recent people you sent money to: Daniel Example (daniel@example.com) (70.00 ILS last sent); Rani Example (rani@example.com) (42.00 ILS last sent).",
         metadata: {
           recordCount: 2,
           counterparties: [
@@ -405,9 +405,9 @@ function createPhaseTwoCounterpartyTools(
               displayName: "Daniel Example"
             },
             {
-              counterpartyEmail: "maya@example.com",
+              counterpartyEmail: "rani@example.com",
               maskedLabel: "m***@example.com",
-              displayName: "Maya Example"
+              displayName: "Rani Example"
             }
           ]
         },
@@ -425,11 +425,11 @@ function createPhaseTwoCounterpartyTools(
               lastInteractionAt: "2026-05-24T10:00:00.000Z"
             },
             {
-              counterpartyId: "maya@example.com",
-              emailFullForBackendOnly: "maya@example.com",
+              counterpartyId: "rani@example.com",
+              emailFullForBackendOnly: "rani@example.com",
               emailMasked: "m***@example.com",
-              displayName: "Maya Example",
-              firstName: "Maya",
+              displayName: "Rani Example",
+              firstName: "Rani",
               lastName: "Example",
               relation: "sent_to",
               source: "transaction",

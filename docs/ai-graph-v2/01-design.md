@@ -201,7 +201,7 @@ function routeAgent(state): "tools" | "transferGate" | "finalize" {
   `respondToAiPendingTransfer({ action: "confirm", ... })` →
   `executeTransferWithSession()` in a Mongo transaction. Appends a `ToolMessage`
   with the real outcome and loops to `agent`, which composes a natural,
-  truthful confirmation ("Done — ₪70 is on its way to Maya.").
+  truthful confirmation ("Done — ₪70 is on its way to Rani.").
 - **`finalize`** — no model call by default. Collects the streamed assistant text
   + accumulated `uiBlocks` into the `RunAssistantResult`, attaches any
   `clarification`/`confirmation`, and resolves the personality phrase pack into
@@ -297,7 +297,7 @@ Key points:
   "structured blocks are authoritative, the model writes only a short intro"
   win, but driven by the tool that actually has the data.
 - `config.writer?.(...)` emits a **custom stream event** (§7) — this is how we
-  get "Looking up Maya…" / "Checking your daily limit…" status lines that are
+  get "Looking up Rani…" / "Checking your daily limit…" status lines that are
   *semantically accurate* because they come from the tool actually running.
 
 ### 5.3 Counterparty resolution is now a tool, not a pipeline
@@ -308,10 +308,10 @@ resolver, and regex for pronouns/ordinals. v2:
 
 - The model sees the real history. For "send **him** the same again", it already
   knows who "him" is and what "the same" was, because those turns are in
-  `messages`. It calls `prepareTransfer({ recipientQuery: "Maya", amount: 70 })`
-  or, if it only has a name, calls `findCounterparty({ query: "Maya" })` first.
+  `messages`. It calls `prepareTransfer({ recipientQuery: "Rani", amount: 70 })`
+  or, if it only has a name, calls `findCounterparty({ query: "Rani" })` first.
 - `findCounterparty` returns **candidates** (0, 1, or many). On many/zero, the
-  model asks a natural clarifying question ("I see two Mayas — the one at m\*\*\*@…
+  model asks a natural clarifying question ("I see two Ranis — the one at m\*\*\*@…
   or m\*\*\*2@…?"). That question is just an `AIMessage`; the user's next turn
   answers it; the checkpointer kept everything. **No clarification state machine.**
 - The model never receives a raw email to put in `recipientEmail`; it passes a
@@ -373,7 +373,7 @@ flowchart LR
 
 - **What:** durable, cross-conversation facts under `namespace = (userId,)`:
   - **Counterparties**: `name ↔ email ↔ relationship/last-interaction` (so "send
-    Maya 50" works in a brand-new conversation if the user has paid Maya before).
+    Rani 50" works in a brand-new conversation if the user has paid Rani before).
   - **Preferences**: default assistant/personality, preferred language, "always
     ask before sending over ₪500", display preferences.
   - **Salient facts** the user states ("my rent is the 1st").
@@ -398,7 +398,7 @@ streamMode: ["messages", "custom", "updates"] })`) and map each to an SSE event:
 | Stream mode | Source | SSE event | UX |
 | --- | --- | --- | --- |
 | `messages` | LLM token deltas in `agent` | `token` | true type-on effect for the reply |
-| `custom` | `config.writer(...)` inside tools | `status` | *semantic* progress: "Looking up Maya", "Checking your daily limit", "Preparing your confirmation" |
+| `custom` | `config.writer(...)` inside tools | `status` | *semantic* progress: "Looking up Rani", "Checking your daily limit", "Preparing your confirmation" |
 | `updates` | node state deltas | `block` | render a balance/stats card the moment its tool returns, before text finishes |
 | (final) | `finalize` | `result` | the existing `RunAssistantResult` shape |
 
@@ -422,10 +422,10 @@ sequenceDiagram
     participant S as Transfer service
     participant DB as Mongo
 
-    U->>API: "send Maya 70"
+    U->>API: "send Rani 70"
     API->>G: stream(turn)
     G->>M: agent (history + tools)
-    M-->>G: tool_call prepareTransfer{recipientQuery:"Maya", amount:70}
+    M-->>G: tool_call prepareTransfer{recipientQuery:"Rani", amount:70}
     G->>S: validate (recipient exists, balance, limits)
     S-->>G: card {id, version, recipient, ₪70, expiresAt}
     G-->>API: interrupt -> emit confirmation card
@@ -439,7 +439,7 @@ sequenceDiagram
     DB-->>S: ok
     S-->>G: ToolMessage "transfer executed"
     G->>M: agent composes truthful confirmation
-    M-->>API: "Done — ₪70 is on its way to Maya."
+    M-->>API: "Done — ₪70 is on its way to Rani."
 ```
 
 - **Prepare** = the `prepareTransfer` tool + `interrupt()`. The backend
@@ -521,16 +521,16 @@ sequenceDiagram
 
 A user can, in one flowing conversation and in Hebrew or English:
 
-1. "how much did I send Maya this month?" → model calls `findCounterparty` +
+1. "how much did I send Rani this month?" → model calls `findCounterparty` +
    `getTotals` (or `getCounterpartySummary`), answers with a card.
 2. "and to Dan?" → model reuses the thread, swaps the counterparty, answers.
-3. "ok send her the same I sent him last week" → model resolves "her" = Maya,
+3. "ok send her the same I sent him last week" → model resolves "her" = Rani,
    "the same I sent him" = the Dan figure from the prior turns, calls
    `prepareTransfer`, the graph shows a card.
 4. "actually make it 100" → model re-proposes 100, new card supersedes.
 5. *clicks Confirm* → money moves once, the model says so truthfully.
-6. *next week, new conversation* "pay Maya 50" → long-term memory already knows
-   Maya, straight to a card.
+6. *next week, new conversation* "pay Rani 50" → long-term memory already knows
+   Rani, straight to a card.
 
 No regex, no frame, no intent table, no clarification state machine — just a
 model with memory, tools, and a confirmation gate. That is the deliverable.

@@ -238,11 +238,11 @@
           "mustNotCreateConfirmation": true
         },
         {
-          "userMessage": "תעביר 80 ל maya@example.com",
+          "userMessage": "תעביר 80 ל rani@example.com",
           "expectedResponseLanguage": "hebrew",
           "expectedIntent": "transfer_prepare",
           "expectedConfirmation": {
-            "recipientEmail": "maya@example.com",
+            "recipientEmail": "rani@example.com",
             "amount": 80
           }
         }

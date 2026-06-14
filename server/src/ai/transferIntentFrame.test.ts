@@ -240,8 +240,8 @@ test('changing the recipient keeps the established amount from the frame', async
       return { intent: "transfer_prepare" };
     },
     async extractTransferDraft(input) {
-      if (/maya/i.test(input.userMessage)) {
-        return { recipientEmail: "maya@example.com" };
+      if (/rani/i.test(input.userMessage)) {
+        return { recipientEmail: "rani@example.com" };
       }
       return {
         recipientEmail: "alex@example.com",
@@ -267,7 +267,7 @@ test('changing the recipient keeps the established amount from the frame', async
 
   // Turn 2: change only the recipient — the amount is inherited from the frame.
   const second = await runAssistantGraph(
-    { userId: USER_ID, conversationId: "change-recipient", message: "actually send it to maya@example.com instead" },
+    { userId: USER_ID, conversationId: "change-recipient", message: "actually send it to rani@example.com instead" },
     {
       conversationStore: store,
       llmProvider: provider,
@@ -276,6 +276,6 @@ test('changing the recipient keeps the established amount from the frame', async
     }
   );
 
-  assert.equal(second.confirmation?.recipientEmail, "maya@example.com");
+  assert.equal(second.confirmation?.recipientEmail, "rani@example.com");
   assert.equal(second.confirmation?.amount, 25);
 });

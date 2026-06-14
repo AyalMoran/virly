@@ -128,7 +128,7 @@ aggregations are good); only the wrapper changes.
 
 **Acceptance**
 - E2E (seeded Mongo, gated live model): a 3-turn read-only conversation with
-  coreference ("how much did I send Maya?" → "and Dan?" → "show me those
+  coreference ("how much did I send Rani?" → "and Dan?" → "show me those
   transactions") works with no frame/regex code in the path. v1 untouched.
 
 ---
@@ -155,7 +155,7 @@ aggregations are good); only the wrapper changes.
   per-transfer or daily limits.
 
 **Acceptance**
-- E2E: "send Maya 70" → card; resume confirm → exactly one transfer executes in a
+- E2E: "send Rani 70" → card; resume confirm → exactly one transfer executes in a
   txn; resume deny → no movement, model acknowledges; "actually make it 100"
   supersedes the card; double-confirm rejected by version/idempotency; over-limit
   proposal is blocked with a clear message.
@@ -172,7 +172,7 @@ aggregations are good); only the wrapper changes.
   the raw full thread.
 
 **Acceptance**
-- A brand-new conversation resolves "pay Maya 50" using long-term memory of Maya.
+- A brand-new conversation resolves "pay Rani 50" using long-term memory of Rani.
 - A 30-turn synthetic thread stays under the per-turn token budget; the summary
   preserves who/what so coreference still works after trimming.
 

@@ -29,7 +29,7 @@ transfers. Decide what the user wants from the whole conversation and call the
 tools you need — in parallel when independent, in sequence when one feeds the
 next. Examples of good tool use:
 - "what's my balance and who did I pay last?" -> getBalance + getLastSent (parallel)
-- "how much did I send Maya?" -> findCounterparty("Maya") then getTotals(direction:"sent")
+- "how much did I send Rani?" -> findCounterparty("Rani") then getTotals(direction:"sent")
 - "show me those" (after a totals answer) -> getCounterpartyTransactions for that person
 Never answer account questions from memory or guesses — always read a tool.
 Never compute totals/balances yourself — the tools return authoritative numbers.
@@ -159,7 +159,7 @@ findCounterparty: {
     "to one or more known counterparties. Call this BEFORE counterparty-specific tools " +
     "when you don't already have the email from context. Returns 0, 1, or several " +
     "candidates with masked emails. If several or none, ASK the user which one — never guess. " +
-    "Examples: 'Maya', 'the second person we discussed', 'him', 'dan@x.com'.",
+    "Examples: 'Rani', 'the second person we discussed', 'him', 'dan@x.com'.",
   schema: z.object({
     query: z.string().describe("The user's words for the person, verbatim."),
     relationHint: z.enum(["sent_to","received_from","any"]).default("any")
@@ -169,13 +169,13 @@ findCounterparty: {
 getCounterpartySummary: {
   description:
     "Overall relationship with one counterparty: total sent, total received, net, count, " +
-    "last interaction. Use for 'what's my history with Maya', 'summarize my activity with Dan'.",
+    "last interaction. Use for 'what's my history with Rani', 'summarize my activity with Dan'.",
   schema: z.object({ counterpartyEmail: z.string() })
 }
 
 getCounterpartyTransactions: {
   description:
-    "List transactions with one counterparty. Use for 'show transfers to Maya', 'payments " +
+    "List transactions with one counterparty. Use for 'show transfers to Rani', 'payments " +
     "with Dan', 'show me those' after naming a person.",
   schema: z.object({
     counterpartyEmail: z.string(),
@@ -187,7 +187,7 @@ getCounterpartyTransactions: {
 getTotals: {
   description:
     "Total money sent to / received from / net with one counterparty. Use for 'how much " +
-    "did I send Dan', 'how much did Maya send me', 'what's the net between us', " +
+    "did I send Dan', 'how much did Rani send me', 'what's the net between us', " +
     "'כמה העברתי לו', 'מה הנטו בינינו'. net = received - sent.",
   schema: z.object({
     counterpartyEmail: z.string(),
@@ -280,9 +280,9 @@ cancelPendingTransfer: {
 > recipient, and a whole structural fix existed for it. In v2 it can't happen:
 > recipient and amount are *separate tool arguments* with separate descriptions,
 > and the model is told to resolve recipients only via `findCounterparty` /
-> verbatim user emails. "Send Maya the same amount sga sent me" → the model calls
+> verbatim user emails. "Send Rani the same amount sga sent me" → the model calls
 > `getTotals` (or reads context) for the sga figure and `prepareTransfer` with
-> `recipientQuery: "Maya"`.
+> `recipientQuery: "Rani"`.
 
 ---
 
@@ -294,10 +294,10 @@ eval scenarios (Phase 10).
 ### 3.1 Multi-turn read-only with coreference (English)
 
 ```
-User: how much did I send Maya this month?
-  [findCounterparty("Maya") -> 1 candidate m***@ex.com]
+User: how much did I send Rani this month?
+  [findCounterparty("Rani") -> 1 candidate m***@ex.com]
   [getTotals(m***, "sent")]  +  [searchTransactions(mode:"stats", counterparty:m***, dateRange:thisMonth)]
-Asst: This month you've sent Maya ₪320 across 4 transfers.   (+ stats card)
+Asst: This month you've sent Rani ₪320 across 4 transfers.   (+ stats card)
 
 User: and to Dan?
   [findCounterparty("Dan") -> 1 candidate d***@ex.com]
@@ -313,19 +313,19 @@ No frame, no regex — "and to Dan?" and "those" resolve from the thread.
 ### 3.2 Transfer with modify + confirm (Hebrew)
 
 ```
-User: תעביר למאיה את אותו סכום ששלחתי לדן השבוע
+User: תעביר לרני את אותו סכום ששלחתי לדן השבוע
   [reads thread: "Dan this month" = ₪150 already known, OR getTotals(d***,"sent")]
-  [findCounterparty("מאיה") -> m***]
+  [findCounterparty("רני") -> m***]
   [prepareTransfer(recipientEmail:m***, amount:150)]
-Asst: הכנתי העברה של ₪150 למאיה — אשר/י בכרטיס.    (card shown; graph paused)
+Asst: הכנתי העברה של ₪150 לרני — אשר/י בכרטיס.    (card shown; graph paused)
 
 User: בעצם תעשה 200
   [modifyPendingTransfer(amount:200)]   (supersedes card)
-Asst: עדכנתי ל-₪200 למאיה. לאשר?
+Asst: עדכנתי ל-₪200 לרני. לאשר?
 
 User: *clicks Confirm*  -> POST /confirmations/:id {confirm, version}
   [resume -> executeTransfer -> respondToAiPendingTransfer(confirm)]
-Asst: בוצע — ₪200 בדרך למאיה. ✅
+Asst: בוצע — ₪200 בדרך לרני. ✅
 ```
 "את אותו סכום ששלחתי לדן" and "תעשה 200" are resolved by the model from context;
 money moves exactly once, only after the click.
@@ -333,9 +333,9 @@ money moves exactly once, only after the click.
 ### 3.3 Ambiguity → natural clarification (no state machine)
 
 ```
-User: send 50 to maya
-  [findCounterparty("maya") -> 2 candidates: m***@a.com, m***@b.com]
-Asst: I have two Mayas — m***@a.com or m***@b.com?   (no card yet, graph just answers)
+User: send 50 to rani
+  [findCounterparty("rani") -> 2 candidates: m***@a.com, m***@b.com]
+Asst: I have two Ranis — m***@a.com or m***@b.com?   (no card yet, graph just answers)
 
 User: the second one
   [model maps "the second one" -> m***@b.com from its own previous message]

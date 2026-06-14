@@ -170,7 +170,7 @@ export function createV2WorldTools(): AssistantToolExecutors {
       );
     },
     async getLastSentCounterparty() {
-      const cp = WORLD.counterparties.maya;
+      const cp = WORLD.counterparties.rani;
       return r(
         "getLastSentCounterparty",
         `The last person you sent money to was ${fullName(cp)} (${maskWorldEmail(cp.email)}).`,
@@ -179,19 +179,19 @@ export function createV2WorldTools(): AssistantToolExecutors {
       );
     },
     async getRecentSentCounterparties() {
-      const list = [WORLD.counterparties.maya, WORLD.counterparties.dan, WORLD.counterparties.noa];
+      const list = [WORLD.counterparties.rani, WORLD.counterparties.dan, WORLD.counterparties.noa];
       return r("getRecentSentCounterparties", `Recent recipients: ${list.map(fullName).join(", ")}.`, {
         recordCount: list.length
       }, { data: list });
     },
     async getRecentReceivedCounterparties() {
-      const list = [WORLD.counterparties.dan, WORLD.counterparties.maya];
+      const list = [WORLD.counterparties.dan, WORLD.counterparties.rani];
       return r("getRecentReceivedCounterparties", `Recently received from: ${list.map(fullName).join(", ")}.`, {
         recordCount: list.length
       }, { data: list });
     },
     async getCounterpartySummary(ctx: ToolContext) {
-      const cp = recipientCp(ctx) ?? WORLD.counterparties.maya;
+      const cp = recipientCp(ctx) ?? WORLD.counterparties.rani;
       const net = cp.totalReceived - cp.totalSent;
       return r(
         "getCounterpartySummary",
@@ -208,7 +208,7 @@ export function createV2WorldTools(): AssistantToolExecutors {
       );
     },
     async getCounterpartyActivityTimeline(ctx: ToolContext) {
-      const cp = recipientCp(ctx) ?? WORLD.counterparties.maya;
+      const cp = recipientCp(ctx) ?? WORLD.counterparties.rani;
       return r(
         "getCounterpartyActivityTimeline",
         `Activity with ${fullName(cp)}: ${cp.txCount} transactions, most recently you sent ${cp.lastSentAmount.toFixed(2)} ILS.`,
@@ -216,7 +216,7 @@ export function createV2WorldTools(): AssistantToolExecutors {
       );
     },
     async getTransactionsWithCounterparty(ctx: ToolContext) {
-      const cp = recipientCp(ctx) ?? WORLD.counterparties.maya;
+      const cp = recipientCp(ctx) ?? WORLD.counterparties.rani;
       return r(
         "getTransactionsWithCounterparty",
         `Transactions with ${fullName(cp)}: most recently you sent ${cp.lastSentAmount.toFixed(2)} ILS; ${cp.txCount} total.`,

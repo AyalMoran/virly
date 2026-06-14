@@ -27,7 +27,7 @@ const SEEDED_MONGO_COUNTERPARTY_IDS = {
   alex: new mongoose.Types.ObjectId("100000000000000000000002"),
   daniel: new mongoose.Types.ObjectId("100000000000000000000003"),
   sarah: new mongoose.Types.ObjectId("100000000000000000000004"),
-  maya: new mongoose.Types.ObjectId("100000000000000000000005")
+  rani: new mongoose.Types.ObjectId("100000000000000000000005")
 } as const;
 
 export type SeededMongoEvalSeedData = {
@@ -96,8 +96,8 @@ export function buildSeededMongoEvalSeedData(): SeededMongoEvalSeedData {
         balance: 500
       },
       {
-        _id: SEEDED_MONGO_COUNTERPARTY_IDS.maya,
-        email: "maya@example.com",
+        _id: SEEDED_MONGO_COUNTERPARTY_IDS.rani,
+        email: "rani@example.com",
         balance: 500
       }
     ],
@@ -118,8 +118,8 @@ export function buildSeededMongoEvalSeedData(): SeededMongoEvalSeedData {
         lastName: "Example"
       },
       {
-        userId: SEEDED_MONGO_COUNTERPARTY_IDS.maya,
-        firstName: "Maya",
+        userId: SEEDED_MONGO_COUNTERPARTY_IDS.rani,
+        firstName: "Rani",
         lastName: "Example"
       }
     ],
@@ -136,7 +136,7 @@ export function buildSeededMongoEvalSeedData(): SeededMongoEvalSeedData {
       },
       {
         ownerId: SEEDED_MONGO_USER_ID,
-        counterpartyEmail: "maya@example.com",
+        counterpartyEmail: "rani@example.com",
         amount: 42,
         type: "debit",
         directionLabel: "sent",
@@ -186,7 +186,7 @@ export function buildSeededMongoEvalSeedData(): SeededMongoEvalSeedData {
       },
       {
         ownerId: SEEDED_MONGO_USER_ID,
-        counterpartyEmail: "maya@example.com",
+        counterpartyEmail: "rani@example.com",
         amount: 20,
         type: "credit",
         directionLabel: "received",
@@ -236,7 +236,7 @@ export function buildSeededMongoEvalSeedData(): SeededMongoEvalSeedData {
       },
       {
         ownerId: SEEDED_MONGO_USER_ID,
-        counterpartyEmail: "maya@example.com",
+        counterpartyEmail: "rani@example.com",
         amount: 15,
         type: "credit",
         directionLabel: "received",
