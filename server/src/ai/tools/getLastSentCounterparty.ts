@@ -42,6 +42,7 @@ export async function getLastSentCounterparty(
     },
     summary: `The last person you sent money to was ${display.llmLabel}.`,
     userSummary: `The last person you sent money to was ${display.userLabel}.`,
+    userSummaryHe: `האדם האחרון שאליו שלחת כסף הוא ${display.userLabel}.`,
     metadata: {
       recordCount: 1,
       counterpartyEmail: transaction.counterpartyEmail,

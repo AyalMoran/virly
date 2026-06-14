@@ -60,6 +60,10 @@ export async function getTotalReceivedFromCounterparty(
       count > 0
         ? `${userLabel} has sent you ${total.toFixed(2)} in total.`
         : `No received transactions were found from ${userLabel}.`,
+    userSummaryHe:
+      count > 0
+        ? `${userLabel} שלח/ה לך סך הכל ${total.toFixed(2)} ₪.`
+        : `לא נמצאו העברות שהתקבלו מ-${userLabel}.`,
     metadata: {
       recordCount: count,
       amount: total,

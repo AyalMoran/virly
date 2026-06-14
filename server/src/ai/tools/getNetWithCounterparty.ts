@@ -58,6 +58,12 @@ export async function getNetWithCounterparty(
       : netAmount < 0
         ? "you have sent them more"
         : "you are even";
+  const netDirectionHe =
+    netAmount > 0
+      ? "הם שלחו לך יותר"
+      : netAmount < 0
+        ? "שלחת להם יותר"
+        : "אתם שווים";
 
   return createToolResult({
     toolName: "getNetWithCounterparty",
@@ -78,6 +84,10 @@ export async function getNetWithCounterparty(
       recordCount > 0
         ? `Net with ${userLabel}: received ${receivedAmount.toFixed(2)}, sent ${sentAmount.toFixed(2)}, net ${netAmount.toFixed(2)} (${netDirection}).`
         : `No transactions were found with ${userLabel}.`,
+    userSummaryHe:
+      recordCount > 0
+        ? `נטו מול ${userLabel}: קיבלת ${receivedAmount.toFixed(2)} ₪, שלחת ${sentAmount.toFixed(2)} ₪, נטו ${netAmount.toFixed(2)} ₪ (${netDirectionHe}).`
+        : `לא נמצאו עסקאות מול ${userLabel}.`,
     metadata: {
       recordCount,
       amount: netAmount,

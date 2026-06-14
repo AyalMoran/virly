@@ -56,6 +56,10 @@ export async function getTotalSentToCounterparty(
       count > 0
         ? `You have sent ${total.toFixed(2)} in total to ${counterparty.userLabel ?? counterparty.email}.`
         : `No sent transactions were found with ${counterparty.userLabel ?? counterparty.email}.`,
+    userSummaryHe:
+      count > 0
+        ? `שלחת סך הכל ${total.toFixed(2)} ₪ ל-${counterparty.userLabel ?? counterparty.email}.`
+        : `לא נמצאו העברות ל-${counterparty.userLabel ?? counterparty.email}.`,
     metadata: {
       recordCount: count,
       amount: total,

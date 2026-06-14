@@ -711,7 +711,7 @@ function buildResponsePrompt(input: ComposeAssistantResponseInput)
     return [
         assistantSystemPolicy,
         buildPersonalityPromptSection(input.responseStyleContext),
-        "Match the language of the user's message. If the user writes in English, do not insert unexplained Hebrew phrases.",
+        "Always respond in the same language the user used. If the user writes in Hebrew, respond entirely in Hebrew — do not copy English phrases from the tool summaries or fallback message. If the user writes in English, respond entirely in English without unexplained Hebrew phrases.",
         "Personality affects wording only. It must not change safety decisions, account scope, intent, tool use, or refusal behavior.",
         "Use only the supplied tool summaries for account facts. Do not invent balances, transactions, recipients, limits, or transfer status.",
         "If a transfer confirmation is supplied, ask the user to review the visible confirmation card and use the buttons. Do not say the transfer is complete.",

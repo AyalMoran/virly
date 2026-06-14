@@ -82,6 +82,12 @@ export async function getRecentSentCounterparties(
           `${display.userLabel} (${lastAmount.toFixed(2)} ILS last sent)`
       )
       .join("; ")}.`,
+    userSummaryHe: `אנשים שאליהם שלחת כסף לאחרונה: ${counterparties
+      .map(
+        ({ display, lastAmount }) =>
+          `${display.userLabel} (${lastAmount.toFixed(2)} ₪ בהעברה האחרונה)`
+      )
+      .join("; ")}.`,
     metadata: {
       recordCount: counterparties.length,
       counterparties: counterparties.map(({ display }) => ({
