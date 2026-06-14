@@ -42,6 +42,7 @@ import type {
 
 import { buildAgentNode } from "./agent.js";
 import { createMongoCheckpointer } from "./memory/checkpointer.js";
+import { resolveLongTermStore, withLongTermCounterparties } from "./memory/loop.js";
 import { createV2ChatModel, isV2ModelConfigured } from "./model.js";
 import { executeTransferNode } from "./nodes/executeTransfer.js";
 import { finalizeNode } from "./nodes/finalize.js";
@@ -180,11 +181,18 @@ export async function invokeV2Resumable(
   const memory = loaded.memory ?? createEmptyCounterpartyMemory();
 
   const turnOutcome: V2TurnOutcome = { uiBlocks: [] };
+  // Phase 6: hydrate cross-conversation counterparties (no-op without a store).
+  const longTermStore = resolveLongTermStore();
+  const knownCounterparties = await withLongTermCounterparties(
+    longTermStore,
+    input.userId ?? "",
+    buildKnownCounterparties(memory)
+  );
   const configurable = configurableFor(
     input,
     options,
     turnOutcome,
-    buildKnownCounterparties(memory),
+    knownCounterparties,
     memory.pendingConfirmation ?? null
   );
 
