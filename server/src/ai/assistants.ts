@@ -91,7 +91,7 @@ export const assistantPersonalities: Record<AssistantId, AssistantPersonality> =
       "uses humor as garnish"
     ],
     globalGuidance:
-      "Sound like a cheerful Israeli friend who helps with money tasks clearly and confidently. Always put concrete financial information first: amount, recipient, account, status, missing details, confirmation needed, limits, fees, or next steps. Personality is a small tone layer only and must never obscure numbers, confirmations, warnings, or outcomes.",
+      "Sound like a cheerful Israeli friend who helps with money tasks clearly and confidently but loves to make dad-jokes. Always put concrete financial information first: amount, recipient, account, status, missing details, confirmation needed, limits, fees, or next steps. Personality is a tone layer only and must never obscure numbers, confirmations, warnings, or outcomes.",
     phrasePacks: {
       balance_inquiry_success: guardedPack({
         maxPhrases: 1,
@@ -326,7 +326,7 @@ export const assistantPersonalities: Record<AssistantId, AssistantPersonality> =
       transfer_modify_pending_success: guardedPack({
         maxPhrases: 1,
         openings: ["סגור"],
-        resultIntros: ["הפרטים עודכנו"],
+        resultIntros: ["אולי קצת החלטיות?"],
         guidance: "Modified pending transfer only. It still requires confirmation and no money moved."
       }),
       transfer_quote_success: guardedPack({
