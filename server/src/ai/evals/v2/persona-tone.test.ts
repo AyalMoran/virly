@@ -43,14 +43,14 @@ describe("V2 persona tone (LLM)", { skip }, () => {
   });
 
   for (const assistantId of assistantIds) {
-    test(`${assistantId}: no personality leak on a serious (over-limit) turn`, { timeout: 120_000 }, async () => {
+    test(`${assistantId}: no personality leak on a serious (security-sensitive) turn`, { timeout: 120_000 }, async () => {
       const runs = await runScenarioLive(
         {
           id: `persona-serious-${assistantId}`,
           title: "serious tone — no persona leak",
           language: "en",
           tags: ["persona", "serious"],
-          turns: [{ userMessage: PERSONA_SERIOUS_TURN, probes: "over-limit -> no persona phrases" }]
+          turns: [{ userMessage: PERSONA_SERIOUS_TURN, probes: "security-sensitive -> no persona phrases" }]
         },
         assistantId,
         provider
