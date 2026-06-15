@@ -1,0 +1,86 @@
+/**
+ * Rolling summary + trim window (design §6.2 / Phase 6).
+ *
+ * Long threads stay affordable: everything older than the most recent `keepTurns`
+ * messages is folded into a few-sentence `runningSummary` (a cheap model call),
+ * and only the recent window is replayed to the agent. The summary + recent
+ * window preserve fluency without unbounded growth — and avoid the anti-pattern
+ * of replaying a 100-turn history on every call.
+ */
+import { HumanMessage } from "@langchain/core/messages";
+import type { BaseMessage } from "@langchain/core/messages";
+import type { ChatOpenAI } from "@langchain/openai";
+
+import { isAiMessage } from "../messages.js";
+
+/** Above this many messages a turn folds older ones into the running summary. */
+export const SUMMARY_BUDGET_MESSAGES = 16;
+/** How many of the most recent messages to always replay verbatim. */
+export const KEEP_RECENT_MESSAGES = 8;
+
+function plainText(message: BaseMessage): string {
+  const { content } = message;
+  if (typeof content === "string") return content;
+  return content
+    .map((part) =>
+      typeof part === "string" ? part : "text" in part && typeof part.text === "string" ? part.text : ""
+    )
+    .join("");
+}
+
+function roleOf(message: BaseMessage): string {
+  if (message instanceof HumanMessage) return "User";
+  if (isAiMessage(message)) return "Assistant";
+  return "Note";
+}
+
+export type FoldResult = {
+  runningSummary?: string;
+  recentMessages: BaseMessage[];
+};
+
+/**
+ * If the thread is within budget, returns it unchanged. Otherwise summarizes the
+ * older messages (prepending any existing summary) and returns the new summary +
+ * the recent window. A summarizer failure degrades gracefully to a plain trim.
+ */
+export async function foldRollingSummary(
+  messages: BaseMessage[],
+  previousSummary: string | undefined,
+  model: ChatOpenAI,
+  budget = SUMMARY_BUDGET_MESSAGES,
+  keep = KEEP_RECENT_MESSAGES
+): Promise<FoldResult> {
+  if (messages.length <= budget) {
+    return { runningSummary: previousSummary, recentMessages: messages };
+  }
+
+  const older = messages.slice(0, messages.length - keep);
+  const recent = messages.slice(messages.length - keep);
+  const transcript = older.map((m) => `${roleOf(m)}: ${plainText(m)}`).join("\n");
+
+  try {
+    const result = await model.invoke([
+      [
+        "system",
+        "Summarize this banking-assistant conversation so far in 2-4 sentences: who " +
+          "the user has been transferring to / asking about, key amounts and totals " +
+          "mentioned, any open thread or stated preference. Be factual and terse."
+      ],
+      [
+        "human",
+        `${previousSummary ? `Earlier summary:\n${previousSummary}\n\n` : ""}Conversation:\n${transcript}`
+      ]
+    ]);
+    const summary = plainText(result).trim();
+    return { runningSummary: summary || previousSummary, recentMessages: recent };
+  } catch {
+    // Degrade to a plain trim; keep the prior summary.
+    return { runningSummary: previousSummary, recentMessages: recent };
+  }
+}
+
+/** A simple recent-window trim (no summary), for the prompt replay window. */
+export function trimToWindow(messages: BaseMessage[], max = SUMMARY_BUDGET_MESSAGES): BaseMessage[] {
+  return messages.length <= max ? messages : messages.slice(messages.length - max);
+}

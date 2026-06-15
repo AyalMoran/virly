@@ -1,0 +1,19 @@
+/**
+ * `persist` — turn tail (design §4.1).
+ *
+ * The checkpointer/`conversationStore` persist the thread (handled by the graph
+ * entry, which owns the store I/O). This in-graph node is the seam for long-term
+ * `Store` upserts and rolling-summary trimming (Phase 6). For the read-only loop
+ * it is a pass-through; keeping it in the topology makes the
+ * prepare→agent⇄tools→finalize→persist shape explicit and ready to grow.
+ */
+import type { LangGraphRunnableConfig } from "@langchain/langgraph";
+
+import type { V2AgentStateType } from "../state.js";
+
+export async function persistNode(
+  _state: V2AgentStateType,
+  _config: LangGraphRunnableConfig
+): Promise<Partial<V2AgentStateType>> {
+  return {};
+}

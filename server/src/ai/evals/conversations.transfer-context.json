@@ -1,0 +1,252 @@
+{
+  "suiteName": "transfer-context",
+  "scenarios": [
+    {
+      "id": "hebrew-alternating-readonly-transfer-modify-chain",
+      "description": "Long Hebrew chain alternates read-only counterparty facts, contextual transfer preparation, pending modification, limits, quote, and explicit transfer without executing money movement.",
+      "toolPreset": "default",
+      "setup": {
+        "rememberedCounterparties": ["alex@example.com"]
+      },
+      "turns": [
+        {
+          "userMessage": "כמה הוא העביר לי?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_total_received",
+          "expectedToolCalls": ["getTotalReceivedFromCounterparty"],
+          "mustInclude": ["35"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תעביר לו את הסכום הזה",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_prepare",
+          "expectedConfirmation": {
+            "recipientEmail": "alex@example.com",
+            "amount": 35
+          }
+        },
+        {
+          "userMessage": "כמה שלחתי לו בסך הכל?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_total_sent",
+          "expectedToolCallsInclude": ["getTotalSentToCounterparty"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "בעצם תעביר 70",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_modify_pending",
+          "expectedConfirmation": {
+            "recipientEmail": "alex@example.com",
+            "amount": 70
+          }
+        },
+        {
+          "userMessage": "כמה נשאר לי להעביר היום?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "daily_transfer_usage",
+          "expectedToolCalls": ["getDailyTransferUsage"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תן ציטוט אם אעביר 30 ל sarah@example.com",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_quote",
+          "expectedToolCallsInclude": ["getTransferQuote"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תעביר ל sarah@example.com 30",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_prepare",
+          "expectedConfirmation": {
+            "recipientEmail": "sarah@example.com",
+            "amount": 30
+          }
+        }
+      ]
+    },
+    {
+      "id": "hebrew-transfer-from-previous-total-answer",
+      "description": "Hebrew transfer follow-up can reuse the previous read-only total answer from conversation memory.",
+      "toolPreset": "default",
+      "setup": {
+        "rememberedCounterparties": ["alex@example.com"]
+      },
+      "turns": [
+        {
+          "userMessage": "כמה הוא העביר לי?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_total_received",
+          "expectedToolCalls": ["getTotalReceivedFromCounterparty"],
+          "mustInclude": ["35"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תעביר לו את הסכום הזה",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_prepare",
+          "expectedConfirmation": {
+            "recipientEmail": "alex@example.com",
+            "amount": 35
+          }
+        },
+        {
+          "userMessage": "כן, תאשר",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "pending_confirmation_status",
+          "expectedToolCalls": [],
+          "mustAskClarification": false,
+          "mustNotCreateConfirmation": true
+        }
+      ]
+    },
+    {
+      "id": "hebrew-amount-scope-clarification-resume",
+      "description": "Hebrew contextual same-amount transfer asks an amount-scope clarification and resumes with the previous answer total.",
+      "toolPreset": "default",
+      "setup": {
+        "rememberedCounterparties": ["alex@example.com"]
+      },
+      "turns": [
+        {
+          "userMessage": "כמה הוא העביר לי?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_total_received",
+          "expectedToolCalls": ["getTotalReceivedFromCounterparty"],
+          "mustInclude": ["35"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תעביר לו את אותו סכום",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_prepare",
+          "mustAskClarification": true,
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "הסכום מהתשובה הקודמת",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_prepare",
+          "expectedConfirmation": {
+            "recipientEmail": "alex@example.com",
+            "amount": 35
+          }
+        }
+      ]
+    },
+    {
+      "id": "hebrew-missing-details-and-unsupported-currency",
+      "description": "Transfer preparation asks for missing amount, missing recipient, and unsupported currency without creating confirmations.",
+      "toolPreset": "default",
+      "turns": [
+        {
+          "userMessage": "תעביר כסף ל alex@example.com",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_prepare",
+          "mustAskClarification": true,
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תעביר 10",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_prepare",
+          "mustAskClarification": true,
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תעביר 10 דולר ל alex@example.com",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_prepare",
+          "mustAskClarification": true,
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תעביר 10 ל alex@example.com",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_prepare",
+          "expectedConfirmation": {
+            "recipientEmail": "alex@example.com",
+            "amount": 10
+          }
+        }
+      ]
+    },
+    {
+      "id": "hebrew-recent-sent-contextual-transfer-chain",
+      "description": "Recent sent memory supports contextual recipient and amount references across a transfer chain.",
+      "toolPreset": "phase_two_counterparty",
+      "turns": [
+        {
+          "userMessage": "למי העברתי היום?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "recent_sent_counterparties",
+          "expectedToolCalls": ["getRecentSentCounterparties"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תעביר לו שוב את אותה כמות",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_prepare"
+        },
+        {
+          "userMessage": "כמה הוא העביר לי?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_total_received",
+          "expectedToolCallsInclude": ["getTotalReceivedFromCounterparty"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תעביר לו את אותו סכום שהוא העביר לי",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_prepare"
+        },
+        {
+          "userMessage": "מה הנטו מולו?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_net_total",
+          "expectedToolCallsInclude": ["getNetWithCounterparty"],
+          "mustNotCreateConfirmation": true
+        }
+      ]
+    },
+    {
+      "id": "hebrew-eligibility-limits-and-explicit-email",
+      "description": "Eligibility and limits remain read-only before an explicit email transfer creates a confirmation card.",
+      "toolPreset": "default",
+      "turns": [
+        {
+          "userMessage": "אפשר להעביר 80 עכשיו?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_eligibility",
+          "expectedToolCalls": ["getTransferEligibility"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "מה המגבלות להעברות?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_limits",
+          "expectedToolCalls": ["getTransferLimits"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "כמה השתמשתי היום לשלוח?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "daily_transfer_usage",
+          "expectedToolCalls": ["getDailyTransferUsage"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תעביר 80 ל rani@example.com",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_prepare",
+          "expectedConfirmation": {
+            "recipientEmail": "rani@example.com",
+            "amount": 80
+          }
+        }
+      ]
+    }
+  ]
+}

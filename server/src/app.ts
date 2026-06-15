@@ -1,0 +1,47 @@
+import cors from "cors";
+import express from "express";
+import morgan from "morgan";
+import { config } from "./config.js";
+import { parseCookies } from "./middleware/cookies.js";
+import { errorHandler } from "./middleware/error-handler.js";
+import aiRoutes from "./routes/ai.routes.js";
+import authRoutes from "./routes/auth.routes.js";
+import exchangeRateRoutes from "./routes/exchangeRate.routes.js";
+import transactionRoutes from "./routes/transaction.routes.js";
+import userRoutes from "./routes/user.routes.js";
+import userProfileRoutes from "./routes/userProfile.routes.js";
+import videoSessionRoutes, {
+  adminVideoSessionRoutes
+} from "./routes/videoSession.routes.js";
+
+export const app = express();
+
+app.use(
+  cors({
+    origin: config.clientUrls,
+    credentials: true
+  })
+);
+
+app.set("trust proxy", 1);
+
+app.use(parseCookies);
+app.use(express.json());
+app.use(morgan("dev"));
+
+app.get("/", (_req, res) => {
+  return res.json({ name: "Virly API", status: "ok" });
+});
+app.get("/api/health", (_req, res) => {
+  return res.json({ status: "ok" });
+});
+
+app.use("/api/auth", authRoutes);
+app.use("/api/accounts", userRoutes);
+app.use("/api/users", userProfileRoutes);
+app.use("/api/transactions", transactionRoutes);
+app.use("/api/exchange-rates", exchangeRateRoutes);
+app.use("/api/ai", aiRoutes);
+app.use("/api/video-sessions", videoSessionRoutes);
+app.use("/api/admin/video-sessions", adminVideoSessionRoutes);
+app.use(errorHandler);

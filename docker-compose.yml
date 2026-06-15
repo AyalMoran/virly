@@ -1,0 +1,94 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: dev
+    ports:
+      - "3000:3000"
+    env_file:
+      - ./server/.env
+    environment:
+      NODE_ENV: development
+      VIRLY_PORT: ${VIRLY_PORT:-3000}
+      VIRLY_MONGODB_URI: ${VIRLY_MONGODB_URI:-mongodb://mongo:27017/virly?replicaSet=rs0}
+    depends_on:
+      mongo:
+        condition: service_healthy
+      mongo-init:
+        condition: service_completed_successfully
+    develop:
+      watch:
+        - action: sync
+          path: ./server/src
+          target: /app/server/src
+        - action: sync+restart
+          path: ./server/tsconfig.json
+          target: /app/server/tsconfig.json
+        - action: rebuild
+          path: ./server/package.json
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./package-lock.json
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: .
+      dockerfile: client/Dockerfile
+    ports:
+      - "5173:5173"
+    environment:
+      VITE_API_BASE_URL: http://localhost:3000
+    depends_on:
+      - app
+    develop:
+      watch:
+        - action: sync
+          path: ./client/src
+          target: /app/client/src
+        - action: sync
+          path: ./client/index.html
+          target: /app/client/index.html
+        - action: sync+restart
+          path: ./client/vite.config.ts
+          target: /app/client/vite.config.ts
+        - action: sync+restart
+          path: ./client/tsconfig.json
+          target: /app/client/tsconfig.json
+        - action: rebuild
+          path: ./client/package.json
+        - action: rebuild
+          path: ./package.json
+        - action: rebuild
+          path: ./package-lock.json
+    restart: unless-stopped
+
+  mongo:
+    image: mongo:7
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    volumes:
+      - mongo-data:/data/db
+      - ./docker/mongo-init.js:/docker-entrypoint-initdb.d/mongo-init.js:ro
+    ports:
+      - "27017:27017"
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+
+  mongo-init:
+    image: mongo:7
+    depends_on:
+      mongo:
+        condition: service_healthy
+    restart: "no"
+    entrypoint: ["/bin/bash", "/docker/mongo-init.sh"]
+    volumes:
+      - ./docker/mongo-init.sh:/docker/mongo-init.sh:ro
+
+volumes:
+  mongo-data:

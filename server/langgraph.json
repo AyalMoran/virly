@@ -1,0 +1,9 @@
+{
+  "dependencies": ["."],
+  "graphs": {
+    "assistantV1": "./src/ai/graph.ts:assistantGraphV1",
+    "assistantV2": "./src/ai/v2/graph.ts:assistantGraphV2",
+    "assistantV2Studio": "./src/ai/v2/studioGraph.ts:assistantGraphV2Studio"
+  },
+  "env": ".env"
+}

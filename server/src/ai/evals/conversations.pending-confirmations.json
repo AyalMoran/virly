@@ -1,0 +1,268 @@
+{
+  "suiteName": "pending-confirmations",
+  "scenarios": [
+    {
+      "id": "hebrew-pending-list-current-conversation",
+      "description": "Hebrew pending transfer list request stores multiple referenceable pending-transfer memory rows.",
+      "toolPreset": "default",
+      "setup": {
+        "pendingTransfers": [
+          {
+            "recipientEmail": "alex@example.com",
+            "recipientFirstName": "Alex",
+            "recipientLastName": "Example",
+            "amount": 50,
+            "currency": "ILS"
+          },
+          {
+            "recipientEmail": "sarah@example.com",
+            "recipientFirstName": "Sarah",
+            "recipientLastName": "Example",
+            "amount": 90,
+            "currency": "ILS"
+          }
+        ]
+      },
+      "turns": [
+        {
+          "userMessage": "תראה לי אישורי העברה ממתינים",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "pending_ai_transfers",
+          "expectedToolCalls": ["getPendingAiTransfers"],
+          "mustInclude": ["50", "90"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "מה לגבי ההעברה הממתינה השנייה?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "pending_confirmation_status",
+          "expectedToolCalls": ["resolvePendingTransferReference"],
+          "mustInclude": ["90"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תראה את ההעברה הממתינה הראשונה",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "pending_confirmation_status",
+          "expectedToolCalls": ["resolvePendingTransferReference"],
+          "mustInclude": ["50"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "כן, תאשר",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "pending_confirmation_status",
+          "expectedToolCalls": [],
+          "mustAskClarification": false,
+          "mustNotCreateConfirmation": true
+        }
+      ]
+    },
+    {
+      "id": "hebrew-pending-ambiguous-reference",
+      "description": "Ambiguous pending transfer reference asks for clarification before ordinal selection resolves a specific row.",
+      "toolPreset": "default",
+      "setup": {
+        "pendingTransfers": [
+          {
+            "recipientEmail": "daniel@example.com",
+            "recipientFirstName": "Daniel",
+            "recipientLastName": "Example",
+            "amount": 40,
+            "currency": "ILS"
+          },
+          {
+            "recipientEmail": "rani@example.com",
+            "recipientFirstName": "Rani",
+            "recipientLastName": "Example",
+            "amount": 65,
+            "currency": "ILS"
+          }
+        ]
+      },
+      "turns": [
+        {
+          "userMessage": "יש לי העברות שמחכות לאישור?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "pending_ai_transfers",
+          "expectedToolCalls": ["getPendingAiTransfers"],
+          "mustInclude": ["40", "65"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "מה לגבי ההעברה הממתינה?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "pending_confirmation_status",
+          "expectedToolCalls": ["resolvePendingTransferReference"],
+          "mustAskClarification": true,
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "השנייה",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "pending_confirmation_status",
+          "expectedToolCalls": ["resolvePendingTransferReference"],
+          "mustInclude": ["65"],
+          "mustNotCreateConfirmation": true
+        }
+      ]
+    },
+    {
+      "id": "hebrew-pending-amount-modification-chain",
+      "description": "Hebrew pending transfer amount changes create replacement confirmations without sending money.",
+      "toolPreset": "default",
+      "setup": {
+        "pendingConfirmation": {
+          "recipientEmail": "alex@example.com",
+          "amount": 50,
+          "currency": "ILS",
+          "version": 1
+        }
+      },
+      "turns": [
+        {
+          "userMessage": "בעצם תעביר 70",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_modify_pending",
+          "expectedConfirmation": {
+            "recipientEmail": "alex@example.com",
+            "amount": 70
+          }
+        },
+        {
+          "userMessage": "בעצם תעביר 90",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_modify_pending",
+          "expectedConfirmation": {
+            "recipientEmail": "alex@example.com",
+            "amount": 90
+          }
+        },
+        {
+          "userMessage": "כן, תאשר",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "pending_confirmation_status",
+          "expectedToolCalls": [],
+          "mustNotCreateConfirmation": true
+        }
+      ]
+    },
+    {
+      "id": "hebrew-pending-recipient-replacement",
+      "description": "Hebrew pending transfer recipient change with an explicit email creates a replacement confirmation.",
+      "toolPreset": "default",
+      "setup": {
+        "pendingConfirmation": {
+          "recipientEmail": "alex@example.com",
+          "amount": 50,
+          "currency": "ILS",
+          "version": 1
+        }
+      },
+      "turns": [
+        {
+          "userMessage": "במקום זה תעביר ל sarah@example.com",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_modify_pending",
+          "expectedConfirmation": {
+            "recipientEmail": "sarah@example.com",
+            "amount": 50
+          }
+        },
+        {
+          "userMessage": "כמה נשאר לי להעביר היום?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "daily_transfer_usage",
+          "expectedToolCalls": ["getDailyTransferUsage"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "כן, תאשר",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "pending_confirmation_status",
+          "expectedToolCalls": [],
+          "mustNotCreateConfirmation": true
+        }
+      ]
+    },
+    {
+      "id": "hebrew-pending-chat-confirmation-safe",
+      "description": "Hebrew chat confirmation and cancellation-like wording remain non-mutating and do not execute money movement.",
+      "toolPreset": "default",
+      "setup": {
+        "pendingConfirmation": {
+          "recipientEmail": "alex@example.com",
+          "amount": 50,
+          "currency": "ILS",
+          "version": 1
+        }
+      },
+      "turns": [
+        {
+          "userMessage": "כן, תאשר",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "pending_confirmation_status",
+          "expectedToolCalls": [],
+          "mustAskClarification": false,
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "אל תשלח את זה",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transfer_cancel_pending",
+          "expectedToolCalls": [],
+          "mustNotCreateConfirmation": true
+        }
+      ]
+    },
+    {
+      "id": "hebrew-pending-list-all-and-follow-up",
+      "description": "All-pending wording stays read-only and a later ordinal follow-up resolves through pending transfer memory.",
+      "toolPreset": "default",
+      "setup": {
+        "pendingTransfers": [
+          {
+            "recipientEmail": "alex@example.com",
+            "recipientFirstName": "Alex",
+            "recipientLastName": "Example",
+            "amount": 50,
+            "currency": "ILS"
+          },
+          {
+            "recipientEmail": "rani@example.com",
+            "recipientFirstName": "Rani",
+            "recipientLastName": "Example",
+            "amount": 75,
+            "currency": "ILS"
+          }
+        ]
+      },
+      "turns": [
+        {
+          "userMessage": "תראה לי את כל האישורים הממתינים בכל השיחות",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "pending_ai_transfers",
+          "expectedToolCalls": ["getPendingAiTransfers"],
+          "mustInclude": ["50", "75"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תראה את השני",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "pending_confirmation_status",
+          "expectedToolCalls": ["resolvePendingTransferReference"],
+          "mustInclude": ["75"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "מה לגבי ההעברה הממתינה השנייה?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "pending_confirmation_status",
+          "expectedToolCalls": ["resolvePendingTransferReference"],
+          "mustInclude": ["75"],
+          "mustNotCreateConfirmation": true
+        }
+      ]
+    }
+  ]
+}

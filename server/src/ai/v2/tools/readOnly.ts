@@ -1,0 +1,309 @@
+/**
+ * Read-only v2 tools: LangChain `tool()` wrappers over the injected v1 executors.
+ *
+ * The model expresses intent in typed arguments; each wrapper translates those
+ * into the `ToolContext` the underlying executor expects (e.g. a counterparty
+ * email becomes `ctx.resolvedCounterparty`, an ordinal/name becomes
+ * `ctx.message`), runs the executor, and returns a model-facing string. Errors
+ * come back as text, never thrown, so the model recovers conversationally.
+ */
+import { tool } from "@langchain/core/tools";
+import type { LangGraphRunnableConfig } from "@langchain/langgraph";
+import { z } from "zod";
+
+import type { AssistantToolName, ToolContext } from "../../state.js";
+import { buildBlocksFromResult } from "../blocks.js";
+import { statusWriter } from "../streamEvents.js";
+import {
+  baseToolContext,
+  getConfigurable,
+  minimalCounterpartyRef,
+  renderToolResult
+} from "../toolContext.js";
+import * as D from "./descriptions.js";
+
+/** Semantic progress labels emitted as `custom` stream events (Phase 7). */
+const STATUS_LABELS: Partial<Record<AssistantToolName, string>> = {
+  getUserAccounts: "Looking up your accounts",
+  getAccountBalance: "Checking your balance",
+  getRecentTransactions: "Pulling your recent transactions",
+  searchTransactions: "Searching your transactions",
+  getTransactionStats: "Crunching your transaction stats",
+  getTransactionReceipt: "Opening that transaction",
+  resolveCounterpartyCandidates: "Looking up that person",
+  getTransactionsWithCounterparty: "Gathering those transactions",
+  getTotalSentToCounterparty: "Adding up what you've sent",
+  getTotalReceivedFromCounterparty: "Adding up what you've received",
+  getNetWithCounterparty: "Working out your net",
+  getDailyTransferUsage: "Checking your daily limit",
+  getTransferLimits: "Checking your transfer limits"
+};
+
+async function callExecutor(
+  config: LangGraphRunnableConfig,
+  name: AssistantToolName,
+  overrides: Partial<ToolContext> = {}
+): Promise<string> {
+  const cfg = getConfigurable(config);
+  const writer = statusWriter(config);
+  writer?.({ kind: "status", label: STATUS_LABELS[name] ?? "Working on it" });
+
+  const executor = cfg.executors[name];
+  if (!executor) {
+    return `The ${name} capability is unavailable right now.`;
+  }
+  try {
+    const result = await executor({ ...baseToolContext(cfg), ...overrides });
+    // Structured cards render the figures authoritatively (Phase 8); each also
+    // streams as a `block` event so the UI can render it before the text lands.
+    const blocks = buildBlocksFromResult(name, result);
+    cfg.turnOutcome.uiBlocks.push(...blocks);
+    for (const block of blocks) {
+      writer?.({ kind: "block", block });
+    }
+    return renderToolResult(result);
+  } catch (error) {
+    return `That lookup failed: ${error instanceof Error ? error.message : "unknown error"}.`;
+  }
+}
+
+export const getAccountsTool = tool(
+  async (_args, config) => callExecutor(config, "getUserAccounts"),
+  { name: "getAccounts", description: D.GET_ACCOUNTS_DESC, schema: z.object({}) }
+);
+
+export const getBalanceTool = tool(
+  async (_args, config) => callExecutor(config, "getAccountBalance"),
+  {
+    name: "getBalance",
+    description: D.GET_BALANCE_DESC,
+    schema: z.object({
+      accountId: z
+        .string()
+        .optional()
+        .describe("Specific account id; omit for the primary/default account.")
+    })
+  }
+);
+
+export const searchTransactionsTool = tool(
+  async (args, config) => {
+    if (args.counterpartyEmail) {
+      return callExecutor(config, "getTransactionsWithCounterparty", {
+        resolvedCounterparty: minimalCounterpartyRef(args.counterpartyEmail)
+      });
+    }
+    if (args.mode === "stats" || args.mode === "count") {
+      return callExecutor(config, "getTransactionStats");
+    }
+    return callExecutor(config, "getRecentTransactions");
+  },
+  {
+    name: "searchTransactions",
+    description: D.SEARCH_TRANSACTIONS_DESC,
+    schema: z.object({
+      mode: z.enum(["list", "count", "stats"]).default("list"),
+      direction: z.enum(["sent", "received", "both"]).default("both"),
+      counterpartyEmail: z
+        .string()
+        .optional()
+        .describe("Restrict to one counterparty (the email findCounterparty returned)."),
+      dateRange: z
+        .object({ from: z.string().optional(), to: z.string().optional() })
+        .optional()
+        .describe("ISO dates; resolve 'last week' to a range yourself."),
+      amountRange: z
+        .object({ min: z.number().optional(), max: z.number().optional() })
+        .optional(),
+      reasonContains: z.string().optional(),
+      textContains: z.string().optional(),
+      limit: z.number().int().min(1).max(50).default(10),
+      sort: z.enum(["newest", "oldest", "amount_desc", "amount_asc"]).default("newest")
+    })
+  }
+);
+
+export const getTransactionReceiptTool = tool(
+  async (args, config) =>
+    callExecutor(config, "getTransactionReceipt", {
+      resolvedTransactionId: args.transactionId
+    }),
+  {
+    name: "getTransactionReceipt",
+    description: D.GET_TRANSACTION_RECEIPT_DESC,
+    schema: z.object({ transactionId: z.string() })
+  }
+);
+
+export const findCounterpartyTool = tool(
+  async (args, config) =>
+    // The executor resolves from ctx.message, so the user's words go there.
+    callExecutor(config, "resolveCounterpartyCandidates", {
+      message: args.query
+    }),
+  {
+    name: "findCounterparty",
+    description: D.FIND_COUNTERPARTY_DESC,
+    schema: z.object({
+      query: z.string().describe("The user's words for the person, verbatim."),
+      relationHint: z.enum(["sent_to", "received_from", "any"]).default("any")
+    })
+  }
+);
+
+export const getCounterpartySummaryTool = tool(
+  async (args, config) =>
+    callExecutor(config, "getCounterpartySummary", {
+      resolvedCounterparty: minimalCounterpartyRef(args.counterpartyEmail)
+    }),
+  {
+    name: "getCounterpartySummary",
+    description: D.GET_COUNTERPARTY_SUMMARY_DESC,
+    schema: z.object({ counterpartyEmail: z.string() })
+  }
+);
+
+export const getCounterpartyTransactionsTool = tool(
+  async (args, config) =>
+    callExecutor(config, "getTransactionsWithCounterparty", {
+      resolvedCounterparty: minimalCounterpartyRef(args.counterpartyEmail)
+    }),
+  {
+    name: "getCounterpartyTransactions",
+    description: D.GET_COUNTERPARTY_TRANSACTIONS_DESC,
+    schema: z.object({
+      counterpartyEmail: z.string(),
+      direction: z.enum(["sent", "received", "both"]).default("both"),
+      limit: z.number().int().min(1).max(50).default(10)
+    })
+  }
+);
+
+export const getTotalsTool = tool(
+  async (args, config) => {
+    const name: AssistantToolName =
+      args.direction === "sent"
+        ? "getTotalSentToCounterparty"
+        : args.direction === "received"
+          ? "getTotalReceivedFromCounterparty"
+          : "getNetWithCounterparty";
+    return callExecutor(config, name, {
+      resolvedCounterparty: minimalCounterpartyRef(args.counterpartyEmail)
+    });
+  },
+  {
+    name: "getTotals",
+    description: D.GET_TOTALS_DESC,
+    schema: z.object({
+      counterpartyEmail: z.string(),
+      direction: z.enum(["sent", "received", "net"])
+    })
+  }
+);
+
+export const getRecentSentTool = tool(
+  async (_args, config) =>
+    callExecutor(config, "getRecentSentCounterparties"),
+  {
+    name: "getRecentSent",
+    description: D.GET_RECENT_SENT_DESC,
+    schema: z.object({ limit: z.number().int().min(1).max(10).default(5) })
+  }
+);
+
+export const getRecentReceivedTool = tool(
+  async (_args, config) =>
+    callExecutor(config, "getRecentReceivedCounterparties"),
+  {
+    name: "getRecentReceived",
+    description: D.GET_RECENT_RECEIVED_DESC,
+    schema: z.object({ limit: z.number().int().min(1).max(10).default(5) })
+  }
+);
+
+export const getLastSentTool = tool(
+  async (_args, config) =>
+    callExecutor(config, "getLastSentCounterparty"),
+  { name: "getLastSent", description: D.GET_LAST_SENT_DESC, schema: z.object({}) }
+);
+
+export const getVerifiedRecipientsTool = tool(
+  async (_args, config) =>
+    callExecutor(config, "getVerifiedRecipients"),
+  {
+    name: "getVerifiedRecipients",
+    description: D.GET_VERIFIED_RECIPIENTS_DESC,
+    schema: z.object({})
+  }
+);
+
+export const getTransferLimitsTool = tool(
+  async (_args, config) => callExecutor(config, "getTransferLimits"),
+  {
+    name: "getTransferLimits",
+    description: D.GET_TRANSFER_LIMITS_DESC,
+    schema: z.object({})
+  }
+);
+
+export const checkTransferEligibilityTool = tool(
+  async (_args, config) =>
+    callExecutor(config, "getTransferEligibility"),
+  {
+    name: "checkTransferEligibility",
+    description: D.CHECK_TRANSFER_ELIGIBILITY_DESC,
+    schema: z.object({ amount: z.number().positive() })
+  }
+);
+
+export const getTransferQuoteTool = tool(
+  async (args, config) =>
+    callExecutor(config, "getTransferQuote", {
+      resolvedCounterparty: minimalCounterpartyRef(args.counterpartyEmail)
+    }),
+  {
+    name: "getTransferQuote",
+    description: D.GET_TRANSFER_QUOTE_DESC,
+    schema: z.object({ counterpartyEmail: z.string(), amount: z.number().positive() })
+  }
+);
+
+export const getDailyTransferUsageTool = tool(
+  async (_args, config) =>
+    callExecutor(config, "getDailyTransferUsage"),
+  {
+    name: "getDailyTransferUsage",
+    description: D.GET_DAILY_TRANSFER_USAGE_DESC,
+    schema: z.object({})
+  }
+);
+
+export const getPendingTransfersTool = tool(
+  async (_args, config) =>
+    callExecutor(config, "getPendingAiTransfers"),
+  {
+    name: "getPendingTransfers",
+    description: D.GET_PENDING_TRANSFERS_DESC,
+    schema: z.object({})
+  }
+);
+
+export const readOnlyTools = [
+  getAccountsTool,
+  getBalanceTool,
+  searchTransactionsTool,
+  getTransactionReceiptTool,
+  findCounterpartyTool,
+  getCounterpartySummaryTool,
+  getCounterpartyTransactionsTool,
+  getTotalsTool,
+  getRecentSentTool,
+  getRecentReceivedTool,
+  getLastSentTool,
+  getVerifiedRecipientsTool,
+  getTransferLimitsTool,
+  checkTransferEligibilityTool,
+  getTransferQuoteTool,
+  getDailyTransferUsageTool,
+  getPendingTransfersTool
+];

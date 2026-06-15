@@ -1,0 +1,152 @@
+/**
+ * The trust boundary + per-turn runtime for v2 tools.
+ *
+ * Identity (`userId`, `conversationId`, `now`, `timezone`) and the injected
+ * dependencies (read-only executors, transfer services, the active pending card)
+ * are carried in `config.configurable` and read here — tools never trust
+ * model-supplied identity (design §5.2). This mirrors v1's `ToolContext` trust
+ * boundary, expressed through LangGraph's config.
+ *
+ * The v2 tools wrap the existing v1 executors (`AssistantToolExecutors`) so the
+ * proven Mongo aggregations / DB-free conformance fakes are reused unchanged —
+ * only the model-facing wrapper differs.
+ */
+import type { LangGraphRunnableConfig } from "@langchain/langgraph";
+
+import { maskEmail } from "../counterpartyMemory.js";
+import { getToolDisplayData } from "../toolResults.js";
+import type { AssistantId } from "../assistants.js";
+import type { AssistantResponseBlock } from "../responseBlocks.js";
+import type {
+  AssistantToolExecutors,
+  ClarificationRequest,
+  CounterpartyRef,
+  PendingConfirmationMemory,
+  RuntimeToolResult,
+  TransferConfirmation,
+  TransferModificationService,
+  TransferPreparationService,
+  ToolContext
+} from "../state.js";
+
+/**
+ * The structured result of a money-proposing tool. Read-only tools never touch
+ * it. The graph entry seeds one per turn into `configurable`; `finalize` reads it
+ * back, so cards/clarifications reach `RunAssistantResult` without the tool
+ * having to thread a `tool_call_id` into a `Command`.
+ */
+export type V2TurnOutcome = {
+  confirmation?: TransferConfirmation;
+  clarification?: ClarificationRequest;
+  supersededConfirmationId?: string;
+  /** Structured UI cards the tools produced this turn (design §5.2, Phase 8). */
+  uiBlocks: AssistantResponseBlock[];
+};
+
+/** Everything a v2 node/tool needs for one turn, carried in config.configurable. */
+export type V2Configurable = {
+  userId: string;
+  conversationId: string;
+  assistantId: AssistantId;
+  /** The current user message (some executors resolve from ctx.message). */
+  message: string;
+  now: Date;
+  timezone: string;
+  locale: "he" | "en" | "mixed" | "unknown";
+  /** Injected read-only executors (real Mongo tools in prod, world fakes in eval). */
+  executors: AssistantToolExecutors;
+  transferPreparationService?: TransferPreparationService;
+  transferModificationService?: TransferModificationService;
+  /** Executes a confirmed/denied transfer on resume (Phase 5); default = backend service. */
+  transferResponseService?: (input: {
+    userId: string;
+    pendingTransferId: string;
+    action: "confirm" | "deny";
+    version: number;
+    idempotencyKey?: string;
+  }) => Promise<unknown>;
+  /** The active pending confirmation card from memory, if a transfer is in flight. */
+  pendingConfirmation?: PendingConfirmationMemory | null;
+  /** Mutable per-turn sink for money-tool outcomes. */
+  turnOutcome: V2TurnOutcome;
+  /** Known counterparties (name/email) injected into the system prompt. */
+  knownCounterparties: Array<{ email: string; label: string; aliases: string[] }>;
+  /** Compressed earlier-conversation summary when the thread was trimmed (Phase 6). */
+  runningSummary?: string;
+};
+
+export function getConfigurable(
+  config: LangGraphRunnableConfig
+): V2Configurable {
+  const configurable = config.configurable as Partial<V2Configurable> | undefined;
+  if (!configurable?.userId || !configurable.conversationId) {
+    throw new Error("v2 tool invoked without userId/conversationId in config");
+  }
+  return configurable as V2Configurable;
+}
+
+/** A minimal CounterpartyRef from an email — enough for executors that key on email. */
+export function minimalCounterpartyRef(email: string): CounterpartyRef {
+  return {
+    email: email.trim().toLowerCase(),
+    maskedLabel: maskEmail(email),
+    userLabel: email,
+    firstMentionedAtTurn: 0,
+    lastReferencedAtTurn: 0
+  };
+}
+
+/** Base ToolContext seeded from identity; per-tool fields are layered on top. */
+export function baseToolContext(cfg: V2Configurable): ToolContext {
+  return {
+    userId: cfg.userId,
+    conversationId: cfg.conversationId,
+    message: cfg.message
+  };
+}
+
+const RELEVANT_META_KEYS = [
+  "counterpartyEmail",
+  "maskedLabel",
+  "displayName",
+  "amount",
+  "sentAmount",
+  "receivedAmount",
+  "netAmount",
+  "recordCount",
+  "transactionId",
+  "transactions",
+  "counterparties",
+  "counterpartyCandidates",
+  "pendingTransfers",
+  "resolutionStatus"
+] as const;
+
+/**
+ * Render an executor result into the text the model reads. We include the human
+ * summary plus the structured fields the model needs to chain follow-ups
+ * (transaction ids for "the second one", the resolved email for a transfer),
+ * which the prose summary alone may mask.
+ */
+export function renderToolResult(result: RuntimeToolResult): string {
+  const display = getToolDisplayData(result);
+  const metadata = display.metadata as Record<string, unknown>;
+  const slim: Record<string, unknown> = {};
+  for (const key of RELEVANT_META_KEYS) {
+    if (metadata[key] !== undefined) {
+      slim[key] = metadata[key];
+    }
+  }
+  if (result.data && typeof result.data === "object") {
+    slim.data = result.data;
+  }
+
+  const statusNote =
+    result.status === "empty"
+      ? " (no matching data)"
+      : result.status === "error"
+        ? ` (error: ${result.error?.message ?? "tool failed"})`
+        : "";
+  const dataNote = Object.keys(slim).length > 0 ? `\n[data] ${JSON.stringify(slim)}` : "";
+  return `${display.summary}${statusNote}${dataNote}`;
+}
