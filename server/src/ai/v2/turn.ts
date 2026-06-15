@@ -7,8 +7,9 @@
  * card into pending-confirmation memory, and deriving audit fields
  * (executed tools / intent) from the message thread + turn outcome.
  */
-import { AIMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
+
+import { aiToolCalls } from "./messages.js";
 
 import type {
   AssistantIntent,
@@ -106,10 +107,9 @@ const V2_TO_V1_READ_TOOL: Partial<Record<string, AssistantToolName>> = {
 export function collectCalledToolNames(messages: BaseMessage[]): string[] {
   const names: string[] = [];
   for (const message of messages) {
-    if (message instanceof AIMessage) {
-      for (const call of message.tool_calls ?? []) {
-        names.push(call.name);
-      }
+    // aiToolCalls matches AIMessageChunk too (streaming-robust; see ./messages.ts).
+    for (const call of aiToolCalls(message)) {
+      names.push(call.name);
     }
   }
   return names;

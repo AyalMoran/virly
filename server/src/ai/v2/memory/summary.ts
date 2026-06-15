@@ -10,9 +10,11 @@
  * window preserve fluency without unbounded growth — and avoid the anti-pattern
  * of replaying a 100-turn history on every call.
  */
-import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import { HumanMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
 import type { ChatOpenAI } from "@langchain/openai";
+
+import { isAiMessage } from "../messages.js";
 
 /** Above this many messages a turn folds older ones into the running summary. */
 export const SUMMARY_BUDGET_MESSAGES = 16;
@@ -31,7 +33,7 @@ function plainText(message: BaseMessage): string {
 
 function roleOf(message: BaseMessage): string {
   if (message instanceof HumanMessage) return "User";
-  if (message instanceof AIMessage) return "Assistant";
+  if (isAiMessage(message)) return "Assistant";
   return "Note";
 }
 
