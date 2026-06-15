@@ -1,0 +1,199 @@
+/**
+ * Structured uiBlocks (design §5.2, §8 / Phase 8).
+ *
+ * Read tools map their authoritative result into typed `AssistantResponseBlock`s
+ * (the existing client-contract schema). The numbers and their DIRECTION render
+ * from these blocks instead of being re-serialized as prose, so the surfaced
+ * answer is unambiguous (a balance, a transaction's `received`/`sent`, a total)
+ * even when the model's intro sentence is loose.
+ *
+ * Built defensively from the common `displayData.metadata` fields that both the
+ * real Mongo executors and the DB-free eval-world fakes provide.
+ */
+import { getToolDisplayData } from "../toolResults.js";
+import type {
+  AssistantResponseBlock,
+  AssistantTransactionItem
+} from "../responseBlocks.js";
+import type {
+  AssistantToolName,
+  CurrencyCode,
+  RuntimeToolResult,
+  ToolResultMetadata,
+  TransferConfirmation
+} from "../state.js";
+
+let blockSeq = 0;
+function blockId(prefix: string): string {
+  blockSeq += 1;
+  return `${prefix}-${blockSeq}`;
+}
+
+const ILS: CurrencyCode = "ILS";
+function money(amount: number, currency: CurrencyCode = ILS) {
+  return { amount, currency };
+}
+
+type MetaTransaction = NonNullable<ToolResultMetadata["transactions"]>[number];
+
+function toTxItem(tx: MetaTransaction): AssistantTransactionItem {
+  return {
+    id: tx.transactionId,
+    direction: tx.direction,
+    counterpartyName: tx.counterpartyLabel ?? "",
+    amount: money(tx.amount, (tx.currency as CurrencyCode) ?? ILS),
+    status: "completed",
+    createdAt: tx.occurredAt
+  };
+}
+
+/** Best-effort transaction item from a receipt tool's `data` (world or real). */
+function txItemFromData(result: RuntimeToolResult): AssistantTransactionItem | undefined {
+  const data = result.data as
+    | {
+        id?: string;
+        transactionId?: string;
+        direction?: "sent" | "received";
+        amount?: number;
+        cp?: string;
+        counterpartyLabel?: string;
+        occurredAt?: string;
+      }
+    | null
+    | undefined;
+  if (!data || typeof data !== "object" || typeof data.amount !== "number") {
+    return undefined;
+  }
+  return {
+    id: data.transactionId ?? data.id ?? blockId("tx"),
+    direction: data.direction === "received" ? "received" : "sent",
+    counterpartyName: data.counterpartyLabel ?? data.cp ?? "",
+    amount: money(data.amount),
+    status: "completed",
+    createdAt: data.occurredAt ?? new Date().toISOString()
+  };
+}
+
+/** Map a read tool's result into the structured block(s) that render its figures. */
+export function buildBlocksFromResult(
+  toolName: AssistantToolName,
+  result: RuntimeToolResult
+): AssistantResponseBlock[] {
+  if (result.status === "error") {
+    return [];
+  }
+  const meta = getToolDisplayData(result).metadata as ToolResultMetadata;
+  const blocks: AssistantResponseBlock[] = [];
+
+  switch (toolName) {
+    case "getAccountBalance":
+      if (typeof meta.amount === "number") {
+        blocks.push({
+          id: blockId("balance"),
+          type: "account_summary",
+          availableBalance: money(meta.amount),
+          ...(meta.accountLabel ? { accountLabel: { text: meta.accountLabel } } : {})
+        });
+      }
+      break;
+
+    case "getRecentTransactions":
+    case "searchTransactions":
+    case "getTransactionsWithCounterparty":
+      if (meta.transactions?.length) {
+        blocks.push({
+          id: blockId("txlist"),
+          type: "transaction_list",
+          transactions: meta.transactions.map(toTxItem),
+          summary: { totalCount: meta.transactions.length }
+        });
+      }
+      break;
+
+    case "getTransactionReceipt": {
+      const tx =
+        txItemFromData(result) ??
+        (meta.transactions?.length ? toTxItem(meta.transactions[0]) : undefined);
+      if (tx) {
+        blocks.push({ id: blockId("txdetail"), type: "transaction_detail", transaction: tx });
+      }
+      break;
+    }
+
+    case "getTotalSentToCounterparty":
+    case "getTotalReceivedFromCounterparty":
+    case "getNetWithCounterparty": {
+      if (typeof meta.amount === "number") {
+        const counterparty =
+          meta.displayName ?? meta.maskedLabel ?? meta.counterpartyEmail ?? "this counterparty";
+        const label =
+          toolName === "getTotalReceivedFromCounterparty"
+            ? `Received from ${counterparty}`
+            : toolName === "getNetWithCounterparty"
+              ? `Net with ${counterparty}`
+              : `Sent to ${counterparty}`;
+        blocks.push({
+          id: blockId("totals"),
+          type: "transaction_stats",
+          count: meta.recordCount ?? 0,
+          ...(toolName === "getTotalSentToCounterparty" ? { sentTotal: money(meta.amount) } : {}),
+          ...(toolName === "getTotalReceivedFromCounterparty"
+            ? { receivedTotal: money(meta.amount) }
+            : {}),
+          ...(toolName === "getNetWithCounterparty" ? { net: money(meta.amount) } : {}),
+          items: [{ label: { text: label }, value: money(meta.amount) }]
+        });
+      }
+      break;
+    }
+
+    case "getTransactionStats":
+      blocks.push({
+        id: blockId("stats"),
+        type: "transaction_stats",
+        count: meta.recordCount ?? 0,
+        ...(typeof meta.sentAmount === "number" ? { sentTotal: money(meta.sentAmount) } : {}),
+        ...(typeof meta.receivedAmount === "number"
+          ? { receivedTotal: money(meta.receivedAmount) }
+          : {}),
+        ...(typeof meta.netAmount === "number" ? { net: money(meta.netAmount) } : {})
+      });
+      break;
+
+    case "getDailyTransferUsage":
+      if (typeof meta.amount === "number") {
+        blocks.push({
+          id: blockId("limits"),
+          type: "transfer_limits",
+          dailyRemaining: money(meta.amount)
+        });
+      }
+      break;
+
+    case "getTransferLimits":
+      if (typeof meta.amount === "number") {
+        blocks.push({
+          id: blockId("limits"),
+          type: "transfer_limits",
+          perTransferLimit: money(meta.amount)
+        });
+      }
+      break;
+
+    default:
+      break;
+  }
+
+  return blocks;
+}
+
+/** The card block for a prepared/ modified transfer confirmation. */
+export function transferConfirmationBlock(
+  confirmation: TransferConfirmation
+): AssistantResponseBlock {
+  return {
+    id: blockId("confirmation"),
+    type: "transfer_confirmation",
+    confirmation
+  };
+}

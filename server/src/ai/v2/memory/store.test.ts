@@ -1,0 +1,91 @@
+
+import assert from "node:assert/strict";
+import { describe, test } from "node:test";
+
+import {
+  createInMemoryLongTermStore,
+  readLongTermSnapshot,
+  rememberFact,
+  upsertCounterparty,
+  upsertPreferences,
+  userNamespace
+} from "./store.js";
+
+describe("v2 long-term Store (in-memory adapter)", () => {
+  test("upsert + read round-trips counterparties, preferences, and facts", async () => {
+    const store = createInMemoryLongTermStore();
+    const userId = "user-1";
+
+    await upsertCounterparty(store, userId, {
+      email: "Rani@Example.com",
+      displayName: "Rani Cohen",
+      relation: "sent_to",
+      lastInteractionAt: "2026-06-10T09:00:00.000Z"
+    });
+    await upsertPreferences(store, userId, { preferredLanguage: "he" });
+    await rememberFact(store, userId, {
+      id: "rent",
+      text: "rent is on the 1st",
+      createdAt: "2026-06-01T00:00:00.000Z"
+    });
+
+    const snapshot = await readLongTermSnapshot(store, userId);
+
+    assert.equal(snapshot.counterparties.length, 1);
+    // email is normalised to lower-case on write
+    assert.equal(snapshot.counterparties[0]?.email, "rani@example.com");
+    assert.equal(snapshot.counterparties[0]?.displayName, "Rani Cohen");
+    assert.equal(snapshot.preferences.preferredLanguage, "he");
+    assert.equal(snapshot.facts.length, 1);
+    assert.equal(snapshot.facts[0]?.text, "rent is on the 1st");
+  });
+
+  test("relation widens to 'both' when the counterparty is seen in both directions", async () => {
+    const store = createInMemoryLongTermStore();
+    const userId = "user-2";
+
+    await upsertCounterparty(store, userId, {
+      email: "dan@example.com",
+      relation: "sent_to"
+    });
+    await upsertCounterparty(store, userId, {
+      email: "dan@example.com",
+      relation: "received_from"
+    });
+
+    const snapshot = await readLongTermSnapshot(store, userId);
+    assert.equal(snapshot.counterparties.length, 1);
+    assert.equal(snapshot.counterparties[0]?.relation, "both");
+  });
+
+  test("preferences merge rather than replace", async () => {
+    const store = createInMemoryLongTermStore();
+    const userId = "user-3";
+
+    await upsertPreferences(store, userId, { preferredLanguage: "en" });
+    await upsertPreferences(store, userId, { confirmAboveAmount: 500 });
+
+    const snapshot = await readLongTermSnapshot(store, userId);
+    assert.equal(snapshot.preferences.preferredLanguage, "en");
+    assert.equal(snapshot.preferences.confirmAboveAmount, 500);
+  });
+
+  test("namespaces isolate users from each other", async () => {
+    const store = createInMemoryLongTermStore();
+
+    await upsertCounterparty(store, "alice", {
+      email: "x@example.com",
+      relation: "sent_to"
+    });
+
+    const aliceNs = userNamespace("alice");
+    const bobNs = userNamespace("bob");
+    assert.notDeepEqual(aliceNs, bobNs);
+
+    const bobSnapshot = await readLongTermSnapshot(store, "bob");
+    assert.equal(bobSnapshot.counterparties.length, 0);
+
+    const aliceSnapshot = await readLongTermSnapshot(store, "alice");
+    assert.equal(aliceSnapshot.counterparties.length, 1);
+  });
+});

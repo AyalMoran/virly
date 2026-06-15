@@ -1,0 +1,25 @@
+{
+  "name": "virly",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "install:all": "npm install --workspaces",
+    "dev": "npm run dev --workspace server",
+    "dev:server": "npm run dev --workspace server",
+    "dev:client": "npm run dev --workspace client",
+    "test:client": "tsx --tsconfig client/tsconfig.json --test \"client/tests/**/*.test.tsx\"",
+    "seed:personal-details": "node scripts/fill-personal-details.api.js",
+    "seed:transactions": "bash scripts/seed-transactions.sh",
+    "build": "npm run build --workspace server && npm run build --workspace client"
+  },
+  "dependencies": {
+    "@langchain/core": "^1.1.48",
+    "@langchain/langgraph": "^1.4.2",
+    "@langchain/openai": "^1.4.7",
+    "zod": "^4.4.3"
+  }
+}

@@ -1,0 +1,263 @@
+{
+  "suiteName": "counterparty-history",
+  "scenarios": [
+    {
+      "id": "hebrew-received-total-follow-up",
+      "description": "Hebrew read-only follow-up resolves a remembered counterparty and uses the received-total tool.",
+      "toolPreset": "default",
+      "setup": {
+        "rememberedCounterparties": ["alex@example.com"]
+      },
+      "turns": [
+        {
+          "userMessage": "כמה הוא העביר לי?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_total_received",
+          "expectedToolCalls": ["getTotalReceivedFromCounterparty"],
+          "mustInclude": ["35"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "כמה שלחתי לו?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_total_sent",
+          "expectedToolCallsInclude": ["getTotalSentToCounterparty"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "מה הנטו מולו?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_net_total",
+          "expectedToolCallsInclude": ["getNetWithCounterparty"],
+          "mustNotCreateConfirmation": true
+        }
+      ]
+    },
+    {
+      "id": "hebrew-named-activity-timeline",
+      "description": "Hebrew named counterparty activity requests resolve through the phase two timeline tool path.",
+      "toolPreset": "phase_two_counterparty",
+      "turns": [
+        {
+          "userMessage": "תראה לי פעילות מול Daniel",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_activity_timeline",
+          "expectedToolCallsInclude": [
+            "resolveCounterpartyCandidates",
+            "getCounterpartyActivityTimeline"
+          ],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תן לי סיכום מולו",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_summary",
+          "expectedToolCallsInclude": ["getCounterpartySummary"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תראה לי את העסקאות איתו",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_transactions",
+          "expectedToolCallsInclude": ["getTransactionsWithCounterparty"],
+          "mustNotCreateConfirmation": true
+        }
+      ]
+    },
+    {
+      "id": "hebrew-transaction-detail-follow-up",
+      "description": "Hebrew transaction search follow-up resolves ordinal transaction references from prior conversation memory.",
+      "toolPreset": "phase_three_transactions",
+      "turns": [
+        {
+          "userMessage": "תראה לי העברות מעל 40 מהשבוע",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transaction_search",
+          "expectedToolCalls": ["searchTransactions"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תראה לי פרטים על הראשונה",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transaction_detail",
+          "expectedToolCallsInclude": ["resolveTransactionReference"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תראה לי פרטים על השנייה",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transaction_detail",
+          "expectedToolCallsInclude": ["resolveTransactionReference"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "כמה העברות היו לי השבוע?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transaction_count",
+          "expectedToolCalls": ["getTransactionStats"],
+          "mustNotCreateConfirmation": true
+        }
+      ]
+    },
+    {
+      "id": "hebrew-summary-net-and-transactions-chain",
+      "description": "Hebrew multi-turn counterparty history chain summarizes a named counterparty, follows up with totals, then lists transactions with the same person.",
+      "toolPreset": "phase_two_counterparty",
+      "turns": [
+        {
+          "userMessage": "תן לי סיכום מול Daniel",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_summary",
+          "expectedToolCallsInclude": [
+            "resolveCounterpartyCandidates",
+            "getCounterpartySummary"
+          ],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "מה הנטו מולו?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_net_total",
+          "expectedToolCallsInclude": ["getNetWithCounterparty"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "כמה הוא שלח לי בסך הכל?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_total_received",
+          "expectedToolCallsInclude": ["getTotalReceivedFromCounterparty"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "כמה אני שלחתי לו בסך הכל?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_total_sent",
+          "expectedToolCallsInclude": ["getTotalSentToCounterparty"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תראה לי את העסקאות איתו",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_transactions",
+          "expectedToolCallsInclude": ["getTransactionsWithCounterparty"],
+          "mustNotCreateConfirmation": true
+        }
+      ]
+    },
+    {
+      "id": "hebrew-recent-received-follow-up-total",
+      "description": "Hebrew recent received counterparty list updates memory, then pronoun follow-ups total and list that counterparty.",
+      "toolPreset": "phase_two_counterparty",
+      "turns": [
+        {
+          "userMessage": "מי העביר לי היום?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "recent_received_counterparties",
+          "expectedToolCalls": ["getRecentReceivedCounterparties"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "כמה היא העבירה לי בסך הכל?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_total_received",
+          "expectedToolCallsInclude": ["getTotalReceivedFromCounterparty"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תראה לי עסקאות איתה",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_transactions",
+          "expectedToolCallsInclude": ["getTransactionsWithCounterparty"],
+          "mustNotCreateConfirmation": true
+        }
+      ]
+    },
+    {
+      "id": "hebrew-recent-sent-switching-chain",
+      "description": "Hebrew recent sent list drives pronoun and ordinal-style follow-ups while switching back to transaction stats.",
+      "toolPreset": "phase_three_transactions",
+      "turns": [
+        {
+          "userMessage": "למי העברתי היום?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "recent_sent_counterparties",
+          "expectedToolCalls": ["getRecentSentCounterparties"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "מה הנטו מולו?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_net_total",
+          "expectedToolCallsInclude": ["getNetWithCounterparty"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תראה לי פעילות מולו",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_activity_timeline",
+          "expectedToolCallsInclude": ["getCounterpartyActivityTimeline"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תן לי סטטיסטיקות על ההעברות השבוע",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transaction_stats",
+          "expectedToolCalls": ["getTransactionStats"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "תראה לי העברות מעל 20 מהשבוע",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transaction_search",
+          "expectedToolCalls": ["searchTransactions"],
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "פרטים על הראשונה",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "transaction_detail",
+          "expectedToolCallsInclude": ["resolveTransactionReference"],
+          "mustNotCreateConfirmation": true
+        }
+      ]
+    },
+    {
+      "id": "hebrew-ambiguous-counterparty-summary",
+      "description": "Ambiguous named counterparty resolution asks for clarification and does not run downstream counterparty tools.",
+      "toolPreset": "phase_two_counterparty",
+      "setup": {
+        "counterpartyResolver": {
+          "status": "ambiguous",
+          "candidates": [
+            {
+              "email": "daniel@example.com",
+              "displayName": "Daniel Example"
+            },
+            {
+              "email": "dana@example.com",
+              "displayName": "Dana Example"
+            }
+          ]
+        }
+      },
+      "turns": [
+        {
+          "userMessage": "תן לי סיכום מול דן",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_summary",
+          "expectedToolCalls": ["resolveCounterpartyCandidates"],
+          "mustAskClarification": true,
+          "mustNotCreateConfirmation": true
+        },
+        {
+          "userMessage": "מה הנטו מול דן?",
+          "expectedResponseLanguage": "hebrew",
+          "expectedIntent": "counterparty_net_total",
+          "expectedToolCalls": ["resolveCounterpartyCandidates"],
+          "mustAskClarification": true,
+          "mustNotCreateConfirmation": true
+        }
+      ]
+    }
+  ]
+}

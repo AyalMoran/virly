@@ -1,0 +1,204 @@
+import { useEffect, useState } from "react";
+import { AnimatePresence, motion } from "framer-motion";
+import {
+  NavLink,
+  useLocation,
+  useNavigate,
+  useNavigationType,
+  useOutlet
+} from "react-router-dom";
+import {
+  CreditCard,
+  Headphones,
+  LayoutDashboard,
+  LogOut,
+  Settings,
+  Send,
+  Video
+} from "lucide-react";
+import { useAuth } from "../features/auth/AuthProvider";
+import { hasAuthTransition } from "../lib/route-transition";
+import { getDisplayName, getUserAvatarUrl } from "../lib/user-avatar";
+import { FloatingChatWidget } from "./ui/floating-chat-widget-shadcnui";
+import { UserProfileSidebar } from "./ui/menu";
+import { ShellTopbar } from "./ShellTopbar";
+
+/**
+ * Captures the outlet element at mount so the exiting copy keeps rendering
+ * the previous route while AnimatePresence plays its exit animation.
+ */
+function AnimatedOutlet() {
+  const outlet = useOutlet();
+  const [frozenOutlet] = useState(outlet);
+  return <>{frozenOutlet}</>;
+}
+
+const routeTransition = {
+  initial: { opacity: 0, y: 14 },
+  animate: { opacity: 1, y: 0 },
+  exit: {
+    opacity: 0,
+    y: -8,
+    transition: { duration: 0.14, ease: [0.4, 0, 1, 1] as const }
+  },
+  transition: { duration: 0.26, ease: [0.16, 1, 0.3, 1] as const }
+};
+
+const SIDEBAR_COLLAPSED_KEY = "virly-sidebar-collapsed";
+
+function readSidebarCollapsed() {
+  try {
+    return localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+type ShellNavItem = {
+  to: string;
+  label: string;
+  icon: JSX.Element;
+  isSeparator?: boolean;
+  pinToBottom?: boolean;
+};
+
+const baseNavItems: ShellNavItem[] = [
+  { to: "/dashboard", label: "Dashboard", icon: <LayoutDashboard /> },
+  { to: "/transfer", label: "Transfer", icon: <Send /> },
+  { to: "/transactions", label: "Transactions", icon: <CreditCard /> },
+  { to: "/video", label: "Video", icon: <Video /> },
+  { to: "/settings", label: "Settings", icon: <Settings />, pinToBottom: true }
+];
+
+function canUseAgentVideo(role?: string) {
+  return (
+    role === "support_agent" ||
+    role === "sales_agent" ||
+    role === "support_manager" ||
+    role === "admin"
+  );
+}
+
+export function AppShell() {
+  const auth = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const navigationType = useNavigationType();
+  const displayName = getDisplayName(auth.user?.email);
+  const enteredFromAuth = hasAuthTransition(location.state);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(readSidebarCollapsed);
+
+  useEffect(() => {
+    // Forward navigation starts at the top of the new page; browser-driven
+    // back/forward (POP) keeps the browser's own scroll restoration.
+    if (navigationType !== "POP") {
+      window.scrollTo(0, 0);
+    }
+  }, [location.pathname, navigationType]);
+
+  function toggleSidebar() {
+    setIsSidebarCollapsed((collapsed) => {
+      const next = !collapsed;
+      try {
+        localStorage.setItem(SIDEBAR_COLLAPSED_KEY, next ? "1" : "0");
+      } catch {
+        // Preference simply won't persist when storage is unavailable.
+      }
+      return next;
+    });
+  }
+  const navItems: ShellNavItem[] = canUseAgentVideo(auth.user?.role)
+    ? [
+        ...baseNavItems,
+        {
+          to: "/agent/video-sessions",
+          label: "Queue",
+          icon: <Headphones />,
+          isSeparator: true
+        }
+      ]
+    : baseNavItems;
+
+  async function handleLogout() {
+    await auth.logout();
+    navigate("/login", { replace: true });
+  }
+
+  return (
+    <motion.div
+      className={isSidebarCollapsed ? "app-shell sidebar-collapsed" : "app-shell"}
+      initial={enteredFromAuth ? { opacity: 0, scale: 0.985 } : false}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.7, ease: [0.16, 1, 0.3, 1] }}
+    >
+      <motion.aside
+        className="sidebar"
+        aria-label="Primary"
+        initial={enteredFromAuth ? { opacity: 0, x: -28 } : false}
+        animate={{ opacity: 1, x: 0 }}
+        transition={{ duration: 0.75, ease: [0.16, 1, 0.3, 1], delay: 0.08 }}
+      >
+        <UserProfileSidebar
+          user={{
+            name: displayName,
+            email: auth.user?.email ?? "",
+            avatarUrl: getUserAvatarUrl(displayName)
+          }}
+          navItems={navItems.map((item) => ({
+            href: item.to,
+            label: item.label,
+            icon: item.icon,
+            isSeparator: item.isSeparator,
+            pinToBottom: item.pinToBottom
+          }))}
+          logoutItem={{
+            label: "Log out",
+            icon: <LogOut />,
+            onClick: handleLogout
+          }}
+          collapsed={isSidebarCollapsed}
+          onToggleCollapse={toggleSidebar}
+        />
+      </motion.aside>
+
+      <motion.div
+        className="shell-main"
+        initial={enteredFromAuth ? { opacity: 0, y: 28 } : false}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.1 }}
+      >
+        <ShellTopbar
+          displayName={displayName}
+          email={auth.user?.email ?? ""}
+          balance={auth.user?.balance ?? 0}
+          enteredFromAuth={enteredFromAuth}
+        />
+        <main className="page-frame">
+          <AnimatePresence mode="wait" initial={false}>
+            <motion.div
+              key={location.pathname}
+              initial={routeTransition.initial}
+              animate={routeTransition.animate}
+              exit={routeTransition.exit}
+              transition={routeTransition.transition}
+            >
+              <AnimatedOutlet />
+            </motion.div>
+          </AnimatePresence>
+        </main>
+      </motion.div>
+
+      <nav className="mobile-nav" aria-label="Primary mobile">
+        {navItems.map((item) => (
+          <NavLink key={item.to} to={item.to} className="mobile-nav-item">
+            <span className="icon" aria-hidden="true">
+              {item.icon}
+            </span>
+            <span>{item.label}</span>
+          </NavLink>
+        ))}
+      </nav>
+      <FloatingChatWidget />
+    </motion.div>
+  );
+}

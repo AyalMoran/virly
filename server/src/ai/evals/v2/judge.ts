@@ -1,0 +1,77 @@
+
+
+/**
+ * LLM-as-judge for reply faithfulness and language — NOT for personality.
+ *
+ * The judge is told explicitly to ignore tone, style, emoji, and phrase choice,
+ * and to grade only: does the reply satisfy the criteria, mirror the user's
+ * language, and stay faithful to the authoritative facts without inventing
+ * figures? It returns a structured pass/fail + reason so failures are actionable.
+ */
+import { ChatOpenAI } from "@langchain/openai";
+import { z } from "zod";
+import { config } from "../../../config.js";
+
+// Reason BEFORE pass: the model writes its analysis first, then commits the
+// boolean — chain-of-thought before the verdict. This is a reliability fix, not
+// a leniency change: the criteria below are unchanged and a genuinely-wrong
+// reply still fails. (A verdict emitted before reasoning made the weak grader
+// self-contradict and mis-map sent/received direction.)
+const verdictSchema = z.object({
+  reason: z.string(),
+  pass: z.boolean()
+});
+
+export type JudgeVerdict = z.infer<typeof verdictSchema>;
+
+export function judgeAvailable(): boolean {
+  return Boolean(config.ai.openAIApiKey.trim() && config.ai.model.trim());
+}
+
+function buildJudge() {
+  return new ChatOpenAI({
+    apiKey: config.ai.openAIApiKey,
+    model: config.ai.model,
+    temperature: 0,
+    maxRetries: 1,
+    timeout: 20000
+  }).withStructuredOutput<JudgeVerdict>(verdictSchema, { method: "jsonSchema" });
+}
+
+let cachedJudge: ReturnType<typeof buildJudge> | null = null;
+
+function getJudge() {
+  return (cachedJudge ??= buildJudge());
+}
+
+export type JudgeInput = {
+  userMessage: string;
+  reply: string;
+  criteria: string;
+  /** Authoritative ground-truth facts the reply must not contradict or invent past. */
+  facts: Record<string, unknown>;
+};
+
+export async function judgeAnswer(input: JudgeInput): Promise<JudgeVerdict> {
+  const judge = getJudge();
+  const system = [
+    "You are a STRICT but FAIR evaluator of a banking assistant's reply.",
+    "The authoritative facts are the user's HISTORICAL account data (balance, past totals, past transactions). Use them ONLY to check that figures the reply REPORTS about history or account state are correct and not invented.",
+    "IMPORTANT: a transfer the user asks to PREPARE has a user-chosen amount and recipient. That amount need NOT match any historical fact. NEVER fail a reply just because a requested or prepared transfer amount differs from a historical total — that is expected and correct.",
+    "Return pass=false ONLY if: a stated criterion is unmet; OR the reply misreports a historical figure; OR it invents account data; OR it is written in a different language than the user's message.",
+    "Judge ONLY the criteria, faithfulness of REPORTED historical figures, and language mirroring. Do NOT judge tone, personality, warmth, humor, emoji, or phrasing. A blunt reply and a playful reply are equally acceptable.",
+    "Direction matters by MEANING, not keyword: 'X sent you N' / 'you received N from X' is the received-from-X total; 'you sent X N' is the sent-to-X total — map accordingly before deciding.",
+    "Reason step by step FIRST in the 'reason' field — work out the relevant direction and figures from the facts and check each criterion — and ONLY THEN set the boolean 'pass'. Cite the specific criterion or fact."
+  ].join("\n");
+  const human = [
+    `User message:\n${input.userMessage}`,
+    `Assistant reply:\n${input.reply}`,
+    `Pass criteria:\n${input.criteria}`,
+    `Authoritative facts (ground truth):\n${JSON.stringify(input.facts)}`
+  ].join("\n\n");
+
+  return judge.invoke([
+    ["system", system],
+    ["human", human]
+  ]) as Promise<JudgeVerdict>;
+}
