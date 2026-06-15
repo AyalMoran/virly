@@ -209,12 +209,19 @@ function routeAgent(state): "tools" | "transferGate" | "finalize" {
   default — personality is in the prompt).
 
   > **Where personality lives:** `server/src/ai/v2/persona.ts` exports
-  > `buildPersonaSection`, which renders the per-assistant tone, phrases, and
-  > opening style into the system prompt assembled by `agent`. Because the reply
-  > is generated in a single streaming pass inside `agent`, `finalize` makes no
-  > model call — a second compose/finalize pass would break streaming. The
-  > serious-situation tone override (`[TONE — SERIOUS SITUATIONS]`) is a hard
-  > prompt rule inside `persona.ts`, verified non-blockingly by the
+  > `buildPersonaSection(assistantId, locale)`, which renders the per-assistant
+  > voice into the system prompt assembled by `agent`. Because the reply is
+  > generated in a single streaming pass inside `agent`, `finalize` makes no model
+  > call — a second compose/finalize pass would break streaming. On **safe** turns
+  > a `[STAY IN CHARACTER]` directive tells the model to commit fully to the voice
+  > (identifiable from tone alone) and a `[YOUR VOCABULARY]` block surfaces the
+  > persona's signature phrases for active use. That block is **locale-aware**: the
+  > phrases are Hebrew, so they are offered verbatim only when the user writes
+  > Hebrew; in another language they are a register reference reproduced in that
+  > language (never injected as Hebrew), so the bold voice never breaks language
+  > mirroring. The serious-situation override (`[TONE — SERIOUS SITUATIONS]`) is a
+  > hard rule that supersedes the in-character directive — it keeps facts, numbers,
+  > and warnings plain — and is verified non-blockingly by the
   > `persona-tone.test.ts` eval (see the evals README).
 - **`persist`** — upserts long-term memory into the `Store` (counterparties the
   user interacted with this turn, any stated preference), and, if the thread
