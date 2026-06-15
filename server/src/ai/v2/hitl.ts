@@ -14,7 +14,7 @@
  * confirmation endpoint. The conformance suite does NOT use this graph (it drives
  * the non-resumable per-turn entry); this is the production HITL path.
  */
-import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import { HumanMessage } from "@langchain/core/messages";
 import {
   END,
   MemorySaver,
@@ -41,6 +41,7 @@ import type {
 } from "../state.js";
 
 import { buildAgentNode } from "./agent.js";
+import { aiToolCalls } from "./messages.js";
 import { createMongoCheckpointer } from "./memory/checkpointer.js";
 import { resolveLongTermStore, withLongTermCounterparties } from "./memory/loop.js";
 import { mapStreamChunk } from "./streamEvents.js";
@@ -65,9 +66,9 @@ import {
 const V2_TIMEZONE = "Asia/Jerusalem";
 
 function routeAgent(state: V2AgentStateType): "tools" | "finalize" {
-  const last = state.messages.at(-1);
-  const toolCalls = last instanceof AIMessage ? last.tool_calls ?? [] : [];
-  return toolCalls.length > 0 ? "tools" : "finalize";
+  // aiToolCalls matches AIMessageChunk too; under streaming the agent message is
+  // a chunk, and `instanceof AIMessage` would wrongly route tool calls to finalize.
+  return aiToolCalls(state.messages.at(-1)).length > 0 ? "tools" : "finalize";
 }
 
 /** After finalize, a prepared card pauses for human confirmation; else we're done. */

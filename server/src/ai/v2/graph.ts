@@ -31,6 +31,7 @@ import type {
 } from "../state.js";
 
 import { buildAgentNode } from "./agent.js";
+import { aiToolCalls } from "./messages.js";
 import {
   resolveLongTermStore,
   readConversationSummary,
@@ -62,9 +63,8 @@ import {
 const V2_TIMEZONE = "Asia/Jerusalem";
 
 function routeAgent(state: V2AgentStateType): "tools" | "finalize" {
-  const last = state.messages.at(-1);
-  const toolCalls = last instanceof AIMessage ? last.tool_calls ?? [] : [];
-  return toolCalls.length > 0 ? "tools" : "finalize";
+  // aiToolCalls matches AIMessageChunk too (streaming-robust; see ./messages.ts).
+  return aiToolCalls(state.messages.at(-1)).length > 0 ? "tools" : "finalize";
 }
 
 
