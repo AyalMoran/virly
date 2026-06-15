@@ -79,22 +79,4 @@ probing the behaviours the V2 design promises:
 | `assertions.ts` | Personality-agnostic structural assertions |
 | `judge.ts` | LLM-as-judge (faithfulness + language) |
 | `v2-conformance.test.ts` | Gated Node test runner |
-
-## Baseline findings (current graph, gpt-5.4-nano)
-
-First live run against the **current** assistant — all six scenarios fail, each
-localising a real gap (these are the bugs V2 must fix):
-
-- **Multiple requests dropped.** "balance **and** daily remaining" answered only
-  the daily figure (880), omitting the balance (1,840.50).
-- **Hebrew comprehension.** "כמה שלחתי לרני?" returned English *"Which recipient
-  should I use for that question?"* instead of the 320 total.
-- **Language leak / mirroring.** An English question drew a Hebrew reply
-  ("בדיקה זריזה…") — personality phrases overriding the user's language.
-- **Recipient/contextual-amount resolution.** "Send Noa 25", "send him the same I
-  sent Rani", and the F2 case often produced **no confirmation card**.
-- **Clarification resume.** "Send 250." → "to Noa" sometimes loses the amount and
-  re-asks instead of preparing the 250→Noa card (resume only covers `amount_scope`
-  today). Behaviour is also **non-deterministic** across runs — itself a finding.
-
-Re-run after each V2 milestone; the failing set should shrink toward zero.
+| `persona-tone.test.ts` | Per-assistant eval: asserts no personality phrasing leaks on a serious (over-limit) turn. Gated; run with `VIRLY_AI_V2_EVAL=1 LANGSMITH_TRACING=false npx tsx --test src/ai/evals/v2/persona-tone.test.ts` |
