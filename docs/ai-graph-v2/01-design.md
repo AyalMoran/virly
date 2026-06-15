@@ -207,6 +207,15 @@ function routeAgent(state): "tools" | "transferGate" | "finalize" {
   `clarification`/`confirmation`, and resolves the personality phrase pack into
   the already-generated text only if a light post-pass is enabled (off by
   default — personality is in the prompt).
+
+  > **Where personality lives:** `server/src/ai/v2/persona.ts` exports
+  > `buildPersonaSection`, which renders the per-assistant tone, phrases, and
+  > opening style into the system prompt assembled by `agent`. Because the reply
+  > is generated in a single streaming pass inside `agent`, `finalize` makes no
+  > model call — a second compose/finalize pass would break streaming. The
+  > serious-situation tone override (`[TONE — SERIOUS SITUATIONS]`) is a hard
+  > prompt rule inside `persona.ts`, verified non-blockingly by the
+  > `persona-tone.test.ts` eval (see the evals README).
 - **`persist`** — upserts long-term memory into the `Store` (counterparties the
   user interacted with this turn, any stated preference), and, if the thread
   exceeds a token/turn budget, runs the **summarizer** to fold old turns into
