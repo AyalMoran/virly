@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { config } from "../config.js";
 import { ExchangeRate } from "../models/ExchangeRate.js";
+import { AppError } from "../utils/app-error.js";
 
 export const FX_BASE_CURRENCY = "ILS" as const;
 export const SUPPORTED_CURRENCIES = ["ILS", "USD", "EUR"] as const;
@@ -56,11 +57,9 @@ export function isSupportedCurrency(value: unknown): value is SupportedCurrency 
 
 export function assertSupportedCurrency(value: unknown): SupportedCurrency {
   if (!isSupportedCurrency(value)) {
-    throw Object.assign(
-      new Error(
-        `Unsupported currency "${String(value)}". Supported currencies: ${SUPPORTED_CURRENCIES.join(", ")}.`
-      ),
-      { status: 400 }
+    throw new AppError(
+      400,
+      `Unsupported currency "${String(value)}". Supported currencies: ${SUPPORTED_CURRENCIES.join(", ")}.`
     );
   }
 
@@ -86,9 +85,7 @@ export function convertAmount(
   assertSupportedCurrency(to);
 
   if (!Number.isFinite(amount)) {
-    throw Object.assign(new Error("Amount must be a finite number."), {
-      status: 400
-    });
+    throw new AppError(400, "Amount must be a finite number.");
   }
 
   const minorUnits = Math.round(amount * 100);
@@ -99,9 +96,7 @@ export function convertAmount(
   const fromRate = rates[from];
   const toRate = rates[to];
   if (!Number.isFinite(fromRate) || fromRate <= 0 || !Number.isFinite(toRate) || toRate <= 0) {
-    throw Object.assign(new Error("Exchange rates are unavailable."), {
-      status: 503
-    });
+    throw new AppError(503, "Exchange rates are unavailable.");
   }
 
   return Math.round((minorUnits * toRate) / fromRate) / 100;
@@ -131,9 +126,7 @@ export function rateToIls(currency: SupportedCurrency, rates: FxRates) {
 
   const rate = rates[currency];
   if (!Number.isFinite(rate) || rate <= 0) {
-    throw Object.assign(new Error("Exchange rates are unavailable."), {
-      status: 503
-    });
+    throw new AppError(503, "Exchange rates are unavailable.");
   }
 
   return Math.round((1 / rate) * 1e6) / 1e6;
@@ -288,11 +281,9 @@ function toSnapshot(stored: StoredFxSnapshot, today: string): FxSnapshot {
   };
 }
 
-export class FxUnavailableError extends Error {
-  readonly status = 503;
-
+export class FxUnavailableError extends AppError {
   constructor(message = "Currency conversion is currently unavailable.") {
-    super(message);
+    super(503, message);
     this.name = "FxUnavailableError";
   }
 }

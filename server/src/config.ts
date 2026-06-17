@@ -73,6 +73,29 @@ if (videoProvider === "jitsi-jaas" && (!jitsiAppId || !jitsiKeyId)) {
   );
 }
 
+// The JWT secret signs the auth token AND embeds the CSRF hash, so a known
+// default is a full auth bypass. The placeholder is tolerated outside
+// production for local dev/tests; in production a strong, explicitly-set
+// secret is required and the server fails fast on boot otherwise.
+function resolveJwtSecret(): string {
+  const secret = getStringEnv("VIRLY_JWT_SECRET", "change-me-in-production", {
+    aliases: ["JWT_SECRET"]
+  });
+
+  if (
+    isProduction &&
+    (secret === "change-me-in-production" || secret.length < 32)
+  ) {
+    throw new Error(
+      "VIRLY_JWT_SECRET must be set to a strong secret (>= 32 characters) in production."
+    );
+  }
+
+  return secret;
+}
+
+const jwtSecret = resolveJwtSecret();
+
 export const config = {
   port: getIntEnv("VIRLY_PORT", {
     defaultValue: 3000,
@@ -88,9 +111,7 @@ export const config = {
   mongoUri: getStringEnv("VIRLY_MONGODB_URI", "mongodb://127.0.0.1:27017/virly", {
     aliases: ["MONGODB_URI"]
   }),
-  jwtSecret: getStringEnv("VIRLY_JWT_SECRET", "change-me-in-production", {
-    aliases: ["JWT_SECRET"]
-  }),
+  jwtSecret,
   email: {
     resendApiKey: getOptionalStringEnv("RESEND_API_KEY"),
     from: getStringEnv("VIRLY_EMAIL_FROM", "Virly <verify@virly.ayal.online>", {

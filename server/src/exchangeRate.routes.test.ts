@@ -3,6 +3,7 @@ import http from "node:http";
 import test from "node:test";
 import express from "express";
 import { parseCookies } from "./middleware/cookies.js";
+import { errorHandler } from "./middleware/error-handler.js";
 import { ExchangeRate } from "./models/ExchangeRate.js";
 import exchangeRateRoutes from "./routes/exchangeRate.routes.js";
 import { utcDateKey } from "./services/fx.service.js";
@@ -61,6 +62,7 @@ async function withServer<T>(fn: (baseUrl: string) => Promise<T>) {
     return res.json({ csrfToken });
   });
   app.use("/api/exchange-rates", exchangeRateRoutes);
+  app.use(errorHandler);
 
   const server = await new Promise<http.Server>((resolve) => {
     const listeningServer = app.listen(0, () => resolve(listeningServer));

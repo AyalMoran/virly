@@ -1,6 +1,7 @@
 import { randomBytes, randomUUID } from "crypto";
 import type { Types } from "mongoose";
 import { config } from "../config.js";
+import { AppError } from "../utils/app-error.js";
 import {
   VideoSession,
   type VideoSessionSource,
@@ -18,15 +19,20 @@ import { getAllowedVideoSessionTypes } from "../middleware/roles.js";
 export type VideoSessionDocument = InstanceType<typeof VideoSession>;
 type UserDocument = InstanceType<typeof User>;
 
-export class VideoSessionServiceError extends Error {
-  readonly status: number;
+export class VideoSessionServiceError extends AppError {
   readonly error: string;
 
   constructor(status: number, message: string, error: string) {
-    super(message);
+    super(status, message);
     this.name = "VideoSessionServiceError";
-    this.status = status;
     this.error = error;
+  }
+
+  override toResponseBody(): Record<string, unknown> {
+    return {
+      message: this.message,
+      error: this.error
+    };
   }
 }
 

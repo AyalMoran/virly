@@ -9,8 +9,7 @@ import {
   getOwnVideoSession,
   issueVideoJoinConfig,
   listAgentVideoSessions,
-  toVideoSessionDto,
-  VideoSessionServiceError
+  toVideoSessionDto
 } from "../services/videoSession.service.js";
 import {
   videoSessionSourceValues,
@@ -50,21 +49,6 @@ function getRequestMetadata(req: Parameters<Parameters<typeof router.get>[1]>[0]
   };
 }
 
-function handleVideoError(error: unknown, next: (error: unknown) => void) {
-  if (error instanceof VideoSessionServiceError) {
-    return {
-      status: error.status,
-      body: {
-        message: error.message,
-        error: error.error
-      }
-    };
-  }
-
-  next(error);
-  return null;
-}
-
 router.use(requireAuth);
 
 router.post("/", async (req, res, next) => {
@@ -88,10 +72,7 @@ router.post("/", async (req, res, next) => {
 
     return res.status(201).json({ session: toVideoSessionDto(session) });
   } catch (error) {
-    const handled = handleVideoError(error, next);
-    if (handled) {
-      return res.status(handled.status).json(handled.body);
-    }
+    next(error);
   }
 });
 
@@ -105,10 +86,7 @@ router.get("/:id", async (req, res, next) => {
     const session = await getOwnVideoSession(req.userId, sessionId);
     return res.json({ session: toVideoSessionDto(session) });
   } catch (error) {
-    const handled = handleVideoError(error, next);
-    if (handled) {
-      return res.status(handled.status).json(handled.body);
-    }
+    next(error);
   }
 });
 
@@ -131,10 +109,7 @@ router.post("/:id/join-token", async (req, res, next) => {
       jitsi: result.jitsi
     });
   } catch (error) {
-    const handled = handleVideoError(error, next);
-    if (handled) {
-      return res.status(handled.status).json(handled.body);
-    }
+    next(error);
   }
 });
 
@@ -154,10 +129,7 @@ router.post("/:id/end", async (req, res, next) => {
 
     return res.json({ session: toVideoSessionDto(session) });
   } catch (error) {
-    const handled = handleVideoError(error, next);
-    if (handled) {
-      return res.status(handled.status).json(handled.body);
-    }
+    next(error);
   }
 });
 
@@ -178,10 +150,7 @@ adminRouter.get("/", async (req, res, next) => {
 
     return res.json({ sessions });
   } catch (error) {
-    const handled = handleVideoError(error, next);
-    if (handled) {
-      return res.status(handled.status).json(handled.body);
-    }
+    next(error);
   }
 });
 
@@ -200,10 +169,7 @@ adminRouter.post("/:id/assign", async (req, res, next) => {
 
     return res.json({ session: toVideoSessionDto(session) });
   } catch (error) {
-    const handled = handleVideoError(error, next);
-    if (handled) {
-      return res.status(handled.status).json(handled.body);
-    }
+    next(error);
   }
 });
 
@@ -226,10 +192,7 @@ adminRouter.post("/:id/join-token", async (req, res, next) => {
       jitsi: result.jitsi
     });
   } catch (error) {
-    const handled = handleVideoError(error, next);
-    if (handled) {
-      return res.status(handled.status).json(handled.body);
-    }
+    next(error);
   }
 });
 
@@ -249,10 +212,7 @@ adminRouter.post("/:id/end", async (req, res, next) => {
 
     return res.json({ session: toVideoSessionDto(session) });
   } catch (error) {
-    const handled = handleVideoError(error, next);
-    if (handled) {
-      return res.status(handled.status).json(handled.body);
-    }
+    next(error);
   }
 });
 

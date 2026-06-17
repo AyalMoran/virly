@@ -11,6 +11,7 @@ import type {
   TransferConfirmation
 } from "../ai/state.js";
 import {
+  assertAiTransferWithinLimits,
   executeTransferWithSession,
   type ExecuteTransferResult
 } from "./transfer.service.js";
@@ -560,6 +561,11 @@ export async function respondToAiPendingTransfer(
       if (!pendingTransfer) {
         throw getStatusError();
       }
+
+      await assertAiTransferWithinLimits(
+        { senderId: input.userId, amount: pendingTransfer.amount },
+        session
+      );
 
       const transferResult = await executeTransferWithSession(
         {

@@ -288,16 +288,6 @@ router.post("/confirmations/:id", requireAuth, async (req, res, next) => {
 
     return res.json(result);
   } catch (error) {
-    if (error instanceof Error && "status" in error) {
-      return res.status(Number(error.status)).json({
-        message: error.message,
-        ...("error" in error ? { error: error.error } : {}),
-        ...("supersededById" in error
-          ? { supersededById: error.supersededById }
-          : {})
-      });
-    }
-
     next(error);
   }
 });
