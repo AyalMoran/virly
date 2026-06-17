@@ -3,6 +3,7 @@ import http from "node:http";
 import test from "node:test";
 import express from "express";
 import { parseCookies } from "./middleware/cookies.js";
+import { errorHandler } from "./middleware/error-handler.js";
 import videoSessionRoutes from "./routes/videoSession.routes.js";
 import { User } from "./models/User.js";
 import { VideoSession } from "./models/VideoSession.js";
@@ -126,6 +127,7 @@ async function withServer<T>(fn: (baseUrl: string) => Promise<T>) {
   app.use(parseCookies);
   app.use(express.json());
   app.use("/api/video-sessions", videoSessionRoutes);
+  app.use(errorHandler);
 
   const server = await new Promise<http.Server>((resolve) => {
     const listeningServer = app.listen(0, () => resolve(listeningServer));

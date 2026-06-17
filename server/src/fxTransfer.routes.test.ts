@@ -4,6 +4,7 @@ import test from "node:test";
 import express from "express";
 import mongoose from "mongoose";
 import { parseCookies } from "./middleware/cookies.js";
+import { errorHandler } from "./middleware/error-handler.js";
 import { ExchangeRate } from "./models/ExchangeRate.js";
 import { Transaction } from "./models/Transaction.js";
 import { User } from "./models/User.js";
@@ -138,6 +139,7 @@ async function withServer<T>(fn: (baseUrl: string) => Promise<T>) {
     return res.json({ csrfToken });
   });
   app.use("/api/transactions", transactionRoutes);
+  app.use(errorHandler);
 
   const server = await new Promise<http.Server>((resolve) => {
     const listeningServer = app.listen(0, () => resolve(listeningServer));
