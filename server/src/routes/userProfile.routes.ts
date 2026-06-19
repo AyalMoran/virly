@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
 import { PersonalDetails } from "../models/PersonalDetails.js";
-import { Transaction } from "../models/Transaction.js";
 import { accountService } from "../services/account.service.js";
+import { transactionQueryService } from "../services/transactionQuery.service.js";
 import { getPaginationMeta, parsePagination } from "../utils/pagination.js";
 import {
   resolveRelationshipStatus,
@@ -23,52 +23,6 @@ async function getViewedUserDisplayName(viewedUserId: unknown) {
 
   // Only names leave this function; date of birth and address stay private.
   return { firstName: details.firstName, lastName: details.lastName };
-}
-
-type RelationshipStats = {
-  totalSent: number;
-  totalReceived: number;
-  transactionCount: number;
-  lastTransactionAt: Date | null;
-};
-
-/**
- * Totals are computed exclusively from the viewer's own ledger entries whose
- * counterparty is the viewed user. Ledger entries only exist for completed
- * transfers, so totals are completed-only by construction.
- */
-async function getRelationshipStats(
-  viewerId: unknown,
-  viewedEmail: string
-): Promise<RelationshipStats> {
-  const [stats] = await Transaction.aggregate<{
-    totalSent: number;
-    totalReceived: number;
-    transactionCount: number;
-    lastTransactionAt: Date | null;
-  }>([
-    { $match: { ownerId: viewerId, counterpartyEmail: viewedEmail } },
-    {
-      $group: {
-        _id: null,
-        totalSent: {
-          $sum: { $cond: [{ $eq: ["$type", "debit"] }, "$amount", 0] }
-        },
-        totalReceived: {
-          $sum: { $cond: [{ $eq: ["$type", "credit"] }, "$amount", 0] }
-        },
-        transactionCount: { $sum: 1 },
-        lastTransactionAt: { $max: "$createdAt" }
-      }
-    }
-  ]);
-
-  return {
-    totalSent: stats?.totalSent ?? 0,
-    totalReceived: stats?.totalReceived ?? 0,
-    transactionCount: stats?.transactionCount ?? 0,
-    lastTransactionAt: stats?.lastTransactionAt ?? null
-  };
 }
 
 router.get("/:userId/profile", requireAuth, async (req, res, next) => {
@@ -105,10 +59,15 @@ router.get("/:userId/profile", requireAuth, async (req, res, next) => {
     }
 
     const [stats, recentTransactions] = await Promise.all([
-      getRelationshipStats(viewer._id, viewed.email),
-      Transaction.find({ ownerId: viewer._id, counterpartyEmail: viewed.email })
-        .sort({ createdAt: -1 })
-        .limit(5)
+      transactionQueryService.getRelationshipStats({
+        ownerId: String(viewer._id),
+        counterpartyEmail: viewed.email
+      }),
+      transactionQueryService.recentWithCounterparty({
+        ownerId: String(viewer._id),
+        counterpartyEmail: viewed.email,
+        limit: 5
+      })
     ]);
 
     const relationship: UserRelationshipSummaryDto = {
@@ -151,14 +110,14 @@ router.get("/:userId/transactions", requireAuth, async (req, res, next) => {
     }
 
     const { page, limit } = parsePagination(req.query);
-    const skip = (page - 1) * limit;
 
     // Viewer's own ledger only; self-profile naturally yields an empty list.
-    const filter = { ownerId: viewer._id, counterpartyEmail: viewed.email };
-    const [transactions, total] = await Promise.all([
-      Transaction.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
-      Transaction.countDocuments(filter)
-    ]);
+    const { transactions, total } = await transactionQueryService.listForOwner({
+      ownerId: String(viewer._id),
+      counterpartyEmail: viewed.email,
+      page,
+      limit
+    });
 
     return res.json({
       transactions: transactions.map(toRelationshipTransactionDto),
