@@ -2,7 +2,7 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { Transaction } from "../models/Transaction.js";
-import { User } from "../models/User.js";
+import { accountService } from "../services/account.service.js";
 import {
   ensurePersonalDetails,
   toPersonalDetailsDto
@@ -47,13 +47,7 @@ router.get("/me", requireAuth, async (req, res, next) => {
     const { page, limit } = parsePagination(req.query);
     const skip = (page - 1) * limit;
 
-    const user = await User.findById(req.userId).select(
-      "-passwordHash -verificationTokenHash"
-    );
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found." });
-    }
+    const user = await accountService.getById(req.userId!);
 
     const personalDetails = await ensurePersonalDetails(user);
 
@@ -81,12 +75,7 @@ router.get("/me", requireAuth, async (req, res, next) => {
 
 router.get("/personal-details", requireAuth, async (req, res, next) => {
   try {
-    const user = await User.findById(req.userId);
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found." });
-    }
-
+    const user = await accountService.getById(req.userId!);
     const personalDetails = await ensurePersonalDetails(user);
     return res.json({ personalDetails: toPersonalDetailsDto(personalDetails) });
   } catch (error) {
@@ -97,12 +86,7 @@ router.get("/personal-details", requireAuth, async (req, res, next) => {
 router.put("/personal-details", requireAuth, async (req, res, next) => {
   try {
     const payload = personalDetailsSchema.parse(req.body);
-    const user = await User.findById(req.userId);
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found." });
-    }
-
+    const user = await accountService.getById(req.userId!);
     const personalDetails = await ensurePersonalDetails(user);
     personalDetails.status = "provided";
     personalDetails.firstName = payload.firstName;
@@ -120,12 +104,7 @@ router.put("/personal-details", requireAuth, async (req, res, next) => {
 
 router.post("/personal-details/skip", requireAuth, async (req, res, next) => {
   try {
-    const user = await User.findById(req.userId);
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found." });
-    }
-
+    const user = await accountService.getById(req.userId!);
     const personalDetails = await ensurePersonalDetails(user);
     personalDetails.lastSkippedAt = new Date();
     await personalDetails.save();

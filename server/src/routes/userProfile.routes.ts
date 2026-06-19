@@ -1,9 +1,8 @@
 import { Router } from "express";
-import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { PersonalDetails } from "../models/PersonalDetails.js";
 import { Transaction } from "../models/Transaction.js";
-import { User } from "../models/User.js";
+import { accountService } from "../services/account.service.js";
 import { getPaginationMeta, parsePagination } from "../utils/pagination.js";
 import {
   resolveRelationshipStatus,
@@ -14,27 +13,6 @@ import {
 } from "../utils/user-profile-dto.js";
 
 const router = Router();
-
-const objectIdPattern = /^[0-9a-fA-F]{24}$/;
-const emailSchema = z.string().email();
-
-/**
- * Profile pages are reached from counterparty displays, which only know
- * emails, while canonical links use ids — accept both. An email can never
- * match the ObjectId pattern, so the lookup is unambiguous.
- */
-async function findViewedUser(identifier: string) {
-  if (objectIdPattern.test(identifier)) {
-    return User.findById(identifier);
-  }
-
-  const parsed = emailSchema.safeParse(identifier.trim().toLowerCase());
-  if (!parsed.success) {
-    return null;
-  }
-
-  return User.findOne({ email: parsed.data });
-}
 
 async function getViewedUserDisplayName(viewedUserId: unknown) {
   const details = await PersonalDetails.findOne({ userId: viewedUserId });
@@ -95,12 +73,12 @@ async function getRelationshipStats(
 
 router.get("/:userId/profile", requireAuth, async (req, res, next) => {
   try {
-    const viewer = await User.findById(req.userId);
+    const viewer = await accountService.findById(req.userId!);
     if (!viewer) {
       return res.status(401).json({ message: "Authentication required." });
     }
 
-    const viewed = await findViewedUser(String(req.params.userId ?? ""));
+    const viewed = await accountService.findByIdOrEmail(String(req.params.userId ?? ""));
     if (!viewed) {
       return res.status(404).json({ message: "User not found." });
     }
@@ -162,12 +140,12 @@ router.get("/:userId/profile", requireAuth, async (req, res, next) => {
 
 router.get("/:userId/transactions", requireAuth, async (req, res, next) => {
   try {
-    const viewer = await User.findById(req.userId);
+    const viewer = await accountService.findById(req.userId!);
     if (!viewer) {
       return res.status(401).json({ message: "Authentication required." });
     }
 
-    const viewed = await findViewedUser(String(req.params.userId ?? ""));
+    const viewed = await accountService.findByIdOrEmail(String(req.params.userId ?? ""));
     if (!viewed) {
       return res.status(404).json({ message: "User not found." });
     }
