@@ -2,7 +2,6 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { AppError } from "../utils/app-error.js";
-import { Transaction } from "../models/Transaction.js";
 import {
   assertSupportedCurrency,
   buildTransferQuote,
@@ -14,6 +13,7 @@ import {
   executeTransfer,
   type TransferFxMetadata
 } from "../services/transfer.service.js";
+import { transactionQueryService } from "../services/transactionQuery.service.js";
 import { getPaginationMeta, parsePagination } from "../utils/pagination.js";
 import { toTransactionDto } from "../utils/transaction-dto.js";
 
@@ -96,17 +96,14 @@ export function resolveTransferAmount(
 router.get("/", requireAuth, async (req, res, next) => {
   try {
     const { page, limit } = parsePagination(req.query);
-    const skip = (page - 1) * limit;
     const counterparty = z.string().email().optional().parse(req.query.counterparty);
-    const filter = {
-      ownerId: req.userId,
-      ...(counterparty ? { counterpartyEmail: counterparty.toLowerCase() } : {})
-    };
 
-    const [transactions, total] = await Promise.all([
-      Transaction.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
-      Transaction.countDocuments(filter)
-    ]);
+    const { transactions, total } = await transactionQueryService.listForOwner({
+      ownerId: req.userId!,
+      counterpartyEmail: counterparty ? counterparty.toLowerCase() : undefined,
+      page,
+      limit
+    });
 
     return res.json({
       transactions: transactions.map(toTransactionDto),

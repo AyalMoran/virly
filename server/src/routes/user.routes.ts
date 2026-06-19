@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
-import { Transaction } from "../models/Transaction.js";
 import { accountService } from "../services/account.service.js";
+import { transactionQueryService } from "../services/transactionQuery.service.js";
 import {
   ensurePersonalDetails,
   toPersonalDetailsDto
@@ -45,17 +45,16 @@ const personalDetailsSchema = z.object({
 router.get("/me", requireAuth, async (req, res, next) => {
   try {
     const { page, limit } = parsePagination(req.query);
-    const skip = (page - 1) * limit;
 
     const user = await accountService.getById(req.userId!);
 
     const personalDetails = await ensurePersonalDetails(user);
 
-    const filter = { ownerId: user.id };
-    const [transactions, total] = await Promise.all([
-      Transaction.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
-      Transaction.countDocuments(filter)
-    ]);
+    const { transactions, total } = await transactionQueryService.listForOwner({
+      ownerId: user.id,
+      page,
+      limit
+    });
 
     return res.json({
       balance: user.balance,
