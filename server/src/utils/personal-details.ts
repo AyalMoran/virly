@@ -1,44 +1,8 @@
-import type { Types } from "mongoose";
 import { PersonalDetails } from "../models/PersonalDetails.js";
 import { User } from "../models/User.js";
 
 type UserDocument = InstanceType<typeof User>;
 type PersonalDetailsDocument = InstanceType<typeof PersonalDetails>;
-
-function getObjectId(value: unknown): Types.ObjectId | null {
-  if (value && typeof value === "object" && "_id" in value) {
-    return (value as { _id: Types.ObjectId })._id;
-  }
-
-  return value as Types.ObjectId | null;
-}
-
-export async function ensurePersonalDetails(
-  user: UserDocument
-): Promise<PersonalDetailsDocument> {
-  const personalDetailsId = getObjectId(user.personalDetails);
-
-  if (personalDetailsId) {
-    const existingDetails = await PersonalDetails.findById(personalDetailsId);
-    if (existingDetails) {
-      return existingDetails;
-    }
-  }
-
-  let details = await PersonalDetails.findOne({ userId: user._id });
-
-  if (!details) {
-    details = await PersonalDetails.create({
-      userId: user._id,
-      status: "not_provided"
-    });
-  }
-
-  user.personalDetails = details._id;
-  await user.save();
-
-  return details;
-}
 
 export function toAuthUserDto(user: UserDocument, details: PersonalDetailsDocument) {
   return {
