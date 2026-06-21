@@ -445,6 +445,18 @@ export async function modifyAiPendingTransfer(
   }
 }
 
+export async function getResumablePendingForUser(
+  pendingTransferId: string,
+  userId: string
+): Promise<PendingTransferDocument | null> {
+  return AiPendingTransfer.findOne({
+    _id: pendingTransferId,
+    userId
+  })
+    .select("conversationId")
+    .lean() as Promise<PendingTransferDocument | null>;
+}
+
 export async function respondToAiPendingTransfer(
   input: {
     userId: string;
