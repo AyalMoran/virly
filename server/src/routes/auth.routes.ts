@@ -2,7 +2,8 @@ import { Router } from "express";
 import { z } from "zod";
 import { authService } from "../services/auth.service.js";
 import { accountService } from "../services/account.service.js";
-import { ensurePersonalDetails, toAuthUserDto } from "../utils/personal-details.js";
+import { personalDetailsService } from "../services/personalDetails.service.js";
+import { toAuthUserDto } from "../utils/personal-details.js";
 import { clearAuthCookies, setAuthCookies } from "../utils/session.js";
 import { requireAuth } from "../middleware/auth.js";
 
@@ -45,7 +46,7 @@ async function createAuthResponse(
     throw new Error("createAuthResponse requires a user.");
   }
 
-  const personalDetails = await ensurePersonalDetails(user);
+  const personalDetails = await personalDetailsService.ensureForUser(user);
 
   return {
     user: toAuthUserDto(user, personalDetails),

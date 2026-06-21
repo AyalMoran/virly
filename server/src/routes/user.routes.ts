@@ -2,11 +2,9 @@ import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { accountService } from "../services/account.service.js";
+import { personalDetailsService } from "../services/personalDetails.service.js";
 import { transactionQueryService } from "../services/transactionQuery.service.js";
-import {
-  ensurePersonalDetails,
-  toPersonalDetailsDto
-} from "../utils/personal-details.js";
+import { toPersonalDetailsDto } from "../utils/personal-details.js";
 import { getPaginationMeta, parsePagination } from "../utils/pagination.js";
 import { toTransactionDto } from "../utils/transaction-dto.js";
 
@@ -48,7 +46,7 @@ router.get("/me", requireAuth, async (req, res, next) => {
 
     const user = await accountService.getById(req.userId!);
 
-    const personalDetails = await ensurePersonalDetails(user);
+    const personalDetails = await personalDetailsService.ensureForUser(user);
 
     const { transactions, total } = await transactionQueryService.listForOwner({
       ownerId: user.id,
@@ -75,7 +73,7 @@ router.get("/me", requireAuth, async (req, res, next) => {
 router.get("/personal-details", requireAuth, async (req, res, next) => {
   try {
     const user = await accountService.getById(req.userId!);
-    const personalDetails = await ensurePersonalDetails(user);
+    const personalDetails = await personalDetailsService.ensureForUser(user);
     return res.json({ personalDetails: toPersonalDetailsDto(personalDetails) });
   } catch (error) {
     next(error);
@@ -85,16 +83,11 @@ router.get("/personal-details", requireAuth, async (req, res, next) => {
 router.put("/personal-details", requireAuth, async (req, res, next) => {
   try {
     const payload = personalDetailsSchema.parse(req.body);
+    // Ensure the doc exists first so a PUT before any GET still creates-then-
+    // updates (the pre-service behavior) rather than 404-ing.
     const user = await accountService.getById(req.userId!);
-    const personalDetails = await ensurePersonalDetails(user);
-    personalDetails.status = "provided";
-    personalDetails.firstName = payload.firstName;
-    personalDetails.lastName = payload.lastName;
-    personalDetails.dateOfBirth = new Date(payload.dateOfBirth);
-    personalDetails.address = payload.address;
-
-    await personalDetails.save();
-
+    await personalDetailsService.ensureForUser(user);
+    const personalDetails = await personalDetailsService.update(req.userId!, payload);
     return res.json({ personalDetails: toPersonalDetailsDto(personalDetails) });
   } catch (error) {
     next(error);
@@ -103,11 +96,11 @@ router.put("/personal-details", requireAuth, async (req, res, next) => {
 
 router.post("/personal-details/skip", requireAuth, async (req, res, next) => {
   try {
+    // Ensure the doc exists first so skip works before any GET (pre-service
+    // behavior) rather than 404-ing.
     const user = await accountService.getById(req.userId!);
-    const personalDetails = await ensurePersonalDetails(user);
-    personalDetails.lastSkippedAt = new Date();
-    await personalDetails.save();
-
+    await personalDetailsService.ensureForUser(user);
+    const personalDetails = await personalDetailsService.markSkipped(req.userId!);
     return res.json({
       message: "Personal details skipped.",
       personalDetails: toPersonalDetailsDto(personalDetails)

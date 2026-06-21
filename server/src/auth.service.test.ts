@@ -103,20 +103,14 @@ function patchCreate(t: test.TestContext, onCreate: (doc: Record<string, unknown
   );
 }
 
-// ensurePersonalDetails(user) hits PersonalDetails.findById (the mock user
-// already references a personalDetails id). Returning a doc avoids the
-// create/save branch so register stays focused on auth behavior.
+// personalDetailsService.ensureForUser hits PersonalDetails.findOneAndUpdate
+// (upsert). Returning a doc avoids a real MongoDB round-trip so register
+// stays focused on auth behavior.
 function patchPersonalDetails(t: test.TestContext) {
   patchModel(
     PersonalDetails,
-    "findById",
-    (async () => ({ _id: "507f191e810c19729de860ea", id: "507f191e810c19729de860ea", status: "not_provided" })) as unknown as typeof PersonalDetails.findById,
-    t
-  );
-  patchModel(
-    PersonalDetails,
-    "findOne",
-    (async () => ({ _id: "507f191e810c19729de860ea", id: "507f191e810c19729de860ea", status: "not_provided" })) as unknown as typeof PersonalDetails.findOne,
+    "findOneAndUpdate",
+    (async () => ({ _id: "507f191e810c19729de860ea", id: "507f191e810c19729de860ea", status: "not_provided" })) as unknown as typeof PersonalDetails.findOneAndUpdate,
     t
   );
 }

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireAuth } from "../middleware/auth.js";
-import { PersonalDetails } from "../models/PersonalDetails.js";
 import { accountService } from "../services/account.service.js";
+import { personalDetailsService } from "../services/personalDetails.service.js";
 import { transactionQueryService } from "../services/transactionQuery.service.js";
 import { getPaginationMeta, parsePagination } from "../utils/pagination.js";
 import {
@@ -13,17 +13,6 @@ import {
 } from "../utils/user-profile-dto.js";
 
 const router = Router();
-
-async function getViewedUserDisplayName(viewedUserId: unknown) {
-  const details = await PersonalDetails.findOne({ userId: viewedUserId });
-
-  if (!details || details.status !== "provided") {
-    return null;
-  }
-
-  // Only names leave this function; date of birth and address stay private.
-  return { firstName: details.firstName, lastName: details.lastName };
-}
 
 router.get("/:userId/profile", requireAuth, async (req, res, next) => {
   try {
@@ -38,7 +27,7 @@ router.get("/:userId/profile", requireAuth, async (req, res, next) => {
     }
 
     const isSelf = String(viewed._id) === String(viewer._id);
-    const personalName = await getViewedUserDisplayName(viewed._id);
+    const personalName = await personalDetailsService.getDisplayName(String(viewed._id));
     const userDto = toPublicUserProfileDto(viewed, personalName);
 
     if (isSelf) {
