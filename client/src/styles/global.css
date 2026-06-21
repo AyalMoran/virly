@@ -1000,17 +1000,7 @@ h2 {
 }
 
 .transaction-confirmation-overlay [role="dialog"] {
-  width: min(100%, 420px);
-}
-
-.transaction-confirmation-overlay [role="dialog"] > div {
-  max-width: none;
-  border-color: rgba(255, 255, 255, 0.42);
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.72), rgba(230, 238, 201, 0.34)),
-    rgba(230, 238, 201, 0.76);
-  box-shadow: 0 34px 90px rgba(18, 58, 64, 0.3);
-  backdrop-filter: blur(24px) saturate(1.18);
+  width: min(100%, 396px);
 }
 
 .quick-contact-list {
@@ -3961,5 +3951,360 @@ select {
 .nf-cta svg {
   width: 17px;
   height: 17px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Transaction receipt — the details modal as a printed bank slip.     */
+/* Shares the 404's paper language (torn edges, mono ledger, Fraunces  */
+/* hero) but inverts the sentiment: a PAID / RECEIVED clearing stamp.   */
+/* ------------------------------------------------------------------ */
+
+.tr-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  width: 100%;
+}
+
+/* Mask clips box-shadow, so the paper's drop shadow lives on this wrapper. */
+.tr-shadow {
+  position: relative;
+  width: 100%;
+  filter:
+    drop-shadow(0 2px 4px rgba(23, 61, 66, 0.12))
+    drop-shadow(0 26px 54px rgba(18, 58, 64, 0.34));
+}
+
+.tr-receipt {
+  --zig: 11px;
+  position: relative;
+  width: 100%;
+  padding: calc(var(--zig) + 26px) clamp(20px, 6vw, 30px) calc(var(--zig) + 22px);
+  color: var(--color-text);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5), transparent 24%),
+    repeating-linear-gradient(0deg, rgba(23, 61, 66, 0.022) 0 27px, transparent 27px 28px),
+    linear-gradient(165deg, #fffdf6, #fbfaef 64%, #f4f3e4);
+  font-family: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, monospace;
+  -webkit-mask:
+    conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / var(--zig) var(--zig) repeat-x,
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / var(--zig) var(--zig) repeat-x,
+    linear-gradient(#000 0 0) center / 100% calc(100% - 2 * var(--zig)) no-repeat;
+  mask:
+    conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / var(--zig) var(--zig) repeat-x,
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / var(--zig) var(--zig) repeat-x,
+    linear-gradient(#000 0 0) center / 100% calc(100% - 2 * var(--zig)) no-repeat;
+}
+
+/* Sits on the unmasked wrapper so it isn't clipped by the torn top edge. */
+.tr-close {
+  position: absolute;
+  top: 16px;
+  right: 14px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(23, 61, 66, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--color-muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.tr-close:hover {
+  color: var(--color-text);
+  border-color: rgba(23, 61, 66, 0.32);
+  background: #fff;
+  transform: rotate(90deg);
+}
+
+.tr-merchant {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  text-align: center;
+}
+
+.tr-logo {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin-bottom: 4px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #35858e, #7da78c 72%, #c2d099);
+  box-shadow: 0 10px 22px rgba(53, 133, 142, 0.32);
+  color: #f8ffe7;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.tr-brand {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 640;
+  font-variation-settings: "SOFT" 40, "WONK" 0;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.tr-merchant-sub {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.tr-merchant-meta {
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-subtle);
+}
+
+.tr-divider {
+  height: 0;
+  margin: 16px 0;
+  border-top: 1.5px dashed rgba(23, 61, 66, 0.28);
+}
+
+.tr-hero {
+  position: relative;
+  text-align: center;
+}
+
+/* Direction chip mirrors the transaction-list in/out marks. */
+.tr-direction {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  padding: 4px 12px 4px 8px;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.tr-direction.is-credit {
+  background: rgba(9, 145, 32, 0.1);
+  color: var(--color-credit);
+}
+
+.tr-direction.is-debit {
+  background: rgba(53, 133, 142, 0.12);
+  color: var(--color-primary-deep);
+}
+
+.tr-direction-mark {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.tr-direction-mark svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.4;
+}
+
+.tr-amount {
+  position: relative;
+  display: inline-block;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 12vw, 4.1rem);
+  font-weight: 580;
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 40, "WONK" 0;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.tr-amount.is-credit {
+  color: var(--color-credit);
+}
+
+/* Outgoing money reads as a calm, in-palette debit — not an alarming red. */
+.tr-amount.is-debit {
+  color: #123a40;
+}
+
+/* The clearing stamp: teal ink, double-ruled, slammed off-axis — the
+   optimistic counterpart to the 404's DECLINED. */
+.tr-stamp {
+  position: absolute;
+  top: -16px;
+  right: -8px;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: 6px 13px 5px;
+  transform: rotate(-11deg);
+  transform-origin: center;
+  border: 2.5px solid rgba(31, 95, 103, 0.74);
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1.5px rgba(31, 95, 103, 0.46);
+  color: rgba(31, 95, 103, 0.82);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  white-space: nowrap;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.tr-stamp-main {
+  font-size: 1.18rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.tr-stamp-sub {
+  font-size: 0.46rem;
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  padding-left: 0.34em;
+  opacity: 0.85;
+}
+
+.tr-status-note {
+  margin: 10px 0 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+}
+
+.tr-rows,
+.tr-totals {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 9px;
+}
+
+.tr-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tr-row-key {
+  flex: 0 0 auto;
+  color: var(--color-muted);
+}
+
+.tr-row-dots {
+  flex: 1 1 auto;
+  align-self: center;
+  height: 0;
+  margin: 0 3px;
+  border-bottom: 1.5px dotted rgba(23, 61, 66, 0.32);
+}
+
+.tr-row-val {
+  flex: 0 1 auto;
+  max-width: 62%;
+  overflow: hidden;
+  color: var(--color-text);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The auth code is a raw id — keep it lowercase and let it truncate. */
+.tr-row-val-id {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.tr-grand {
+  margin-top: 2px;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.tr-grand .tr-row-key {
+  color: var(--color-text);
+}
+
+.tr-row-val.is-credit {
+  color: var(--color-credit);
+}
+
+.tr-row-val.is-debit {
+  color: #123a40;
+}
+
+.tr-barcode {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  height: 52px;
+  margin-top: 2px;
+}
+
+.tr-bar,
+.tr-space {
+  flex-basis: 0;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.tr-bar {
+  background: #1c2b2d;
+}
+
+.tr-space {
+  background: transparent;
+}
+
+.tr-barcode-caption {
+  margin: 9px 0 0;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-align: center;
+  color: var(--color-muted);
+}
+
+.tr-receipt-footer {
+  margin-top: 14px;
+  font-size: 0.6rem;
+  line-height: 1.7;
+  letter-spacing: 0.1em;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--color-subtle);
+}
+
+.tr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.tr-cta {
+  flex: 1 1 auto;
+  min-width: 140px;
+  max-width: 200px;
 }
 
