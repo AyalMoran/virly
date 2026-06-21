@@ -13,6 +13,7 @@ import { ResendVerificationPage } from "../features/auth/ResendVerificationPage"
 import { TransferPage } from "../features/transfer/TransferPage";
 import { TransactionsPage } from "../features/transactions/TransactionsPage";
 import { SettingsPage } from "../features/settings/SettingsPage";
+import { NotFoundPage } from "../features/not-found/NotFoundPage";
 import ShaderBackground from "../components/ui/shader-background";
 
 const AgentVideoSessionsPage = lazy(() =>
@@ -104,7 +105,7 @@ export function App() {
             <Route path="/settings" element={<SettingsPage />} />
           </Route>
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
-          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+          <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </div>
     </MotionConfig>
