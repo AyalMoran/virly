@@ -94,6 +94,11 @@ export function TransactionReceipt({
 
       <div className="tr-shadow">
         <motion.article className="tr-receipt" variants={paper} initial="hidden" animate="shown">
+          <motion.span className="tr-stamp" variants={stamp} aria-hidden="true">
+            <span className="tr-stamp-main">{isCredit ? "Received" : "Paid"}</span>
+            <span className="tr-stamp-sub">Virly · Cleared</span>
+          </motion.span>
+
           <motion.header className="tr-merchant" variants={line}>
             <span className="tr-logo" aria-hidden="true">
               V
@@ -113,13 +118,7 @@ export function TransactionReceipt({
               {isCredit ? "Money received" : "Money sent"}
             </span>
 
-            <p className={`tr-amount ${isCredit ? "is-credit" : "is-debit"}`}>
-              {amountText}
-              <motion.span className="tr-stamp" variants={stamp} aria-hidden="true">
-                <span className="tr-stamp-main">{isCredit ? "Received" : "Paid"}</span>
-                <span className="tr-stamp-sub">Virly · Cleared</span>
-              </motion.span>
-            </p>
+            <p className={`tr-amount ${isCredit ? "is-credit" : "is-debit"}`}>{amountText}</p>
 
             <p className="tr-status-note">Settled — funds available immediately.</p>
           </motion.div>

@@ -4146,12 +4146,12 @@ select {
    optimistic counterpart to the 404's DECLINED. */
 .tr-stamp {
   position: absolute;
-  top: -16px;
-  right: -8px;
+  top: 30px;
+  left: 14px;
   display: grid;
   justify-items: center;
   gap: 1px;
-  padding: 6px 13px 5px;
+  padding: 5px 10px 4px;
   transform: rotate(-11deg);
   transform-origin: center;
   border: 2.5px solid rgba(31, 95, 103, 0.74);
@@ -4165,9 +4165,9 @@ select {
 }
 
 .tr-stamp-main {
-  font-size: 1.18rem;
+  font-size: 1.02rem;
   font-weight: 800;
-  letter-spacing: 0.14em;
+  letter-spacing: 0.1em;
   text-transform: uppercase;
   line-height: 1;
 }
