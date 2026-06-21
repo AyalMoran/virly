@@ -6,7 +6,7 @@ import { config } from "../config.js";
 import { sendVerificationEmail } from "./email.service.js";
 import { accountService, type UserDocument } from "./account.service.js";
 import { createVerificationToken, verifyVerificationToken } from "../utils/auth.js";
-import { ensurePersonalDetails } from "../utils/personal-details.js";
+import { personalDetailsService } from "./personalDetails.service.js";
 import { hashToken, verificationTokenExpiry } from "../utils/token.js";
 import { AppError } from "../utils/app-error.js";
 
@@ -52,7 +52,7 @@ export const authService = {
       phone: input.phone,
       balance: 0
     });
-    await ensurePersonalDetails(user);
+    await personalDetailsService.ensureForUser(user);
 
     const verificationToken = await sendNewVerificationLink(user);
 
