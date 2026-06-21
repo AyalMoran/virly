@@ -5,12 +5,10 @@ import {
   Button,
   Card,
   ErrorBanner,
-  Field,
   PageHeader,
   PageStack,
   ResponsiveGrid,
-  SuccessBanner,
-  TextareaField
+  SuccessBanner
 } from "../../components/Primitives";
 import { useAuth } from "../auth/AuthProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
@@ -20,9 +18,9 @@ import {
   CURRENCY_LABELS,
   SUPPORTED_DISPLAY_CURRENCIES,
   convertIlsForDisplay,
-  formatMoneyIn,
   isDisplayCurrency
 } from "../../lib/currency";
+import { amountInWords } from "../../lib/amount-words";
 import { formatCurrency } from "../../lib/format";
 import type {
   AccountSummary,
@@ -43,6 +41,27 @@ type TransferErrors = {
   reason?: string;
   form?: string;
 };
+
+const CURRENCY_WORD: Record<DisplayCurrency, string> = {
+  ILS: "Shekels",
+  USD: "Dollars",
+  EUR: "Euros"
+};
+const CURRENCY_GLYPH: Record<DisplayCurrency, string> = { ILS: "₪", USD: "$", EUR: "€" };
+
+/** Best-effort human name from an email local-part, for the signature line. */
+function signatureName(email?: string | null): string {
+  if (!email) {
+    return "Virly Account";
+  }
+  const pretty = email
+    .split("@")[0]
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(" ");
+  return pretty || email;
+}
 
 export function TransferPage() {
   const auth = useAuth();
@@ -238,202 +257,309 @@ export function TransferPage() {
     }
   }
 
+  function resetForm() {
+    setRecipientEmail("");
+    setAmount("");
+    setReason("");
+    setResult(null);
+    setQuote(null);
+    setQuoteNotice("");
+    setErrors({});
+    setStep("form");
+  }
+
+  const isForm = step === "form";
+  const isReview = step === "review";
+  const isSuccess = step === "success";
+
+  const chequeNumber = useMemo(() => String(Math.floor(10000 + Math.random() * 89999)), []);
+  const issueDate = useMemo(
+    () =>
+      new Intl.DateTimeFormat("en-US", {
+        year: "numeric",
+        month: "short",
+        day: "2-digit"
+      }).format(new Date()),
+    []
+  );
+  const holderName = signatureName(auth.user?.email);
+
+  const payee = (isSuccess ? result?.transaction.counterpartyEmail ?? recipientEmail : recipientEmail)
+    .trim()
+    .toLowerCase();
+  const hasAmount = amount.trim() !== "" && Number.isFinite(numericAmount) && numericAmount > 0;
+  const words = hasAmount ? amountInWords(numericAmount) : "";
+  const numericFigure = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  }).format(hasAmount ? numericAmount : 0);
+
+  const cheque = (
+    <article className="cheque" aria-label="Cheque">
+      <span className="cheque-watermark" aria-hidden="true">V</span>
+      <span className="cheque-guilloche" aria-hidden="true" />
+
+      {isSuccess ? (
+        <motion.span
+          className="cheque-stamp"
+          aria-hidden="true"
+          initial={{ opacity: 0, scale: 1.8, rotate: -24 }}
+          animate={{ opacity: 0.92, scale: 1, rotate: -12 }}
+          transition={{ delay: 0.18, type: "spring", stiffness: 340, damping: 13, mass: 0.7 }}
+        >
+          <span className="cheque-stamp-main">Cleared</span>
+          <span className="cheque-stamp-sub">Virly · Paid</span>
+        </motion.span>
+      ) : null}
+
+      <header className="cheque-head">
+        <div className="cheque-brand">
+          <span className="cheque-logo" aria-hidden="true">V</span>
+          <span className="cheque-brandname">
+            Virly
+            <small>Savings &amp; Trust</small>
+          </span>
+        </div>
+        <div className="cheque-meta">
+          <span className="cheque-no">No. {chequeNumber}</span>
+          <span className="cheque-dateline">
+            <span className="cheque-microlabel">Date</span> {issueDate}
+          </span>
+        </div>
+      </header>
+
+      <div className="cheque-payline">
+        <span className="cheque-microlabel">Pay to the order of</span>
+        <div className="cheque-payfields">
+          {isForm ? (
+            <input
+              className="cheque-input cheque-payee"
+              id="recipientEmail"
+              name="recipientEmail"
+              type="email"
+              aria-label="Recipient email"
+              value={recipientEmail}
+              placeholder="recipient@example.com"
+              aria-invalid={Boolean(errors.recipientEmail)}
+              onChange={(event) => setRecipientEmail(event.target.value)}
+            />
+          ) : (
+            <Link
+              className="cheque-payee cheque-payee-static counterparty-link"
+              to={`/users/${encodeURIComponent(payee)}`}
+            >
+              {payee}
+            </Link>
+          )}
+          <div className={`cheque-amountbox${errors.amount && isForm ? " has-error" : ""}`}>
+            <span className="cheque-amountbox-cur" aria-hidden="true">
+              {CURRENCY_GLYPH[currency]}
+            </span>
+            {isForm ? (
+              <input
+                className="cheque-input cheque-amount-input"
+                id="amount"
+                name="amount"
+                type="number"
+                inputMode="decimal"
+                min="0.01"
+                step="0.01"
+                aria-label={`Amount in ${CURRENCY_WORD[currency]}`}
+                value={amount}
+                placeholder="0.00"
+                aria-invalid={Boolean(errors.amount)}
+                onChange={(event) => setAmount(event.target.value)}
+              />
+            ) : (
+              <span className="cheque-amount-static">{numericFigure}</span>
+            )}
+          </div>
+        </div>
+        {isForm && errors.recipientEmail ? (
+          <span className="cheque-error">{errors.recipientEmail}</span>
+        ) : null}
+        {isForm && errors.amount ? (
+          <span className="cheque-error cheque-error-amount">{errors.amount}</span>
+        ) : null}
+      </div>
+
+      <div className="cheque-words">
+        <span className={words ? "cheque-words-text" : "cheque-words-text is-empty"}>
+          {words || "—"}
+        </span>
+        <span className="cheque-words-rule" aria-hidden="true" />
+        <span className="cheque-words-cur">{CURRENCY_WORD[currency]}</span>
+      </div>
+
+      {isForm ? (
+        <div className="cheque-currency">
+          <label className="cheque-microlabel" htmlFor="transfer-currency">
+            Currency
+          </label>
+          <select
+            id="transfer-currency"
+            name="currency"
+            value={currency}
+            onChange={(event) => {
+              const next = event.target.value;
+              if (isDisplayCurrency(next)) {
+                setCurrency(next);
+                setQuote(null);
+              }
+            }}
+          >
+            {SUPPORTED_DISPLAY_CURRENCIES.map((code) => (
+              <option key={code} value={code}>
+                {CURRENCY_LABELS[code]}
+              </option>
+            ))}
+          </select>
+        </div>
+      ) : null}
+
+      <div className="cheque-foot">
+        <div className="cheque-memo">
+          <span className="cheque-microlabel">Memo</span>
+          {isForm ? (
+            <input
+              className="cheque-input cheque-memo-input"
+              id="reason"
+              name="reason"
+              maxLength={200}
+              aria-label="Memo"
+              value={reason}
+              placeholder="What's it for?"
+              aria-invalid={Boolean(errors.reason)}
+              onChange={(event) => setReason(event.target.value)}
+            />
+          ) : (
+            <span className="cheque-memo-static">{reason.trim() || "—"}</span>
+          )}
+          {isForm && errors.reason ? <span className="cheque-error">{errors.reason}</span> : null}
+        </div>
+        <div className="cheque-sign">
+          <span className={isForm ? "cheque-sign-script is-ghost" : "cheque-sign-script"}>
+            {isForm ? "sign on send" : holderName}
+          </span>
+          <span className="cheque-sign-rule" aria-hidden="true" />
+          <span className="cheque-microlabel">Authorized signature</span>
+        </div>
+      </div>
+
+      <div className="cheque-micr" aria-hidden="true">
+        ⑆012345678⑆ {chequeNumber}⑈ 04⑇
+      </div>
+    </article>
+  );
+
   return (
     <PageStack>
-      <PageHeader eyebrow="" title="Transfer" />
-      <ResponsiveGrid className="transfer-layout figma-transfer-layout" variant="sidebar">
-        <Card className="transfer-card figma-transfer-card">
+      <PageHeader eyebrow="Transfer" title="Write a cheque" />
+      <ResponsiveGrid className="cheque-layout" variant="sidebar">
+        <div className="cheque-panel">
           <AnimatePresence mode="wait" initial={false}>
             <motion.div
               key={step}
+              className="cheque-step"
               initial={{ opacity: 0, y: 12 }}
               animate={{ opacity: 1, y: 0 }}
-              exit={{
-                opacity: 0,
-                y: -6,
-                transition: { duration: 0.12, ease: [0.4, 0, 1, 1] }
-              }}
-              transition={{ duration: 0.22, ease: [0.16, 1, 0.3, 1] }}
+              exit={{ opacity: 0, y: -6, transition: { duration: 0.12, ease: [0.4, 0, 1, 1] } }}
+              transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
             >
-          {step === "success" && result ? (
-            <div className="success-panel">
-              <SuccessBanner message={result.message} />
-              <h2>Transfer complete</h2>
-              <p>
-                {result.transaction.fx
-                  ? `${formatMoneyIn(
-                      result.transaction.fx.enteredAmount ?? Number(amount),
-                      result.transaction.fx.enteredCurrency
-                    )} (${formatCurrency(Math.abs(result.transaction.amount))})`
-                  : formatCurrency(Math.abs(result.transaction.amount))}{" "}
-                sent to {result.transaction.counterpartyEmail}.
-              </p>
-              <strong>New balance: {formatAmount(result.newBalance)}</strong>
-              <div className="button-row">
-                <Button type="button" onClick={() => navigate("/transactions")}>
-                  View transactions
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  onClick={() => {
-                    setRecipientEmail("");
-                    setAmount("");
-                    setReason("");
-                    setResult(null);
-                    setQuote(null);
-                    setQuoteNotice("");
-                    setStep("form");
-                  }}
-                >
-                  New transfer
-                </Button>
-              </div>
-            </div>
-          ) : step === "review" ? (
-            <div className="review-panel">
-              <h2>Confirm</h2>
-              {quoteNotice ? <ErrorBanner message={quoteNotice} /> : null}
-              <dl className="review-list">
-                <div>
-                  <dt>Recipient</dt>
-                  <dd>
-                    <Link
-                      className="counterparty-link"
-                      to={`/users/${encodeURIComponent(recipientEmail.trim().toLowerCase())}`}
-                    >
-                      {recipientEmail.trim().toLowerCase()}
-                    </Link>
-                  </dd>
-                </div>
-                <div>
-                  <dt>Amount</dt>
-                  <dd>
-                    <span className="review-amount">
-                      {formatMoneyIn(Number(amount), currency)}
-                      {currency !== "ILS" ? ` ${currency}` : ""}
-                    </span>
+              {isForm ? (
+                <form className="cheque-shell" onSubmit={handleReview} noValidate>
+                  {errors.form ? <ErrorBanner message={errors.form} /> : null}
+                  {cheque}
+                  {currency !== "ILS" && !rates ? (
+                    <p className="cheque-hint">
+                      Currency conversion is unavailable right now; the exact ILS amount will be
+                      quoted before you confirm.
+                    </p>
+                  ) : null}
+                  {recentCounterparties.length ? (
+                    <div className="cheque-payeebook" aria-label="Recent payees">
+                      <span className="cheque-microlabel">Recent payees</span>
+                      <div className="cheque-payeebook-grid">
+                        {recentCounterparties.map((contact) => (
+                          <button
+                            key={contact.email}
+                            type="button"
+                            className={
+                              recipientEmail === contact.email
+                                ? "cheque-payee-chip selected"
+                                : "cheque-payee-chip"
+                            }
+                            onClick={() => setRecipientEmail(contact.email)}
+                          >
+                            <span aria-hidden="true">{contact.avatar}</span>
+                            <strong>{contact.email}</strong>
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  ) : null}
+                  <div className="cheque-actions">
+                    <Button type="submit" disabled={isSubmitting}>
+                      {isSubmitting ? "Preparing quote…" : "Review cheque"}
+                    </Button>
+                  </div>
+                </form>
+              ) : isReview ? (
+                <div className="cheque-shell">
+                  {cheque}
+                  <div className="cheque-reviewnote">
+                    {quoteNotice ? <ErrorBanner message={quoteNotice} /> : null}
                     {quote ? <TransferQuoteSmallPrint quote={quote} /> : null}
-                  </dd>
-                </div>
-                <div>
-                  <dt>Reason</dt>
-                  <dd>{reason.trim() || "No reason provided"}</dd>
-                </div>
-                <div>
-                  <dt>Projected balance</dt>
-                  <dd>{formatCurrency(projectedBalance)}</dd>
-                </div>
-              </dl>
-              <div className="button-row">
-                <Button type="button" disabled={isSubmitting} onClick={handleSubmit}>
-                  {isSubmitting ? "Sending..." : "Confirm and send"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="secondary"
-                  disabled={isSubmitting}
-                  onClick={() => {
-                    setQuoteNotice("");
-                    setStep("form");
-                  }}
-                >
-                  Edit
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <form className="form-stack" onSubmit={handleReview} noValidate>
-              {errors.form ? <ErrorBanner message={errors.form} /> : null}
-              <Field
-                label="Recipient email"
-                name="recipientEmail"
-                type="email"
-                value={recipientEmail}
-                error={errors.recipientEmail}
-                placeholder="recipient@example.com"
-                onChange={(event) => setRecipientEmail(event.target.value)}
-              />
-              {recentCounterparties.length ? (
-                <div className="contact-picker-grid" aria-label="Recent counterparties">
-                  {recentCounterparties.map((contact) => (
-                    <button
-                      key={contact.email}
-                      className={
-                        recipientEmail === contact.email
-                          ? "contact-picker-item selected"
-                          : "contact-picker-item"
-                      }
+                    <p className="cheque-projection-line">
+                      Projected balance after sending{" "}
+                      <strong>{formatCurrency(projectedBalance)}</strong>
+                    </p>
+                  </div>
+                  <div className="cheque-actions">
+                    <Button type="button" disabled={isSubmitting} onClick={handleSubmit}>
+                      {isSubmitting ? "Sending…" : "Sign & send"}
+                    </Button>
+                    <Button
                       type="button"
-                      onClick={() => setRecipientEmail(contact.email)}
+                      variant="secondary"
+                      disabled={isSubmitting}
+                      onClick={() => {
+                        setQuoteNotice("");
+                        setStep("form");
+                      }}
                     >
-                      <span aria-hidden="true">{contact.avatar}</span>
-                      <strong>{contact.email}</strong>
-                    </button>
-                  ))}
+                      Edit
+                    </Button>
+                  </div>
                 </div>
-              ) : null}
-              <div className="amount-currency-row">
-                <Field
-                  label="Amount"
-                  name="amount"
-                  type="number"
-                  inputMode="decimal"
-                  min="0.01"
-                  step="0.01"
-                  value={amount}
-                  error={errors.amount}
-                  onChange={(event) => setAmount(event.target.value)}
-                />
-                <label className="field" htmlFor="transfer-currency">
-                  <span className="field-label">Currency</span>
-                  <select
-                    id="transfer-currency"
-                    name="currency"
-                    value={currency}
-                    onChange={(event) => {
-                      const next = event.target.value;
-                      if (isDisplayCurrency(next)) {
-                        setCurrency(next);
-                        setQuote(null);
-                      }
-                    }}
-                  >
-                    {SUPPORTED_DISPLAY_CURRENCIES.map((code) => (
-                      <option key={code} value={code}>
-                        {CURRENCY_LABELS[code]}
-                      </option>
-                    ))}
-                  </select>
-                </label>
-              </div>
-              {currency !== "ILS" && !rates ? (
-                <p className="field-hint">
-                  Currency conversion is unavailable right now; the exact ILS
-                  amount will be quoted before you confirm.
-                </p>
-              ) : null}
-              <TextareaField
-                label="Reason"
-                name="reason"
-                value={reason}
-                maxLength={200}
-                error={errors.reason}
-                hint={`${reason.length}/200 characters`}
-                onChange={(event) => setReason(event.target.value)}
-              />
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Preparing quote..." : "Review transfer"}
-              </Button>
-            </form>
-          )}
+              ) : (
+                <div className="cheque-shell">
+                  {cheque}
+                  {result ? (
+                    <div className="cheque-successnote">
+                      <SuccessBanner message={result.message} />
+                      <p className="cheque-projection-line">
+                        New balance <strong>{formatAmount(result.newBalance)}</strong>
+                      </p>
+                    </div>
+                  ) : null}
+                  <div className="cheque-actions">
+                    <Button type="button" onClick={() => navigate("/transactions")}>
+                      View transactions
+                    </Button>
+                    <Button type="button" variant="secondary" onClick={resetForm}>
+                      Write another
+                    </Button>
+                  </div>
+                </div>
+              )}
             </motion.div>
           </AnimatePresence>
-        </Card>
+        </div>
         <Card className="balance-aside figma-balance-aside">
           <p className="eyebrow">Balance</p>
           <strong>{formatAmount(balance)}</strong>
-          {step !== "success" ? (
+          {!isSuccess ? (
             <div className="projection">
               <span>After transfer</span>
               <strong>{formatAmount(Math.max(projectedBalance, 0))}</strong>

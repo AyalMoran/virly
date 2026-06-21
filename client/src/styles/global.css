@@ -4308,3 +4308,552 @@ select {
   max-width: 200px;
 }
 
+/* ------------------------------------------------------------------ */
+/* Transfer cheque — the send-money flow as a personal cheque.         */
+/* Write it (form) → sign it (review) → clear it (success), extending  */
+/* the receipt's paper world with guilloche, an amount-in-words line,  */
+/* a signature, and a MICR band.                                       */
+/* ------------------------------------------------------------------ */
+
+.cheque-layout {
+  align-items: start;
+}
+
+.cheque-panel {
+  min-width: 0;
+}
+
+.cheque-shell {
+  display: grid;
+  gap: 18px;
+}
+
+.cheque {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(53, 133, 142, 0.3);
+  border-radius: 16px;
+  padding: clamp(20px, 4vw, 30px);
+  background:
+    linear-gradient(135deg, #f6faf1, #eef4ea 58%, #e7f0ea);
+  box-shadow:
+    0 1px 2px rgba(23, 61, 66, 0.06),
+    0 22px 50px rgba(53, 133, 142, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+/* Engine-turned guilloche security tint in the corner. */
+.cheque-guilloche {
+  position: absolute;
+  top: -120px;
+  right: -120px;
+  width: 320px;
+  height: 320px;
+  pointer-events: none;
+  background: repeating-radial-gradient(
+    circle at center,
+    transparent 0 13px,
+    rgba(53, 133, 142, 0.07) 13px 14.5px
+  );
+  -webkit-mask-image: radial-gradient(circle at center, black 30%, transparent 72%);
+  mask-image: radial-gradient(circle at center, black 30%, transparent 72%);
+}
+
+.cheque-watermark {
+  position: absolute;
+  right: 14px;
+  bottom: -22px;
+  font-family: var(--font-display);
+  font-size: 11rem;
+  font-weight: 700;
+  font-style: italic;
+  line-height: 1;
+  color: rgba(53, 133, 142, 0.06);
+  pointer-events: none;
+  user-select: none;
+}
+
+.cheque > * {
+  position: relative;
+  z-index: 1;
+}
+
+.cheque-microlabel {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-subtle);
+}
+
+.cheque-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.cheque-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.cheque-logo {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #35858e, #7da78c 72%, #c2d099);
+  box-shadow: 0 10px 22px rgba(53, 133, 142, 0.32);
+  color: #f8ffe7;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.cheque-brandname {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: 1.32rem;
+  font-weight: 640;
+  font-variation-settings: "SOFT" 40, "WONK" 0;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.cheque-brandname small {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.cheque-meta {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  text-align: right;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.cheque-no {
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--color-primary-deep);
+  font-variant-numeric: tabular-nums;
+}
+
+.cheque-dateline {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding-bottom: 2px;
+  border-bottom: 1.5px solid rgba(53, 133, 142, 0.3);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.cheque-payline {
+  display: grid;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.cheque-payfields {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+/* Shared transparent "written on the line" input. */
+.cheque-input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-bottom: 1.5px solid rgba(53, 133, 142, 0.34);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 4px 2px;
+  color: var(--color-text);
+  transition: border-color 160ms ease;
+}
+
+.cheque-input::placeholder {
+  color: var(--color-subtle);
+}
+
+.cheque-input:focus-visible {
+  outline: none;
+  border-bottom-color: var(--color-primary);
+  background: transparent;
+  box-shadow: 0 1px 0 0 var(--color-primary);
+}
+
+.cheque-payee,
+.cheque-payee-static {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 1.04rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cheque-payee-static {
+  overflow: hidden;
+  padding: 4px 2px;
+  border-bottom: 1.5px solid rgba(53, 133, 142, 0.34);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cheque-amountbox {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-width: 120px;
+  padding: 7px 12px;
+  border: 1.6px solid rgba(53, 133, 142, 0.5);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.cheque-amountbox.has-error {
+  border-color: rgba(127, 75, 68, 0.6);
+}
+
+.cheque-amountbox-cur {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-primary-deep);
+}
+
+.cheque-amount-input,
+.cheque-amount-static {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  text-align: right;
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 580;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.cheque-amount-static {
+  display: block;
+}
+
+/* Strip the number spinner — the box is the frame. */
+.cheque-amount-input::-webkit-outer-spin-button,
+.cheque-amount-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cheque-amount-input {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.cheque-amount-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.cheque-error {
+  display: block;
+  color: #7f4b44;
+  font-size: 0.82rem;
+}
+
+.cheque-error-amount {
+  text-align: right;
+}
+
+.cheque-words {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.cheque-words-text {
+  flex: 0 1 auto;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 1.16rem;
+  font-style: italic;
+  font-weight: 500;
+  font-variation-settings: "SOFT" 60, "WONK" 1;
+  color: var(--color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cheque-words-text.is-empty {
+  color: var(--color-subtle);
+}
+
+.cheque-words-rule {
+  flex: 1 1 auto;
+  height: 0;
+  border-bottom: 1.5px dotted rgba(53, 133, 142, 0.34);
+}
+
+.cheque-words-cur {
+  flex: 0 0 auto;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-primary-deep);
+}
+
+.cheque-currency {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.cheque-currency select {
+  min-height: 38px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--color-text);
+  padding: 0 12px;
+  font-weight: 700;
+}
+
+.cheque-foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 26px;
+}
+
+.cheque-memo {
+  display: grid;
+  gap: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cheque-memo-static {
+  padding: 4px 2px;
+  border-bottom: 1.5px solid rgba(53, 133, 142, 0.34);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text);
+}
+
+.cheque-sign {
+  display: grid;
+  gap: 5px;
+  flex: 0 0 auto;
+  width: min(48%, 220px);
+  justify-items: stretch;
+  text-align: center;
+}
+
+.cheque-sign-script {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-style: italic;
+  font-weight: 460;
+  font-variation-settings: "SOFT" 90, "WONK" 1;
+  line-height: 1.1;
+  color: var(--color-primary-deep);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cheque-sign-script.is-ghost {
+  color: var(--color-subtle);
+  font-size: 1.05rem;
+}
+
+.cheque-sign-rule {
+  height: 0;
+  border-bottom: 1.5px solid rgba(53, 133, 142, 0.4);
+}
+
+.cheque-micr {
+  margin-top: 24px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: #1c2b2d;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The clearing stamp — teal ink, slammed across the cheque on success. */
+.cheque-stamp {
+  position: absolute;
+  top: 44%;
+  right: 11%;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: 7px 15px 6px;
+  transform: rotate(-12deg);
+  transform-origin: center;
+  border: 2.5px solid rgba(31, 95, 103, 0.74);
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 1.5px rgba(31, 95, 103, 0.46);
+  color: rgba(31, 95, 103, 0.82);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  white-space: nowrap;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.cheque-stamp-main {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.cheque-stamp-sub {
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  padding-left: 0.3em;
+  opacity: 0.85;
+}
+
+.cheque-hint {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.cheque-payeebook {
+  display: grid;
+  gap: 8px;
+}
+
+.cheque-payeebook-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.cheque-payee-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.4);
+  color: var(--color-text);
+  padding: 9px 11px;
+  text-align: left;
+  transition: border 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.cheque-payee-chip:hover,
+.cheque-payee-chip.selected {
+  border-color: rgba(53, 133, 142, 0.42);
+  background: rgba(255, 255, 255, 0.62);
+  transform: translateY(-1px);
+}
+
+.cheque-payee-chip span {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(53, 133, 142, 0.18), rgba(194, 208, 153, 0.34));
+  color: var(--color-primary-deep);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.cheque-payee-chip strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.84rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cheque-reviewnote,
+.cheque-successnote {
+  display: grid;
+  gap: 10px;
+}
+
+.cheque-projection-line {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.cheque-projection-line strong {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.cheque-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.cheque-actions .button {
+  flex: 1 1 auto;
+  min-width: 150px;
+}
+
+@media (max-width: 560px) {
+  .cheque-payfields,
+  .cheque-foot {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .cheque-amountbox {
+    width: 100%;
+  }
+
+  .cheque-sign {
+    width: 100%;
+  }
+}
+
