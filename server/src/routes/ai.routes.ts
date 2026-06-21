@@ -10,7 +10,6 @@ import {
   resumeV2Confirmation,
   streamAssistantV2
 } from "../ai/v2/hitl.js";
-import { AiPendingTransfer } from "../models/AiPendingTransfer.js";
 import { createConfiguredAssistantLlmProvider } from "../ai/llm.js";
 import {
   buildVideoSessionCtaBlock,
@@ -19,7 +18,10 @@ import {
 import { requireAuth } from "../middleware/auth.js";
 import { writeAiAuditLog } from "../services/aiAuditLog.service.js";
 import { mongoConversationStore } from "../services/aiConversation.service.js";
-import { respondToAiPendingTransfer } from "../services/aiPendingTransfer.service.js";
+import {
+  getResumablePendingForUser,
+  respondToAiPendingTransfer
+} from "../services/aiPendingTransfer.service.js";
 import { createVideoSession } from "../services/videoSession.service.js";
 
 const router = Router();
@@ -252,12 +254,7 @@ router.post("/confirmations/:id", requireAuth, async (req, res, next) => {
     // path to money execution). Falls back to the direct service if no paused
     // graph exists for this card. Response shape is unchanged.
     if (config.ai.graphVersion === "v2") {
-      const pending = await AiPendingTransfer.findOne({
-        _id: pendingTransferId,
-        userId: req.userId
-      })
-        .select("conversationId")
-        .lean();
+      const pending = await getResumablePendingForUser(pendingTransferId, req.userId);
       if (pending?.conversationId) {
         try {
           const resumed = await resumeV2Confirmation({
