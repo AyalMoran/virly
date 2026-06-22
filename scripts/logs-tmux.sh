@@ -37,4 +37,6 @@ tmux select-pane -t "$SESSION:dev.1" -T "app logs"
 tmux select-pane -t "$SESSION:dev.2" -T "frontend logs"
 tmux select-pane -t "$SESSION:dev.3" -T "mongo logs"
 
+tmux set-hook -t "$SESSION" session-closed "run-shell 'cd $PROJECT_ROOT && $COMPOSE_CMD down'"
+
 tmux attach-session -t "$SESSION"
