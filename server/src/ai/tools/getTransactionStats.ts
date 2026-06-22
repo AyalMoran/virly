@@ -1,8 +1,8 @@
-import { Transaction } from "../../models/Transaction.js";
+import { getRepositories } from "../../repositories/index.js";
 import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, ToolContext } from "../state.js";
 import {
-  buildTransactionFilter,
+  buildTransactionFilterCriteria,
   getTransactionQueryContext,
   transactionMemoryUpdatesFromRows,
   toSafeTransactionRows
@@ -52,9 +52,9 @@ function describeScope(context: ToolContext, visibility: "llm" | "user" = "llm")
 export async function getTransactionStats(
   context: ToolContext
 ): Promise<RuntimeToolResult> {
-  const transactions = await Transaction.find(buildTransactionFilter(context))
-    .sort({ createdAt: -1 })
-    .limit(1000);
+  const transactions = await getRepositories().transactions.listForOwnerFiltered(
+    buildTransactionFilterCriteria(context, { limit: 1000, sort: "newest" })
+  );
   const rows = await toSafeTransactionRows(transactions);
 
   if (rows.length === 0) {

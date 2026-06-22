@@ -1,5 +1,4 @@
-import { Types } from "mongoose";
-import { Transaction } from "../../models/Transaction.js";
+import { getRepositories } from "../../repositories/index.js";
 import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, ToolContext } from "../state.js";
 import { normalizeCounterpartyEmail } from "./counterpartyHelpers.js";
@@ -22,33 +21,15 @@ export async function getNetWithCounterparty(
   }
 
   const counterpartyEmail = normalizeCounterpartyEmail(counterparty.email);
-  const totals = await Transaction.aggregate<{
-    _id: "credit" | "debit";
-    total: number;
-    count: number;
-  }>([
-    {
-      $match: {
-        ownerId: new Types.ObjectId(context.userId),
-        counterpartyEmail,
-        type: { $in: ["credit", "debit"] }
-      }
-    },
-    {
-      $group: {
-        _id: "$type",
-        total: { $sum: "$amount" },
-        count: { $sum: 1 }
-      }
-    }
-  ]);
+  const totals = await getRepositories().transactions.getDirectionalTotals({
+    ownerId: context.userId,
+    counterpartyEmail
+  });
 
-  const received = totals.find((total) => total._id === "credit");
-  const sent = totals.find((total) => total._id === "debit");
-  const receivedAmount = received?.total ?? 0;
-  const sentAmount = sent?.total ?? 0;
-  const receivedCount = received?.count ?? 0;
-  const sentCount = sent?.count ?? 0;
+  const receivedAmount = totals.creditTotal;
+  const sentAmount = totals.debitTotal;
+  const receivedCount = totals.creditCount;
+  const sentCount = totals.debitCount;
   const recordCount = receivedCount + sentCount;
   const netAmount = receivedAmount - sentAmount;
   const userLabel = counterparty.userLabel ?? counterparty.email;

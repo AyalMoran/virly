@@ -1,16 +1,5 @@
 import type { PublicUserRecord, TransactionRecord, UserRecord } from "../repositories/types.js";
 
-// Accepts either a TransactionRecord (id field) or a legacy Mongoose-Document
-// shape (_id field) so callers that haven't migrated yet still type-check.
-type TransactionDocument = {
-  id?: string;
-  _id?: unknown;
-  amount: number;
-  type: string;
-  reason?: string | null;
-  createdAt?: Date;
-};
-
 export type PublicUserProfileDto = {
   id: string;
   email: string;
@@ -81,19 +70,14 @@ export function toPublicUserProfileDto(
 }
 
 export function toRelationshipTransactionDto(
-  transaction: TransactionDocument
+  transaction: TransactionRecord
 ): UserRelationshipTransactionDto {
-  const id =
-    "id" in transaction && transaction.id !== undefined
-      ? String(transaction.id)
-      : String((transaction as { _id: unknown })._id);
-
   return {
-    id,
+    id: transaction.id,
     amount: transaction.amount,
     direction: transaction.type === "debit" ? "sent" : "received",
     status: "completed",
-    createdAt: transaction.createdAt?.toISOString(),
+    createdAt: transaction.createdAt.toISOString(),
     description: transaction.reason ?? undefined
   };
 }

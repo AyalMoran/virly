@@ -1,4 +1,4 @@
-import { Transaction } from "../../models/Transaction.js";
+import { getRepositories } from "../../repositories/index.js";
 import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, ToolContext } from "../state.js";
 import {
@@ -13,19 +13,11 @@ export async function getRecentTransactions(
   context: ToolContext
 ): Promise<RuntimeToolResult> {
   const dateRange = context.resolvedDateRange;
-  const transactions = await Transaction.find({
+  const transactions = await getRepositories().transactions.recentForOwner({
     ownerId: context.userId,
-    ...(dateRange
-      ? {
-          createdAt: {
-            $gte: dateRange.from,
-            $lt: dateRange.to
-          }
-        }
-      : {})
-  })
-    .sort({ createdAt: -1 })
-    .limit(5);
+    ...(dateRange ? { dateFrom: dateRange.from, dateTo: dateRange.to } : {}),
+    limit: 5
+  });
 
   if (transactions.length === 0) {
     return createToolResult({

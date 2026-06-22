@@ -1,11 +1,6 @@
 import { getRepositories } from "../repositories/index.js";
 import type { TransactionRecord } from "../repositories/types.js";
 
-// Re-export TransactionRecord as TransactionDocument for backward-compat with
-// consumers that import this type from this module (routes, ai/tools, etc.).
-// They will be migrated in Task 6b; keeping the alias avoids breakage now.
-export type TransactionDocument = TransactionRecord;
-
 export const transactionQueryService = {
   /**
    * Paginated list of ledger entries owned by `ownerId`, optionally filtered
