@@ -96,6 +96,35 @@ function resolveJwtSecret(): string {
 
 const jwtSecret = resolveJwtSecret();
 
+function resolveDbDriver(): "mongo" | "postgres" {
+  // Guard against the string "undefined" that process.env coerces from
+  // undefined values (e.g. Object.assign(process.env, {KEY: undefined})).
+  const envVal = process.env.VIRLY_DB_DRIVER;
+  const effective = !envVal || envVal === "undefined" ? undefined : envVal;
+  const raw = (effective ?? "mongo").trim().toLowerCase();
+  if (raw !== "mongo" && raw !== "postgres") {
+    throw new Error("VIRLY_DB_DRIVER must be one of: mongo, postgres.");
+  }
+  return raw;
+}
+
+const dbDriver = resolveDbDriver();
+
+function resolvePostgresUrl(): string | undefined {
+  const raw = getOptionalStringEnv("VIRLY_POSTGRES_URL", {
+    aliases: ["POSTGRES_URL", "DATABASE_URL"]
+  });
+  // Guard against the string "undefined" that process.env coerces from
+  // undefined values (e.g. Object.assign(process.env, {KEY: undefined})).
+  return raw === "undefined" ? undefined : raw;
+}
+
+const postgresUrl = resolvePostgresUrl();
+
+if (dbDriver === "postgres" && !postgresUrl) {
+  throw new Error("VIRLY_POSTGRES_URL is required when VIRLY_DB_DRIVER=postgres.");
+}
+
 export const config = {
   port: getIntEnv("VIRLY_PORT", {
     defaultValue: 3000,
@@ -181,5 +210,7 @@ export const config = {
   },
   cookies: {
     sameSite: getCookieSameSite()
-  }
+  },
+  dbDriver,
+  postgresUrl
 };
