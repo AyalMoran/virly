@@ -1,7 +1,10 @@
-import { Types } from "mongoose";
-import { Transaction } from "../models/Transaction.js";
+import { getRepositories } from "../repositories/index.js";
+import type { TransactionRecord } from "../repositories/types.js";
 
-export type TransactionDocument = InstanceType<typeof Transaction>;
+// Re-export TransactionRecord as TransactionDocument for backward-compat with
+// consumers that import this type from this module (routes, ai/tools, etc.).
+// They will be migrated in Task 6b; keeping the alias avoids breakage now.
+export type TransactionDocument = TransactionRecord;
 
 export const transactionQueryService = {
   /**
@@ -14,28 +17,12 @@ export const transactionQueryService = {
     counterpartyEmail?: string;
     page: number;
     limit: number;
-  }): Promise<{ transactions: TransactionDocument[]; total: number }> {
-    const { ownerId, counterpartyEmail, page, limit } = input;
-    const skip = (page - 1) * limit;
-
-    const filter = {
-      ownerId,
-      ...(counterpartyEmail ? { counterpartyEmail } : {})
-    };
-
-    const [transactions, total] = await Promise.all([
-      Transaction.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
-      Transaction.countDocuments(filter)
-    ]);
-
-    return { transactions, total };
+  }): Promise<{ transactions: TransactionRecord[]; total: number }> {
+    return getRepositories().transactions.listForOwner(input);
   },
 
   /**
    * Aggregated relationship statistics between `ownerId` and a counterparty.
-   * Totals are drawn exclusively from the owner's ledger entries (completed
-   * transfers only, by construction). The aggregation pipeline is preserved
-   * verbatim from userProfile.routes.ts — do not alter its math.
    */
   async getRelationshipStats(input: {
     ownerId: string;
@@ -46,39 +33,7 @@ export const transactionQueryService = {
     transactionCount: number;
     lastTransactionAt: Date | null;
   }> {
-    const { ownerId, counterpartyEmail } = input;
-
-    const [stats] = await Transaction.aggregate<{
-      totalSent: number;
-      totalReceived: number;
-      transactionCount: number;
-      lastTransactionAt: Date | null;
-    }>([
-      // Mongoose does NOT cast aggregation pipeline stages, so `ownerId` (an
-      // ObjectId column) must be matched against an ObjectId, not the string
-      // the public API accepts — otherwise $match silently matches nothing.
-      { $match: { ownerId: new Types.ObjectId(ownerId), counterpartyEmail } },
-      {
-        $group: {
-          _id: null,
-          totalSent: {
-            $sum: { $cond: [{ $eq: ["$type", "debit"] }, "$amount", 0] }
-          },
-          totalReceived: {
-            $sum: { $cond: [{ $eq: ["$type", "credit"] }, "$amount", 0] }
-          },
-          transactionCount: { $sum: 1 },
-          lastTransactionAt: { $max: "$createdAt" }
-        }
-      }
-    ]);
-
-    return {
-      totalSent: stats?.totalSent ?? 0,
-      totalReceived: stats?.totalReceived ?? 0,
-      transactionCount: stats?.transactionCount ?? 0,
-      lastTransactionAt: stats?.lastTransactionAt ?? null
-    };
+    return getRepositories().transactions.getRelationshipStats(input);
   },
 
   /**
@@ -90,11 +45,7 @@ export const transactionQueryService = {
     ownerId: string;
     counterpartyEmail: string;
     limit: number;
-  }): Promise<TransactionDocument[]> {
-    const { ownerId, counterpartyEmail, limit } = input;
-
-    return Transaction.find({ ownerId, counterpartyEmail })
-      .sort({ createdAt: -1 })
-      .limit(limit);
+  }): Promise<TransactionRecord[]> {
+    return getRepositories().transactions.recentWithCounterparty(input);
   }
 };

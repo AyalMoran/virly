@@ -56,7 +56,7 @@ export async function getTransactionsWithCounterparty(
       amount: Math.abs(dto.amount),
       currency: "ILS" as const,
       direction,
-      occurredAt: new Date(dto.date).toISOString(),
+      occurredAt: dto.date ? new Date(dto.date).toISOString() : new Date(0).toISOString(),
       counterpartyLabel: counterparty.userLabel ?? counterparty.email,
       counterpartyMaskedLabel: counterparty.maskedLabel,
       reason: dto.reason ?? null,
