@@ -9,6 +9,7 @@
 export function stubRepository<T extends object>(name: string): T {
   return new Proxy({} as T, {
     get(_target, prop) {
+      if (typeof prop === "symbol") return undefined;
       return async () => {
         throw new Error(
           `${name}.${String(prop)} not implemented yet (stub — replaced in Stage B)`
