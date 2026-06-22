@@ -1,7 +1,9 @@
 import bcrypt from "bcryptjs";
 import { config } from "../config.js";
 import { sendVerificationEmail } from "./email.service.js";
-import { accountService, type UserDocument } from "./account.service.js";
+import { accountService } from "./account.service.js";
+import { getRepositories } from "../repositories/index.js";
+import type { UserRecord } from "../repositories/types.js";
 import { createVerificationToken, verifyVerificationToken } from "../utils/auth.js";
 import { personalDetailsService } from "./personalDetails.service.js";
 import { hashToken, verificationTokenExpiry } from "../utils/token.js";
@@ -12,11 +14,13 @@ import { AppError } from "../utils/app-error.js";
  * email the verification link. Moved verbatim from auth.routes.ts so the token
  * hashing/expiry semantics are preserved exactly.
  */
-async function sendNewVerificationLink(user: UserDocument): Promise<string> {
+async function sendNewVerificationLink(user: UserRecord): Promise<string> {
   const verificationToken = createVerificationToken(user.id);
-  user.verificationTokenHash = hashToken(verificationToken);
-  user.verificationTokenExpiresAt = verificationTokenExpiry();
-  await user.save();
+  await getRepositories().users.setVerificationToken(
+    user.id,
+    hashToken(verificationToken),
+    verificationTokenExpiry()
+  );
 
   const verificationUrl = `${config.serverUrl}/api/auth/verify?token=${encodeURIComponent(
     verificationToken
@@ -36,7 +40,7 @@ export const authService = {
     email: string;
     password: string;
     phone: string;
-  }): Promise<{ user: UserDocument; verificationToken: string }> {
+  }): Promise<{ user: UserRecord; verificationToken: string }> {
     const existingUser = await accountService.findByEmail(input.email);
     if (existingUser) {
       throw new AppError(409, "Email is already registered.");
@@ -66,7 +70,7 @@ export const authService = {
    */
   async verifyEmail(
     token: string
-  ): Promise<{ user: UserDocument; alreadyVerified: boolean }> {
+  ): Promise<{ user: UserRecord; alreadyVerified: boolean }> {
     let userId: string;
     try {
       userId = verifyVerificationToken(token).userId;
@@ -92,21 +96,26 @@ export const authService = {
       throw new AppError(400, "Verification token is invalid or expired.");
     }
 
-    user.isVerified = true;
-    user.verificationTokenHash = null;
-    user.verificationTokenExpiresAt = null;
-    await user.save();
+    await getRepositories().users.markVerified(user.id);
 
-    return { user, alreadyVerified: false };
+    return {
+      user: {
+        ...user,
+        isVerified: true,
+        verificationTokenHash: null,
+        verificationTokenExpiresAt: null
+      },
+      alreadyVerified: false
+    };
   },
 
   /**
    * Authenticate credentials. An unknown email and a wrong password both fail
    * with AppError(401) and the SAME message so neither is enumerable. A correct
    * password on an unverified account fails with AppError(403). On success the
-   * full user document is returned.
+   * full user record is returned.
    */
-  async login(creds: { email: string; password: string }): Promise<UserDocument> {
+  async login(creds: { email: string; password: string }): Promise<UserRecord> {
     const user = await accountService.findByEmail(creds.email);
     if (!user) {
       throw new AppError(401, "Invalid email or password.");

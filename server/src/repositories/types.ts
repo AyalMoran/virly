@@ -178,6 +178,7 @@ export interface UserRepository {
   setBalance(id: string, balance: number, tx?: TxContext): Promise<void>;
   setVerificationToken(id: string, hash: string | null, expiresAt: Date | null, tx?: TxContext): Promise<void>;
   markVerified(id: string, tx?: TxContext): Promise<void>;
+  setPersonalDetails(id: string, personalDetailsId: string, tx?: TxContext): Promise<void>;
 }
 
 export interface TransactionRepository {
