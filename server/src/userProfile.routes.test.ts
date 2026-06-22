@@ -69,7 +69,9 @@ function patchTransactionFind(t: test.TestContext, results: unknown[]) {
       const chain = {
         sort: () => chain,
         skip: () => chain,
-        limit: async () => mock.results
+        limit: () => chain,
+        session: () => chain,
+        lean: async () => mock.results
       };
       return chain;
     }) as unknown as typeof Transaction.find,

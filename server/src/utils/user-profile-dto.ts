@@ -1,9 +1,13 @@
-import { InferSchemaType } from "mongoose";
-import { Transaction } from "../models/Transaction.js";
-import type { PublicUserRecord, UserRecord } from "../repositories/types.js";
+import type { PublicUserRecord, TransactionRecord, UserRecord } from "../repositories/types.js";
 
-type TransactionDocument = InferSchemaType<typeof Transaction.schema> & {
-  _id: unknown;
+// Accepts either a TransactionRecord (id field) or a legacy Mongoose-Document
+// shape (_id field) so callers that haven't migrated yet still type-check.
+type TransactionDocument = {
+  id?: string;
+  _id?: unknown;
+  amount: number;
+  type: string;
+  reason?: string | null;
   createdAt?: Date;
 };
 
@@ -79,8 +83,13 @@ export function toPublicUserProfileDto(
 export function toRelationshipTransactionDto(
   transaction: TransactionDocument
 ): UserRelationshipTransactionDto {
+  const id =
+    "id" in transaction && transaction.id !== undefined
+      ? String(transaction.id)
+      : String((transaction as { _id: unknown })._id);
+
   return {
-    id: String(transaction._id),
+    id,
     amount: transaction.amount,
     direction: transaction.type === "debit" ? "sent" : "received",
     status: "completed",
