@@ -1,11 +1,6 @@
 import { InferSchemaType } from "mongoose";
 import { Transaction } from "../models/Transaction.js";
-import { User } from "../models/User.js";
-
-type UserDocument = InferSchemaType<typeof User.schema> & {
-  _id: unknown;
-  createdAt?: Date;
-};
+import type { PublicUserRecord, UserRecord } from "../repositories/types.js";
 
 type TransactionDocument = InferSchemaType<typeof Transaction.schema> & {
   _id: unknown;
@@ -64,7 +59,7 @@ export function deriveDisplayNameFromEmail(email: string) {
 }
 
 export function toPublicUserProfileDto(
-  user: UserDocument,
+  user: UserRecord | PublicUserRecord,
   personalName?: { firstName?: string | null; lastName?: string | null } | null
 ): PublicUserProfileDto {
   const fullName = [personalName?.firstName, personalName?.lastName]
@@ -73,7 +68,7 @@ export function toPublicUserProfileDto(
     .trim();
 
   return {
-    id: String(user._id),
+    id: user.id,
     email: user.email,
     displayName: fullName || deriveDisplayNameFromEmail(user.email),
     isVerified: Boolean(user.isVerified),

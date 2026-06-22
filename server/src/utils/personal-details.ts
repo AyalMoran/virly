@@ -1,10 +1,12 @@
 import { PersonalDetails } from "../models/PersonalDetails.js";
-import { User } from "../models/User.js";
+import type { PublicUserRecord, UserRecord } from "../repositories/types.js";
 
-type UserDocument = InstanceType<typeof User>;
 type PersonalDetailsDocument = InstanceType<typeof PersonalDetails>;
 
-export function toAuthUserDto(user: UserDocument, details: PersonalDetailsDocument) {
+export function toAuthUserDto(
+  user: UserRecord | PublicUserRecord,
+  details: PersonalDetailsDocument
+) {
   return {
     id: user.id,
     email: user.email,

@@ -1,6 +1,7 @@
 import { PersonalDetails } from "../models/PersonalDetails.js";
 import { AppError } from "../utils/app-error.js";
-import type { UserDocument } from "./account.service.js";
+import { getRepositories } from "../repositories/index.js";
+import type { PublicUserRecord, UserRecord } from "../repositories/types.js";
 
 export type PersonalDetailsDocument = InstanceType<typeof PersonalDetails>;
 
@@ -23,20 +24,22 @@ export const personalDetailsService = {
    * Idempotent upsert — finds or creates the PersonalDetails doc for the
    * given user via a single atomic findOneAndUpdate with { upsert: true }.
    *
-   * Only patches user.personalDetails (and calls user.save()) when the field
-   * is currently null/absent, so GET paths do not perform unconditional writes.
+   * Only back-fills the User->PersonalDetails FK (via the user repository) when
+   * the field is currently null/absent, so GET paths do not perform
+   * unconditional writes.
    */
-  async ensureForUser(user: UserDocument): Promise<PersonalDetailsDocument> {
+  async ensureForUser(
+    user: UserRecord | PublicUserRecord
+  ): Promise<PersonalDetailsDocument> {
     const details = await PersonalDetails.findOneAndUpdate(
-      { userId: user._id },
-      { $setOnInsert: { userId: user._id, status: "not_provided" } },
+      { userId: user.id },
+      { $setOnInsert: { userId: user.id, status: "not_provided" } },
       { upsert: true, new: true, setDefaultsOnInsert: true }
     );
 
-    // Back-fill the FK on the user document only when it is absent.
+    // Back-fill the FK on the user record only when it is absent.
     if (!user.personalDetails) {
-      user.personalDetails = details._id;
-      await user.save();
+      await getRepositories().users.setPersonalDetails(user.id, String(details._id));
     }
 
     return details;

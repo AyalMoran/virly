@@ -6,6 +6,9 @@ import test from "node:test";
 import { PersonalDetails } from "./models/PersonalDetails.js";
 import { AppError } from "./utils/app-error.js";
 import { personalDetailsService } from "./services/personalDetails.service.js";
+import { setRepositories } from "./repositories/index.js";
+import { createMongoRepositories } from "./repositories/mongo/index.js";
+import type { Repositories, UserRecord } from "./repositories/types.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -62,26 +65,43 @@ function createMockDetails(overrides: Partial<MockPersonalDetails> = {}): MockPe
   return doc;
 }
 
-type MockUser = {
-  _id: string;
-  id: string;
-  personalDetails: unknown;
-  saveCalls: number;
-  save: () => Promise<void>;
-};
-
-function createMockUser(overrides: Partial<MockUser> = {}): MockUser {
-  const user: MockUser = {
-    _id: "507f1f77bcf86cd799439011",
+function createUserRecord(overrides: Partial<UserRecord> = {}): UserRecord {
+  return {
     id: "507f1f77bcf86cd799439011",
+    email: "alice@example.com",
+    passwordHash: "placeholder-hash",
+    phone: "+972500000000",
+    isVerified: true,
+    balance: 0,
+    role: "user",
     personalDetails: null,
-    saveCalls: 0,
-    save: async () => {
-      user.saveCalls += 1;
-    },
+    verificationTokenHash: null,
+    verificationTokenExpiresAt: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...overrides
   };
-  return user;
+}
+
+// ensureForUser now back-fills the User->PersonalDetails FK via the repository
+// (getRepositories().users.setPersonalDetails) instead of user.save(). This
+// stub captures those calls so the tests can assert on the back-fill.
+function withSetPersonalDetailsSpy(t: test.TestContext) {
+  const calls: Array<{ id: string; personalDetailsId: string }> = [];
+  const base = createMongoRepositories();
+  setRepositories({
+    ...base,
+    users: {
+      ...base.users,
+      setPersonalDetails: async (id: string, personalDetailsId: string) => {
+        calls.push({ id, personalDetailsId });
+      }
+    } as Repositories["users"]
+  });
+  t.after(() => {
+    setRepositories(base);
+  });
+  return calls;
 }
 
 // ---------------------------------------------------------------------------
@@ -90,7 +110,8 @@ function createMockUser(overrides: Partial<MockUser> = {}): MockUser {
 
 test("ensureForUser: uses findOneAndUpdate upsert — does not call findOne or create", async (t) => {
   const details = createMockDetails({ status: "not_provided" });
-  const user = createMockUser({ personalDetails: null });
+  const user = createUserRecord({ personalDetails: null });
+  withSetPersonalDetailsSpy(t);
 
   let findOneAndUpdateCalled = false;
   let findOneCalled = false;
@@ -115,16 +136,17 @@ test("ensureForUser: uses findOneAndUpdate upsert — does not call findOne or c
     t
   );
 
-  const result = await personalDetailsService.ensureForUser(user as never);
+  const result = await personalDetailsService.ensureForUser(user);
 
   assert.equal(result, details);
   assert.equal(findOneAndUpdateCalled, true, "must use findOneAndUpdate for upsert");
   assert.equal(findOneCalled, false, "must NOT fall back to findOne");
 });
 
-test("ensureForUser: patches user.personalDetails and calls user.save when personalDetails is null", async (t) => {
+test("ensureForUser: back-fills the FK via setPersonalDetails when personalDetails is null", async (t) => {
   const details = createMockDetails();
-  const user = createMockUser({ personalDetails: null });
+  const user = createUserRecord({ personalDetails: null });
+  const calls = withSetPersonalDetailsSpy(t);
 
   patchModel(
     PersonalDetails,
@@ -133,16 +155,17 @@ test("ensureForUser: patches user.personalDetails and calls user.save when perso
     t
   );
 
-  await personalDetailsService.ensureForUser(user as never);
+  await personalDetailsService.ensureForUser(user);
 
-  assert.equal(user.personalDetails, details._id, "should patch user.personalDetails to the returned doc._id");
-  assert.equal(user.saveCalls, 1, "should call user.save() once when personalDetails was null");
+  assert.equal(calls.length, 1, "should back-fill the FK once when personalDetails was null");
+  assert.equal(calls[0]?.id, user.id);
+  assert.equal(calls[0]?.personalDetailsId, String(details._id), "should set the returned doc._id");
 });
 
-test("ensureForUser: does NOT call user.save when user.personalDetails is already set", async (t) => {
-  const existingId = { _id: "507f191e810c19729de860ea" };
+test("ensureForUser: does NOT back-fill when user.personalDetails is already set", async (t) => {
   const details = createMockDetails();
-  const user = createMockUser({ personalDetails: existingId });
+  const user = createUserRecord({ personalDetails: "507f191e810c19729de860ea" });
+  const calls = withSetPersonalDetailsSpy(t);
 
   patchModel(
     PersonalDetails,
@@ -151,15 +174,14 @@ test("ensureForUser: does NOT call user.save when user.personalDetails is alread
     t
   );
 
-  await personalDetailsService.ensureForUser(user as never);
+  await personalDetailsService.ensureForUser(user);
 
-  assert.equal(user.saveCalls, 0, "must NOT call user.save when personalDetails was already set");
+  assert.equal(calls.length, 0, "must NOT back-fill the FK when personalDetails was already set");
 });
 
-test("ensureForUser: idempotent — calling twice does not double-save the user", async (t) => {
+test("ensureForUser: idempotent — a record that already has the FK is not back-filled again", async (t) => {
   const details = createMockDetails();
-  // First call: no personalDetails; after first call user.personalDetails is set
-  const user = createMockUser({ personalDetails: null });
+  const calls = withSetPersonalDetailsSpy(t);
 
   patchModel(
     PersonalDetails,
@@ -168,12 +190,16 @@ test("ensureForUser: idempotent — calling twice does not double-save the user"
     t
   );
 
-  await personalDetailsService.ensureForUser(user as never);
-  assert.equal(user.saveCalls, 1);
+  // First call: no FK yet -> one back-fill.
+  await personalDetailsService.ensureForUser(createUserRecord({ personalDetails: null }));
+  assert.equal(calls.length, 1);
 
-  // Second call: personalDetails now set (as it would be after first call)
-  await personalDetailsService.ensureForUser(user as never);
-  assert.equal(user.saveCalls, 1, "second call must NOT call user.save again");
+  // Second call: a record whose FK is already populated (as it would be after
+  // a reload following the first call) -> no further back-fill.
+  await personalDetailsService.ensureForUser(
+    createUserRecord({ personalDetails: String(details._id) })
+  );
+  assert.equal(calls.length, 1, "second call must NOT back-fill again");
 });
 
 // ---------------------------------------------------------------------------

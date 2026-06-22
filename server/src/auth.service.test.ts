@@ -4,42 +4,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import bcrypt from "bcryptjs";
-import { User } from "./models/User.js";
 import { PersonalDetails } from "./models/PersonalDetails.js";
 import { AppError } from "./utils/app-error.js";
 import { createVerificationToken } from "./utils/auth.js";
 import { hashToken, verificationTokenExpiry } from "./utils/token.js";
 import { config } from "./config.js";
 import { authService } from "./services/auth.service.js";
+import { setRepositories } from "./repositories/index.js";
+import { createMongoRepositories } from "./repositories/mongo/index.js";
+import type { Repositories, UserRecord } from "./repositories/types.js";
 
 // ---------------------------------------------------------------------------
-// Mock user document
+// Repository-backed mocks
 //
-// These tests exercise authService against patched Mongoose statics (no live
-// MongoDB), mirroring account.service.test.ts. A mock user is a plain object
-// with a `save` spy so the service's persistence calls are observable.
+// These tests exercise authService against a stubbed UserRepository (no live
+// MongoDB), mirroring account.service.test.ts. The service now persists via
+// getRepositories().users.* instead of Mongoose statics / user.save(), so the
+// stubs capture the calls the service makes.
 // ---------------------------------------------------------------------------
 
-type MockUser = {
-  _id: string;
-  id: string;
-  email: string;
-  passwordHash: string;
-  phone: string;
-  isVerified: boolean;
-  balance: number;
-  role: string;
-  personalDetails: unknown;
-  verificationTokenHash: string | null;
-  verificationTokenExpiresAt: Date | null;
-  createdAt: Date;
-  saveCalls: number;
-  save: () => Promise<void>;
-};
-
-function createMockUser(overrides: Partial<MockUser> = {}): MockUser {
-  const user: MockUser = {
-    _id: "507f1f77bcf86cd799439011",
+function createUserRecord(overrides: Partial<UserRecord> = {}): UserRecord {
+  return {
     id: "507f1f77bcf86cd799439011",
     email: "alice@example.com",
     passwordHash: "placeholder-hash",
@@ -47,17 +32,18 @@ function createMockUser(overrides: Partial<MockUser> = {}): MockUser {
     isVerified: true,
     balance: 500,
     role: "user",
-    personalDetails: { _id: "507f191e810c19729de860ea" },
+    personalDetails: "507f191e810c19729de860ea",
     verificationTokenHash: null,
     verificationTokenExpiresAt: null,
     createdAt: new Date("2026-01-15T10:00:00.000Z"),
-    saveCalls: 0,
-    save: async () => {
-      user.saveCalls += 1;
-    },
+    updatedAt: new Date("2026-01-15T10:00:00.000Z"),
     ...overrides
   };
-  return user;
+}
+
+function withUsers(stub: Partial<Repositories["users"]>) {
+  const base = createMongoRepositories();
+  setRepositories({ ...base, users: { ...base.users, ...stub } as Repositories["users"] });
 }
 
 function patchModel<T extends object, K extends keyof T>(
@@ -71,36 +57,6 @@ function patchModel<T extends object, K extends keyof T>(
   t.after(() => {
     model[key] = original;
   });
-}
-
-function patchFindOne(t: test.TestContext, users: MockUser[]) {
-  const byEmail = new Map(users.map((u) => [u.email, u]));
-  patchModel(
-    User,
-    "findOne",
-    (async (filter: { email?: string }) =>
-      filter.email ? (byEmail.get(filter.email) ?? null) : null) as unknown as typeof User.findOne,
-    t
-  );
-}
-
-function patchFindById(t: test.TestContext, users: MockUser[]) {
-  const byId = new Map(users.map((u) => [u._id, u]));
-  patchModel(
-    User,
-    "findById",
-    (async (id: unknown) => byId.get(String(id)) ?? null) as unknown as typeof User.findById,
-    t
-  );
-}
-
-function patchCreate(t: test.TestContext, onCreate: (doc: Record<string, unknown>) => MockUser) {
-  patchModel(
-    User,
-    "create",
-    (async (doc: Record<string, unknown>) => onCreate(doc)) as unknown as typeof User.create,
-    t
-  );
 }
 
 // personalDetailsService.ensureForUser hits PersonalDetails.findOneAndUpdate
@@ -147,19 +103,28 @@ function captureVerificationLogs(t: test.TestContext) {
 // ---------------------------------------------------------------------------
 
 test("register: new email creates a user, returns a token, and emails a link", async (t) => {
-  patchFindOne(t, []); // no existing user
   let createdInput: Record<string, unknown> | null = null;
-  let created: MockUser | null = null;
-  patchCreate(t, (doc) => {
-    createdInput = doc;
-    created = createMockUser({
-      email: String(doc.email),
-      passwordHash: String(doc.passwordHash),
-      phone: String(doc.phone),
-      balance: Number(doc.balance),
-      isVerified: false
-    });
-    return created;
+  let created: UserRecord | null = null;
+  const verificationTokenCalls: Array<{ id: string; hash: string | null }> = [];
+
+  withUsers({
+    findByEmail: async () => null, // no existing user
+    create: async (input) => {
+      createdInput = input;
+      created = createUserRecord({
+        email: input.email,
+        passwordHash: input.passwordHash,
+        phone: input.phone,
+        balance: input.balance,
+        isVerified: false,
+        personalDetails: null
+      });
+      return created;
+    },
+    setVerificationToken: async (id, hash) => {
+      verificationTokenCalls.push({ id, hash });
+    },
+    setPersonalDetails: async () => {}
   });
   patchPersonalDetails(t);
   const links = captureVerificationLogs(t);
@@ -187,19 +152,21 @@ test("register: new email creates a user, returns a token, and emails a link", a
   // as a HASH (never stored in cleartext).
   assert.equal(result.user, created);
   assert.ok(result.verificationToken.length > 0);
-  assert.ok(created);
-  assert.equal(
-    (created as MockUser).verificationTokenHash,
-    hashToken(result.verificationToken)
-  );
-  assert.equal((created as MockUser).saveCalls > 0, true);
+  assert.equal(verificationTokenCalls.length, 1);
+  assert.equal(verificationTokenCalls[0]?.hash, hashToken(result.verificationToken));
 
   // A verification email was triggered.
   assert.equal(links.length, 1);
 });
 
 test("register: duplicate email throws AppError(409)", async (t) => {
-  patchFindOne(t, [createMockUser({ email: "taken@example.com" })]);
+  const verificationTokenCalls: number[] = [];
+  withUsers({
+    findByEmail: async () => createUserRecord({ email: "taken@example.com" }),
+    setVerificationToken: async () => {
+      verificationTokenCalls.push(1);
+    }
+  });
   const links = captureVerificationLogs(t);
 
   await assert.rejects(
@@ -216,8 +183,9 @@ test("register: duplicate email throws AppError(409)", async (t) => {
     }
   );
 
-  // No email for an already-registered address.
+  // No email and no token persisted for an already-registered address.
   assert.equal(links.length, 0);
+  assert.equal(verificationTokenCalls.length, 0);
 });
 
 // ---------------------------------------------------------------------------
@@ -226,8 +194,8 @@ test("register: duplicate email throws AppError(409)", async (t) => {
 
 test("login: correct password on a verified account returns the user", async (t) => {
   const passwordHash = await bcrypt.hash("correct horse", 10);
-  const user = createMockUser({ email: "alice@example.com", passwordHash, isVerified: true });
-  patchFindOne(t, [user]);
+  const user = createUserRecord({ email: "alice@example.com", passwordHash, isVerified: true });
+  withUsers({ findByEmail: async (e) => (e.trim().toLowerCase() === "alice@example.com" ? user : null) });
 
   const result = await authService.login({
     email: "Alice@Example.com",
@@ -237,10 +205,10 @@ test("login: correct password on a verified account returns the user", async (t)
   assert.equal(result, user);
 });
 
-test("login: correct password on an UNVERIFIED account throws AppError(403)", async (t) => {
+test("login: correct password on an UNVERIFIED account throws AppError(403)", async () => {
   const passwordHash = await bcrypt.hash("correct horse", 10);
-  const user = createMockUser({ passwordHash, isVerified: false });
-  patchFindOne(t, [user]);
+  const user = createUserRecord({ passwordHash, isVerified: false });
+  withUsers({ findByEmail: async () => user });
 
   await assert.rejects(
     () => authService.login({ email: "alice@example.com", password: "correct horse" }),
@@ -252,10 +220,10 @@ test("login: correct password on an UNVERIFIED account throws AppError(403)", as
   );
 });
 
-test("login: wrong password throws AppError(401) with the generic message", async (t) => {
+test("login: wrong password throws AppError(401) with the generic message", async () => {
   const passwordHash = await bcrypt.hash("correct horse", 10);
-  const user = createMockUser({ passwordHash, isVerified: true });
-  patchFindOne(t, [user]);
+  const user = createUserRecord({ passwordHash, isVerified: true });
+  withUsers({ findByEmail: async () => user });
 
   await assert.rejects(
     () => authService.login({ email: "alice@example.com", password: "wrong" }),
@@ -268,8 +236,8 @@ test("login: wrong password throws AppError(401) with the generic message", asyn
   );
 });
 
-test("login: unknown email throws AppError(401) with the SAME message (no enumeration)", async (t) => {
-  patchFindOne(t, []); // no such user
+test("login: unknown email throws AppError(401) with the SAME message (no enumeration)", async () => {
+  withUsers({ findByEmail: async () => null }); // no such user
 
   await assert.rejects(
     () => authService.login({ email: "ghost@example.com", password: "whatever" }),
@@ -286,52 +254,71 @@ test("login: unknown email throws AppError(401) with the SAME message (no enumer
 // verifyEmail
 // ---------------------------------------------------------------------------
 
-test("verifyEmail: valid unexpired matching token flips an unverified account", async (t) => {
+test("verifyEmail: valid unexpired matching token flips an unverified account", async () => {
   const token = createVerificationToken("507f1f77bcf86cd799439011");
-  const user = createMockUser({
+  const user = createUserRecord({
     isVerified: false,
     verificationTokenHash: hashToken(token),
     verificationTokenExpiresAt: verificationTokenExpiry()
   });
-  patchFindById(t, [user]);
+  const markVerifiedCalls: string[] = [];
+  withUsers({
+    findById: async () => user,
+    markVerified: async (id) => {
+      markVerifiedCalls.push(id);
+    }
+  });
 
   const result = await authService.verifyEmail(token);
 
   assert.equal(result.alreadyVerified, false);
-  assert.equal(result.user, user);
-  assert.equal(user.isVerified, true);
-  assert.equal(user.verificationTokenHash, null);
-  assert.equal(user.verificationTokenExpiresAt, null);
-  assert.equal(user.saveCalls > 0, true);
+  assert.equal(result.user.id, user.id);
+  assert.equal(result.user.isVerified, true);
+  assert.equal(result.user.verificationTokenHash, null);
+  assert.equal(result.user.verificationTokenExpiresAt, null);
+  assert.equal(markVerifiedCalls.length, 1);
+  assert.equal(markVerifiedCalls[0], user.id);
 });
 
-test("verifyEmail: already-verified account short-circuits without state change", async (t) => {
+test("verifyEmail: already-verified account short-circuits without state change", async () => {
   const token = createVerificationToken("507f1f77bcf86cd799439011");
-  const user = createMockUser({
+  const user = createUserRecord({
     isVerified: true,
     verificationTokenHash: "stale-hash",
     verificationTokenExpiresAt: verificationTokenExpiry()
   });
-  patchFindById(t, [user]);
+  const markVerifiedCalls: string[] = [];
+  withUsers({
+    findById: async () => user,
+    markVerified: async (id) => {
+      markVerifiedCalls.push(id);
+    }
+  });
 
   const result = await authService.verifyEmail(token);
 
   assert.equal(result.alreadyVerified, true);
   assert.equal(result.user, user);
-  // No state mutation, no save.
-  assert.equal(user.isVerified, true);
-  assert.equal(user.verificationTokenHash, "stale-hash");
-  assert.equal(user.saveCalls, 0);
+  // No state mutation, no persistence call.
+  assert.equal(result.user.isVerified, true);
+  assert.equal(result.user.verificationTokenHash, "stale-hash");
+  assert.equal(markVerifiedCalls.length, 0);
 });
 
-test("verifyEmail: expired stored token throws AppError(400)", async (t) => {
+test("verifyEmail: expired stored token throws AppError(400)", async () => {
   const token = createVerificationToken("507f1f77bcf86cd799439011");
-  const user = createMockUser({
+  const user = createUserRecord({
     isVerified: false,
     verificationTokenHash: hashToken(token),
     verificationTokenExpiresAt: new Date(Date.now() - 1000) // already expired
   });
-  patchFindById(t, [user]);
+  const markVerifiedCalls: string[] = [];
+  withUsers({
+    findById: async () => user,
+    markVerified: async (id) => {
+      markVerifiedCalls.push(id);
+    }
+  });
 
   await assert.rejects(
     () => authService.verifyEmail(token),
@@ -343,17 +330,23 @@ test("verifyEmail: expired stored token throws AppError(400)", async (t) => {
   );
   // State untouched on rejection.
   assert.equal(user.isVerified, false);
-  assert.equal(user.saveCalls, 0);
+  assert.equal(markVerifiedCalls.length, 0);
 });
 
-test("verifyEmail: token hash mismatch throws AppError(400)", async (t) => {
+test("verifyEmail: token hash mismatch throws AppError(400)", async () => {
   const token = createVerificationToken("507f1f77bcf86cd799439011");
-  const user = createMockUser({
+  const user = createUserRecord({
     isVerified: false,
     verificationTokenHash: hashToken("a-different-token"),
     verificationTokenExpiresAt: verificationTokenExpiry()
   });
-  patchFindById(t, [user]);
+  const markVerifiedCalls: string[] = [];
+  withUsers({
+    findById: async () => user,
+    markVerified: async (id) => {
+      markVerifiedCalls.push(id);
+    }
+  });
 
   await assert.rejects(
     () => authService.verifyEmail(token),
@@ -364,11 +357,11 @@ test("verifyEmail: token hash mismatch throws AppError(400)", async (t) => {
     }
   );
   assert.equal(user.isVerified, false);
-  assert.equal(user.saveCalls, 0);
+  assert.equal(markVerifiedCalls.length, 0);
 });
 
-test("verifyEmail: structurally invalid JWT throws AppError(400)", async (t) => {
-  patchFindById(t, []);
+test("verifyEmail: structurally invalid JWT throws AppError(400)", async () => {
+  withUsers({ findById: async () => null });
 
   await assert.rejects(
     () => authService.verifyEmail("not-a-real-jwt"),
@@ -385,34 +378,53 @@ test("verifyEmail: structurally invalid JWT throws AppError(400)", async (t) => 
 // ---------------------------------------------------------------------------
 
 test("resendVerification: unverified existing user re-sends a link", async (t) => {
-  const user = createMockUser({ email: "alice@example.com", isVerified: false });
-  patchFindOne(t, [user]);
+  const user = createUserRecord({ email: "alice@example.com", isVerified: false });
+  const verificationTokenCalls: Array<{ id: string; hash: string | null }> = [];
+  withUsers({
+    findByEmail: async (e) => (e.trim().toLowerCase() === "alice@example.com" ? user : null),
+    setVerificationToken: async (id, hash) => {
+      verificationTokenCalls.push({ id, hash });
+    }
+  });
   const links = captureVerificationLogs(t);
 
   await authService.resendVerification("Alice@Example.com");
 
   assert.equal(links.length, 1);
   // A fresh token hash was persisted.
-  assert.ok(user.verificationTokenHash);
-  assert.equal(user.saveCalls > 0, true);
+  assert.equal(verificationTokenCalls.length, 1);
+  assert.ok(verificationTokenCalls[0]?.hash);
 });
 
 test("resendVerification: already-verified user sends nothing and does not throw", async (t) => {
-  const user = createMockUser({ email: "alice@example.com", isVerified: true });
-  patchFindOne(t, [user]);
+  const user = createUserRecord({ email: "alice@example.com", isVerified: true });
+  const verificationTokenCalls: number[] = [];
+  withUsers({
+    findByEmail: async () => user,
+    setVerificationToken: async () => {
+      verificationTokenCalls.push(1);
+    }
+  });
   const links = captureVerificationLogs(t);
 
   await authService.resendVerification("alice@example.com");
 
   assert.equal(links.length, 0);
-  assert.equal(user.saveCalls, 0);
+  assert.equal(verificationTokenCalls.length, 0);
 });
 
 test("resendVerification: absent user sends nothing and does not throw", async (t) => {
-  patchFindOne(t, []);
+  const verificationTokenCalls: number[] = [];
+  withUsers({
+    findByEmail: async () => null,
+    setVerificationToken: async () => {
+      verificationTokenCalls.push(1);
+    }
+  });
   const links = captureVerificationLogs(t);
 
   await authService.resendVerification("ghost@example.com");
 
   assert.equal(links.length, 0);
+  assert.equal(verificationTokenCalls.length, 0);
 });

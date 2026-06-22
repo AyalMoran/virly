@@ -5,9 +5,11 @@ import express from "express";
 import { parseCookies } from "./middleware/cookies.js";
 import { PersonalDetails } from "./models/PersonalDetails.js";
 import { Transaction } from "./models/Transaction.js";
-import { User } from "./models/User.js";
 import userProfileRoutes from "./routes/userProfile.routes.js";
 import { setAuthCookies } from "./utils/session.js";
+import { setRepositories } from "./repositories/index.js";
+import { createMongoRepositories } from "./repositories/mongo/index.js";
+import type { Repositories, UserRecord } from "./repositories/types.js";
 
 const viewerId = "507f1f77bcf86cd799439011";
 const viewedId = "507f191e810c19729de860ea";
@@ -77,23 +79,43 @@ function patchTransactionFind(t: test.TestContext, results: unknown[]) {
   return mock;
 }
 
-function patchUsers(t: test.TestContext, users: MockUser[]) {
-  const byId = new Map(users.map((user) => [user._id, user]));
-  const byEmail = new Map(users.map((user) => [user.email, user]));
+function toUserRecord(user: MockUser): UserRecord {
+  return {
+    id: user.id,
+    email: user.email,
+    passwordHash: user.passwordHash,
+    phone: user.phone,
+    isVerified: user.isVerified,
+    personalDetails: null,
+    verificationTokenHash: null,
+    verificationTokenExpiresAt: null,
+    balance: user.balance,
+    role: user.role as UserRecord["role"],
+    createdAt: user.createdAt,
+    updatedAt: user.createdAt
+  };
+}
 
-  patchModel(
-    User,
-    "findById",
-    (async (id: unknown) => byId.get(String(id)) ?? null) as unknown as typeof User.findById,
-    t
-  );
-  patchModel(
-    User,
-    "findOne",
-    (async (filter: { email?: string }) =>
-      filter.email ? byEmail.get(filter.email) ?? null : null) as unknown as typeof User.findOne,
-    t
-  );
+// The route now reaches the User store through getRepositories().users, so we
+// stub the repository instead of the Mongoose model. Transaction access still
+// flows through the Mongoose model (Task 6), so those patches stay.
+function patchUsers(t: test.TestContext, users: MockUser[]) {
+  const records = users.map(toUserRecord);
+  const byId = new Map(records.map((user) => [user.id, user]));
+  const byEmail = new Map(records.map((user) => [user.email.toLowerCase(), user]));
+
+  const base = createMongoRepositories();
+  setRepositories({
+    ...base,
+    users: {
+      ...base.users,
+      findById: async (id: string) => byId.get(id) ?? null,
+      findByEmail: async (email: string) => byEmail.get(email.trim().toLowerCase()) ?? null
+    } as Repositories["users"]
+  });
+  t.after(() => {
+    setRepositories(base);
+  });
 }
 
 function patchPersonalDetails(
