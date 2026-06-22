@@ -4,7 +4,7 @@ export const assistantIds = [
   "oshri",
   "chaya",
   "yehuda",
-  "yohai_daniel"
+  "yohai"
 ] as const;
 
 export type AssistantId = (typeof assistantIds)[number];
@@ -370,9 +370,9 @@ export const assistantPersonalities: Record<AssistantId, AssistantPersonality> =
       })
     }
   },
-  yohai_daniel: {
-    id: "yohai_daniel",
-    name: "Yohai/Daniel",
+  yohai: {
+    id: "yohai",
+    name: "Yohai",
     role: "לחשוב מהר, לחשב נכון",
     traits: [
       "analytical",

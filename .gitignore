@@ -6,5 +6,8 @@ coverage
 
 TODO.md
 *.sh
+
+/docs
+
 # LangGraph API
 .langgraph_api

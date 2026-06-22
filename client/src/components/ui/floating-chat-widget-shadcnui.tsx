@@ -63,6 +63,7 @@ import { cn } from "@/lib/utils";
 import oshriAvatar from "@/assets/agents/oshri.jpeg";
 import chayaAvatar from "@/assets/agents/chaya.jpeg";
 import yehudaAvatar from "@/assets/agents/yehuda.jpeg";
+import yohaiAvatar from "@/assets/agents/yohai.jpeg";
 
 
 
@@ -142,10 +143,10 @@ const AI_AGENTS: Agent[] = [
     greeting: "היי, אני יהודה. אני פה, אני עובד, לא נעשה מזה טקס. מה צריך?",
   },
   {
-    id: "yohai_daniel",
-    name: "Yohai/Daniel",
+    id: "yohai",
+    name: "Yohai",
     role: "לחשוב מהר, לחשב נכון",
-    avatar: "https://images.unsplash.com/photo-1544723795-3fb6469f5b39?auto=format&fit=crop&w=128&q=80",
+    avatar: yohaiAvatar,
     status: "online",
     icon: Brain,
     gradient: "from-rose-500/20 to-orange-500/20",
