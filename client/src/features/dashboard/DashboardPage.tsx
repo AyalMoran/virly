@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
-import { ArrowDownLeft, ArrowUpRight, TrendingUp } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Card, ErrorBanner, PageHeader, Skeleton } from "../../components/Primitives";
 import { QuickContacts } from "../../components/QuickContacts";
 import { TransactionDetailsDialog } from "../../components/TransactionDetailsDialog";
-import { TransactionList } from "../../components/TransactionList";
+import { AccountStatement } from "./AccountStatement";
 import { api } from "../../lib/api";
 import { getQuickContacts } from "../../lib/contacts";
 import { clearAuthTransition, hasAuthTransition } from "../../lib/route-transition";
@@ -85,6 +85,16 @@ export function DashboardPage() {
   const firstName = summary?.personalDetails.firstName?.trim();
   const greetingName = firstName || getUsername(auth.user?.email);
 
+  // A stable, decorative masked account number derived from the user's identity.
+  const accountNumber = useMemo(() => {
+    const seed = auth.user?.id ?? auth.user?.email ?? "virly-account";
+    let hash = 0;
+    for (const char of seed) {
+      hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
+    }
+    return `•••• ${String(hash % 10000).padStart(4, "0")}`;
+  }, [auth.user?.id, auth.user?.email]);
+
   const containerAnimation: Variants | undefined = enteredFromAuth
     ? {
         hidden: { opacity: 0 },
@@ -141,41 +151,17 @@ export function DashboardPage() {
           animate="visible"
         >
           <div className="dashboard-main-column">
-            <motion.section className="figma-balance-card" variants={itemAnimation}>
-              <div className="figma-balance-top">
-                <div>
-                  <p>Available Balance</p>
-                  <strong>{formatAmount(summary?.balance ?? 0)}</strong>
-                </div>
-                <span className="trend-badge" aria-hidden="true">
-                  <TrendingUp />
-                </span>
-              </div>
-              <div className="figma-balance-stats">
-                <div>
-                  <span>Received</span>
-                  <strong>{formatAmount(totals.received)}</strong>
-                </div>
-                <div>
-                  <span>Sent</span>
-                  <strong>{formatAmount(totals.sent)}</strong>
-                </div>
-              </div>
-            </motion.section>
-
-            <motion.div variants={itemAnimation}>
-              <Card className="figma-panel">
-              <div className="section-heading">
-                <h2>Recent Transactions</h2>
-                <Link to="/transactions">View All</Link>
-              </div>
-              <TransactionList
-                transactions={summary?.transactions ?? []}
-                compact
-                onTransactionSelect={setSelectedTransaction}
-              />
-              </Card>
-            </motion.div>
+            {summary ? (
+              <motion.div variants={itemAnimation}>
+                <AccountStatement
+                  summary={summary}
+                  holderName={greetingName}
+                  accountNumber={accountNumber}
+                  formatAmount={formatAmount}
+                  onSelectTransaction={setSelectedTransaction}
+                />
+              </motion.div>
+            ) : null}
           </div>
 
           <aside className="dashboard-side-column">
