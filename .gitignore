@@ -4,10 +4,18 @@ dist
 .DS_Store
 coverage
 
-TODO.md
 *.sh
 
-/docs
+docs
+.agents
+.claude
+.instance
+/scripts
+/compare
+/skills-lock.json
 
 # LangGraph API
 .langgraph_api
+
+
+scripts/fill-personal-details.api.js
