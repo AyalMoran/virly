@@ -160,22 +160,42 @@ export function EmptyState({
 }) {
   return (
     <div className="empty-state">
-      <div className="empty-icon" aria-hidden="true">
-        {icon ?? <Inbox />}
+      <span className="empty-state-flourish" aria-hidden="true" />
+      <div className="empty-seal" aria-hidden="true">
+        <span className="empty-seal-ring" />
+        <span className="empty-seal-icon">{icon ?? <Inbox />}</span>
       </div>
       <h2>{title}</h2>
       {message ? <p>{message}</p> : null}
-      {children}
+      <div className="empty-ledger" aria-hidden="true">
+        <span className="empty-ledger-row">
+          <span className="empty-ledger-key" />
+          <span className="empty-ledger-dots" />
+          <span className="empty-ledger-val" />
+        </span>
+        <span className="empty-ledger-row">
+          <span className="empty-ledger-key" />
+          <span className="empty-ledger-dots" />
+          <span className="empty-ledger-val" />
+        </span>
+      </div>
+      {children ? <div className="empty-state-actions">{children}</div> : null}
     </div>
   );
 }
 
 export function Skeleton({ rows = 3 }: { rows?: number }) {
   return (
-    <div className="skeleton-stack" role="status" aria-busy="true" aria-label="Loading">
-      {Array.from({ length: rows }).map((_, index) => (
-        <div className="skeleton-row" key={index} />
-      ))}
+    <div className="printing" role="status" aria-busy="true" aria-label="Loading">
+      <span className="printing-slot" aria-hidden="true" />
+      <div className="printing-lines" aria-hidden="true">
+        {Array.from({ length: rows }).map((_, index) => (
+          <span className="printing-line" key={index} />
+        ))}
+      </div>
+      <span className="printing-caption" aria-hidden="true">
+        Printing…
+      </span>
     </div>
   );
 }

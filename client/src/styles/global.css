@@ -2492,41 +2492,245 @@ dd {
   color: var(--color-muted);
 }
 
+/* ------------------------------------------------------------------ */
+/* Empty state — an embossed bank seal over a "void ledger".           */
+/* ------------------------------------------------------------------ */
+
 .empty-state {
+  position: relative;
   display: grid;
   justify-items: center;
-  gap: 10px;
-  padding: 42px 18px;
+  gap: 14px;
+  padding: clamp(30px, 5vw, 46px) 20px;
+  overflow: hidden;
   text-align: center;
+}
+
+/* Faint engine-turned guilloche bleeding in from the corner. */
+.empty-state-flourish {
+  position: absolute;
+  top: -96px;
+  right: -96px;
+  width: 250px;
+  height: 250px;
+  pointer-events: none;
+  background: repeating-radial-gradient(
+    circle at center,
+    transparent 0 12px,
+    rgba(53, 133, 142, 0.05) 12px 13.5px
+  );
+  -webkit-mask-image: radial-gradient(circle at center, black 28%, transparent 70%);
+  mask-image: radial-gradient(circle at center, black 28%, transparent 70%);
+}
+
+/* An embossed wax-seal medallion holding the icon. */
+.empty-seal {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 78px;
+  height: 78px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.85), transparent 58%),
+    linear-gradient(145deg, rgba(53, 133, 142, 0.18), rgba(194, 208, 153, 0.26));
+  color: var(--color-primary-deep);
+  box-shadow:
+    inset 0 2px 4px rgba(255, 255, 255, 0.75),
+    inset 0 -4px 9px rgba(53, 133, 142, 0.2),
+    0 14px 30px rgba(53, 133, 142, 0.18);
+}
+
+/* A slowly turning guilloche ring engraved into the seal. */
+.empty-seal-ring {
+  position: absolute;
+  inset: 7px;
+  border-radius: 999px;
+  background: repeating-radial-gradient(
+    circle at center,
+    transparent 0 3.5px,
+    rgba(31, 95, 103, 0.22) 3.5px 4.6px
+  );
+  -webkit-mask: radial-gradient(circle, transparent 52%, #000 54%, #000 96%, transparent 99%);
+  mask: radial-gradient(circle, transparent 52%, #000 54%, #000 96%, transparent 99%);
+  opacity: 0.7;
+  animation: seal-spin 44s linear infinite;
+}
+
+.empty-seal-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.empty-seal-icon svg {
+  width: 30px;
+  height: 30px;
+  stroke-width: 1.7;
+}
+
+.empty-state h2 {
+  font-size: clamp(1.4rem, 3.4vw, 1.85rem);
 }
 
 .empty-state p {
   max-width: 420px;
   color: var(--color-muted);
+  line-height: 1.6;
 }
 
-.empty-icon {
+/* The "void ledger": empty rows with leader dots and no values. */
+.empty-ledger {
   display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  background: rgba(53, 133, 142, 0.12);
-  color: var(--color-primary);
-  font-weight: 900;
+  gap: 11px;
+  width: min(280px, 86%);
+  margin-top: 4px;
 }
 
-.skeleton-stack {
+.empty-ledger-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.empty-ledger-key {
+  flex: 0 0 auto;
+  width: 34%;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(53, 133, 142, 0.18);
+}
+
+.empty-ledger-dots {
+  flex: 1 1 auto;
+  height: 0;
+  border-bottom: 1.5px dotted rgba(53, 133, 142, 0.3);
+}
+
+.empty-ledger-val {
+  flex: 0 0 auto;
+  width: 15%;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(53, 133, 142, 0.11);
+}
+
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+/* Staggered reveal, lifting each element in turn. */
+.empty-seal,
+.empty-state h2,
+.empty-state p,
+.empty-ledger,
+.empty-state-actions {
+  animation: rise-in 0.6s var(--ease-spring) backwards;
+}
+
+.empty-state h2 {
+  animation-delay: 70ms;
+}
+
+.empty-state p {
+  animation-delay: 120ms;
+}
+
+.empty-ledger {
+  animation-delay: 170ms;
+}
+
+.empty-state-actions {
+  animation-delay: 220ms;
+}
+
+@keyframes seal-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Loading — a receipt feeding out of the printer slot.                */
+/* ------------------------------------------------------------------ */
+
+.printing {
+  position: relative;
   display: grid;
-  gap: 14px;
 }
 
-.skeleton-row {
-  height: 76px;
-  border-radius: 16px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.22), rgba(53, 133, 142, 0.14), rgba(255, 255, 255, 0.22));
+/* The dark printer slot the paper emerges from. */
+.printing-slot {
+  height: 8px;
+  margin-bottom: 16px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #2f4446, #1c2b2d);
+  box-shadow:
+    inset 0 -2px 3px rgba(0, 0, 0, 0.32),
+    0 3px 7px rgba(23, 61, 66, 0.22);
+}
+
+.printing-lines {
+  display: grid;
+  gap: 12px;
+}
+
+.printing-line {
+  height: 64px;
+  border-radius: 14px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.24),
+    rgba(53, 133, 142, 0.16),
+    rgba(255, 255, 255, 0.24)
+  );
   background-size: 220% 100%;
-  animation: shimmer 1.4s infinite;
+  animation:
+    shimmer 1.5s linear infinite,
+    rise-in 0.5s var(--ease-spring) backwards;
+}
+
+/* Lines feed out top-to-bottom, with slightly ragged "receipt" widths. */
+.printing-line:nth-child(1) { animation-delay: 0s, 0ms; }
+.printing-line:nth-child(2) { width: 94%; animation-delay: 0s, 70ms; }
+.printing-line:nth-child(3) { width: 98%; animation-delay: 0s, 140ms; }
+.printing-line:nth-child(4) { width: 90%; animation-delay: 0s, 210ms; }
+.printing-line:nth-child(5) { width: 96%; animation-delay: 0s, 280ms; }
+.printing-line:nth-child(n + 6) { width: 88%; animation-delay: 0s, 350ms; }
+
+.printing-caption {
+  display: block;
+  margin-top: 16px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--color-subtle);
+  animation: caption-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes caption-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.85; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .empty-seal,
+  .empty-state h2,
+  .empty-state p,
+  .empty-ledger,
+  .empty-state-actions,
+  .empty-seal-ring,
+  .printing-line,
+  .printing-caption {
+    animation: none !important;
+  }
 }
 
 .mobile-nav {
