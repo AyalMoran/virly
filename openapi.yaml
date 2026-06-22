@@ -1062,7 +1062,7 @@ components:
             - oshri
             - chaya
             - yehuda
-            - yohai_daniel
+            - yohai
           example: oshri
 
     AiChatResponse:
@@ -1103,7 +1103,7 @@ components:
             - oshri
             - chaya
             - yehuda
-            - yohai_daniel
+            - yohai
           example: oshri
         intent:
           $ref: '#/components/schemas/AssistantIntent'
@@ -1205,7 +1205,7 @@ components:
             - oshri
             - chaya
             - yehuda
-            - yohai_daniel
+            - yohai
           example: oshri
 
     AiChatStreamResultEvent:
@@ -1229,7 +1229,7 @@ components:
             - oshri
             - chaya
             - yehuda
-            - yohai_daniel
+            - yohai
           example: oshri
         result:
           $ref: '#/components/schemas/AiChatResponse'

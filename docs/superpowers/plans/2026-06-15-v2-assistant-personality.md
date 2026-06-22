@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make the v2 graph reply *in the voice of the user-selected assistant* (oshri/chaya/yehuda/yohai_daniel), not just under its name.
+**Goal:** Make the v2 graph reply *in the voice of the user-selected assistant* (oshri/chaya/yehuda/yohai), not just under its name.
 
 **Architecture:** Personality is injected into the **agent's system prompt** (single pass, fully streamed) — NOT a new node and NOT `finalize`, both of which would force a second LLM pass that breaks streaming and revives v1's compose+lint loop. We add a `[PERSONA]` section (identity + traits + `globalGuidance` + a hard "be plain on serious situations" rule + a few Hebrew phrases as *spirit* exemplars) and a **non-blocking, eval-only** `lintPersonalityUsage` guardrail proving no persona phrases leak on serious turns.
 

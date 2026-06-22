@@ -2890,7 +2890,7 @@ test("assistant personality changes wording without changing tools", async () =>
     "oshri",
     "chaya",
     "yehuda",
-    "yohai_daniel"
+    "yohai"
   ];
   const results: RunAssistantResult[] = [];
   const llmProvider = createFakeLlmProvider({

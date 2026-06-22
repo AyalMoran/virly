@@ -253,7 +253,7 @@ export type AssistantId =
   | "oshri"
   | "chaya"
   | "yehuda"
-  | "yohai_daniel";
+  | "yohai";
 
 export type ResponseSituation =
   | "balance_inquiry_success"
