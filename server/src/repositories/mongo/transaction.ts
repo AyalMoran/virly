@@ -7,7 +7,7 @@ import type { TxContext } from "../types.js";
 
 /** Narrow an opaque TxContext to a Mongoose session (or undefined). */
 export function asSession(tx?: TxContext): ClientSession | undefined {
-  return (tx as ClientSession | undefined) ?? undefined;
+  return tx as ClientSession | undefined;
 }
 
 export async function runInTransaction<T>(fn: (tx: TxContext) => Promise<T>): Promise<T> {
