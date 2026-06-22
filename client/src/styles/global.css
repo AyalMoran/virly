@@ -5072,11 +5072,31 @@ select {
   border: 1px solid rgba(53, 133, 142, 0.28);
   border-radius: 20px;
   padding: clamp(22px, 4vw, 36px);
-  background: linear-gradient(135deg, #f8fbf3, #f0f6ec 58%, #e9f1ea);
+  /* On-brand pale paper, roughened with a woven crosshatch + fibrous grain. */
+  background-color: #e9efdc;
+  background-image:
+    radial-gradient(ellipse at 20% 12%, rgba(125, 167, 140, 0.1), transparent 55%),
+    radial-gradient(ellipse at 85% 90%, rgba(53, 133, 142, 0.07), transparent 55%),
+    repeating-linear-gradient(0deg, rgba(53, 133, 142, 0.04) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(90deg, rgba(53, 133, 142, 0.035) 0 1px, transparent 1px 5px),
+    linear-gradient(135deg, #f1f5ea, #e8efda 55%, #dfe7ce);
   box-shadow:
     0 1px 2px rgba(23, 61, 66, 0.06),
     0 26px 60px rgba(53, 133, 142, 0.16),
     inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+/* Rough fibrous paper grain — colour-neutral, multiplied into the paper. */
+.statement::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='pf'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.05 0.55' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23pf)' opacity='0.62'/%3E%3C/svg%3E");
+  background-size: 220px 220px;
 }
 
 .statement-flourish {
