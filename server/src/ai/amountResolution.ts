@@ -1,4 +1,4 @@
-import { Transaction } from "../models/Transaction.js";
+import { getRepositories } from "../repositories/index.js";
 import { evaluateAmountExpr } from "./amountExpr.js";
 import type {
   AmountExpr,
@@ -370,13 +370,11 @@ async function resolveLatestTransactionAmount(input: {
   source: ResolvedAmountRef["source"];
   explanation: string;
 }): Promise<AmountResolutionResult> {
-  const transaction = await Transaction.findOne({
+  const transaction = await getRepositories().transactions.lastForOwner({
     ownerId: input.userId,
     counterpartyEmail: normalizeCounterpartyEmail(input.counterpartyEmail),
     type: input.transactionType
-  })
-    .sort({ createdAt: -1 })
-    .select("amount type");
+  });
 
   if (!transaction) {
     return {

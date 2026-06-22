@@ -1,4 +1,4 @@
-import { Transaction } from "../../models/Transaction.js";
+import { getRepositories } from "../../repositories/index.js";
 import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, ToolContext } from "../state.js";
 import {
@@ -12,13 +12,11 @@ export async function getRecentReceivedCounterparties(
   context: ToolContext
 ): Promise<RuntimeToolResult> {
   const limit = getLimitFromMessage(context.message, 1, 10);
-  const transactions = await Transaction.find({
+  const transactions = await getRepositories().transactions.recentForOwner({
     ownerId: context.userId,
-    type: "credit"
-  })
-    .sort({ createdAt: -1 })
-    .limit(100)
-    .select("counterpartyEmail amount createdAt");
+    type: "credit",
+    limit: 100
+  });
 
   const selected = [];
   const seen = new Set<string>();

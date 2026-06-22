@@ -181,6 +181,35 @@ export interface UserRepository {
   setPersonalDetails(id: string, personalDetailsId: string, tx?: TxContext): Promise<void>;
 }
 
+/**
+ * Plain (non-Mongoose) criteria for the filtered/recent list queries. Consumers
+ * pass these params; the repo builds the underlying driver query. `sort` is a
+ * stable enum so the repo owns the index-friendly sort spec.
+ */
+export type TransactionListSort = "newest" | "oldest" | "amount_desc" | "amount_asc";
+
+export type TransactionFilterCriteria = {
+  ownerId: string;
+  type?: "credit" | "debit";
+  counterpartyEmail?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+  minAmount?: number;
+  maxAmount?: number;
+  reasonContains?: string;
+  sort?: TransactionListSort;
+  limit: number;
+};
+
+export type TransactionRecentCriteria = {
+  ownerId: string;
+  type?: "credit" | "debit";
+  counterpartyEmail?: string;
+  dateFrom?: Date;
+  dateTo?: Date;
+  limit: number;
+};
+
 export interface TransactionRepository {
   createMany(entries: Array<Omit<TransactionRecord, "id" | "createdAt" | "updatedAt">>, tx?: TxContext): Promise<TransactionRecord[]>;
   listForOwner(input: { ownerId: string; counterpartyEmail?: string; page: number; limit: number }, tx?: TxContext): Promise<{ transactions: TransactionRecord[]; total: number }>;
@@ -188,8 +217,18 @@ export interface TransactionRepository {
   getRelationshipStats(input: { ownerId: string; counterpartyEmail: string }, tx?: TxContext): Promise<{ totalSent: number; totalReceived: number; transactionCount: number; lastTransactionAt: Date | null }>;
   getDirectionalTotals(input: { ownerId: string; counterpartyEmail: string }, tx?: TxContext): Promise<{ creditTotal: number; creditCount: number; debitTotal: number; debitCount: number }>;
   sumSameDayDebits(input: { ownerId: string; dayStart: Date; dayEnd: Date }, tx?: TxContext): Promise<number>;
-  // Stage B adds further read methods required by ai/tools/* (e.g. listRecent,
-  // countByType). Add them here as each tool is refactored.
+  /** Sum and count of debits in a day window (preflight daily-limit usage). */
+  getDailyDebitUsage(input: { ownerId: string; dayStart: Date; dayEnd: Date }, tx?: TxContext): Promise<{ total: number; count: number }>;
+  /** Single ledger entry owned by `ownerId`. Returns null for malformed or foreign ids. */
+  findByIdForOwner(id: string, ownerId: string, tx?: TxContext): Promise<TransactionRecord | null>;
+  /** Filtered list (search/stats family): typed criteria in, records out (repo builds the query). */
+  listForOwnerFiltered(criteria: TransactionFilterCriteria, tx?: TxContext): Promise<TransactionRecord[]>;
+  /** Recent list for an owner, newest-first, optionally scoped by type/counterparty/date window. */
+  recentForOwner(criteria: TransactionRecentCriteria, tx?: TxContext): Promise<TransactionRecord[]>;
+  /** Newest matching entry (limit-1 of recentForOwner); null when none match. */
+  lastForOwner(criteria: Omit<TransactionRecentCriteria, "limit">, tx?: TxContext): Promise<TransactionRecord | null>;
+  /** True when at least one debit from `ownerId` to `counterpartyEmail` exists. */
+  hasDebitToCounterparty(input: { ownerId: string; counterpartyEmail: string }, tx?: TxContext): Promise<boolean>;
 }
 
 export interface PersonalDetailsRepository {

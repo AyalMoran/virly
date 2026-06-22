@@ -1,4 +1,4 @@
-import { Transaction } from "../../models/Transaction.js";
+import { getRepositories } from "../../repositories/index.js";
 import { toTransactionDto } from "../../utils/transaction-dto.js";
 import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, ToolContext } from "../state.js";
@@ -20,12 +20,11 @@ export async function getTransactionsWithCounterparty(
     });
   }
 
-  const transactions = await Transaction.find({
+  const transactions = await getRepositories().transactions.recentWithCounterparty({
     ownerId: context.userId,
-    counterpartyEmail: counterparty.email
-  })
-    .sort({ createdAt: -1 })
-    .limit(5);
+    counterpartyEmail: counterparty.email,
+    limit: 5
+  });
 
   if (transactions.length === 0) {
     return createToolResult({
@@ -56,7 +55,7 @@ export async function getTransactionsWithCounterparty(
       amount: Math.abs(dto.amount),
       currency: "ILS" as const,
       direction,
-      occurredAt: dto.date ? new Date(dto.date).toISOString() : new Date(0).toISOString(),
+      occurredAt: new Date(transaction.createdAt).toISOString(),
       counterpartyLabel: counterparty.userLabel ?? counterparty.email,
       counterpartyMaskedLabel: counterparty.maskedLabel,
       reason: dto.reason ?? null,

@@ -323,3 +323,285 @@ test("sumSameDayDebits: returns 0 when no debits found", async (t) => {
 
   assert.equal(result, 0);
 });
+
+// ---------------------------------------------------------------------------
+// getDailyDebitUsage
+// ---------------------------------------------------------------------------
+
+test("getDailyDebitUsage: returns sum and count of debits in window", async (t) => {
+  let capturedFilter: unknown;
+  const fakeChain = {
+    select: () => fakeChain,
+    session: () => fakeChain,
+    lean: async () => [{ amount: 100 }, { amount: 50.5 }, { amount: 9.5 }]
+  };
+  patch(
+    Transaction,
+    "find",
+    ((filter: unknown) => { capturedFilter = filter; return fakeChain; }) as unknown as typeof Transaction.find,
+    t
+  );
+
+  const result = await mongoTransactionRepository.getDailyDebitUsage({
+    ownerId: OWNER_OID,
+    dayStart: new Date("2026-06-22T00:00:00.000Z"),
+    dayEnd: new Date("2026-06-23T00:00:00.000Z")
+  });
+
+  assert.equal(result.total, 160);
+  assert.equal(result.count, 3);
+  const filter = capturedFilter as Record<string, unknown>;
+  assert.equal(filter.ownerId, OWNER_OID);
+  assert.equal(filter.type, "debit");
+});
+
+test("getDailyDebitUsage: returns zeros when no debits found", async (t) => {
+  const fakeChain = {
+    select: () => fakeChain,
+    session: () => fakeChain,
+    lean: async () => []
+  };
+  patch(Transaction, "find", ((_f: unknown) => fakeChain) as unknown as typeof Transaction.find, t);
+
+  const result = await mongoTransactionRepository.getDailyDebitUsage({
+    ownerId: OWNER_OID,
+    dayStart: new Date("2026-06-22T00:00:00.000Z"),
+    dayEnd: new Date("2026-06-23T00:00:00.000Z")
+  });
+
+  assert.equal(result.total, 0);
+  assert.equal(result.count, 0);
+});
+
+// ---------------------------------------------------------------------------
+// findByIdForOwner
+// ---------------------------------------------------------------------------
+
+test("findByIdForOwner: returns a record scoped by _id and ownerId", async (t) => {
+  let capturedFilter: unknown;
+  const fakeChain = {
+    session: () => fakeChain,
+    lean: async () => leanTx
+  };
+  patch(
+    Transaction,
+    "findOne",
+    ((filter: unknown) => { capturedFilter = filter; return fakeChain; }) as unknown as typeof Transaction.findOne,
+    t
+  );
+
+  const record = await mongoTransactionRepository.findByIdForOwner(
+    "60d5ec49f1b2c8a1f8e4e1b1",
+    OWNER_OID
+  );
+
+  assert.ok(record);
+  assert.equal(record?.id, leanTx._id);
+  assert.equal((record as Record<string, unknown>)._id, undefined);
+  assert.deepEqual(capturedFilter, { _id: "60d5ec49f1b2c8a1f8e4e1b1", ownerId: OWNER_OID });
+});
+
+test("findByIdForOwner: returns null for a malformed (non-ObjectId) id without querying", async (t) => {
+  let queried = false;
+  patch(
+    Transaction,
+    "findOne",
+    ((_filter: unknown) => { queried = true; return { lean: async () => null }; }) as unknown as typeof Transaction.findOne,
+    t
+  );
+
+  const record = await mongoTransactionRepository.findByIdForOwner("not-an-objectid", OWNER_OID);
+
+  assert.equal(record, null);
+  assert.equal(queried, false);
+});
+
+test("findByIdForOwner: returns null when no document matches", async (t) => {
+  const fakeChain = { session: () => fakeChain, lean: async () => null };
+  patch(
+    Transaction,
+    "findOne",
+    ((_filter: unknown) => fakeChain) as unknown as typeof Transaction.findOne,
+    t
+  );
+
+  const record = await mongoTransactionRepository.findByIdForOwner(
+    "60d5ec49f1b2c8a1f8e4e1b1",
+    OWNER_OID
+  );
+
+  assert.equal(record, null);
+});
+
+// ---------------------------------------------------------------------------
+// listForOwnerFiltered
+// ---------------------------------------------------------------------------
+
+test("listForOwnerFiltered: builds filter from plain criteria and maps records", async (t) => {
+  let capturedFilter: Record<string, unknown> = {};
+  let capturedSort: unknown;
+  let capturedLimit = -1;
+  const fakeChain = {
+    sort: (s: unknown) => { capturedSort = s; return fakeChain; },
+    limit: (n: number) => { capturedLimit = n; return fakeChain; },
+    lean: async () => [leanTx]
+  };
+  patch(
+    Transaction,
+    "find",
+    ((filter: Record<string, unknown>) => { capturedFilter = filter; return fakeChain; }) as unknown as typeof Transaction.find,
+    t
+  );
+
+  const records = await mongoTransactionRepository.listForOwnerFiltered({
+    ownerId: OWNER_OID,
+    type: "debit",
+    counterpartyEmail: "bob@example.com",
+    dateFrom: new Date("2026-06-01T00:00:00.000Z"),
+    dateTo: new Date("2026-06-30T00:00:00.000Z"),
+    minAmount: 10,
+    maxAmount: 500,
+    reasonContains: "lunch",
+    sort: "amount_desc",
+    limit: 25
+  });
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0].id, leanTx._id);
+  assert.equal(capturedFilter.ownerId, OWNER_OID);
+  assert.equal(capturedFilter.type, "debit");
+  assert.equal(capturedFilter.counterpartyEmail, "bob@example.com");
+  assert.deepEqual(capturedFilter.amount, { $gte: 10, $lte: 500 });
+  assert.ok(capturedFilter.createdAt);
+  assert.ok(capturedFilter.reason instanceof RegExp);
+  assert.deepEqual(capturedSort, { amount: -1 });
+  assert.equal(capturedLimit, 25);
+});
+
+test("listForOwnerFiltered: omits optional clauses and defaults sort to newest", async (t) => {
+  let capturedFilter: Record<string, unknown> = {};
+  let capturedSort: unknown;
+  const fakeChain = {
+    sort: (s: unknown) => { capturedSort = s; return fakeChain; },
+    limit: () => fakeChain,
+    lean: async () => []
+  };
+  patch(
+    Transaction,
+    "find",
+    ((filter: Record<string, unknown>) => { capturedFilter = filter; return fakeChain; }) as unknown as typeof Transaction.find,
+    t
+  );
+
+  await mongoTransactionRepository.listForOwnerFiltered({ ownerId: OWNER_OID, limit: 10 });
+
+  assert.deepEqual(capturedFilter, { ownerId: OWNER_OID });
+  assert.deepEqual(capturedSort, { createdAt: -1 });
+});
+
+// ---------------------------------------------------------------------------
+// recentForOwner / lastForOwner
+// ---------------------------------------------------------------------------
+
+test("recentForOwner: sorts newest-first, applies type and date window", async (t) => {
+  let capturedFilter: Record<string, unknown> = {};
+  let capturedSort: unknown;
+  let capturedLimit = -1;
+  const fakeChain = {
+    sort: (s: unknown) => { capturedSort = s; return fakeChain; },
+    limit: (n: number) => { capturedLimit = n; return fakeChain; },
+    lean: async () => [leanTx]
+  };
+  patch(
+    Transaction,
+    "find",
+    ((filter: Record<string, unknown>) => { capturedFilter = filter; return fakeChain; }) as unknown as typeof Transaction.find,
+    t
+  );
+
+  const records = await mongoTransactionRepository.recentForOwner({
+    ownerId: OWNER_OID,
+    type: "credit",
+    dateFrom: new Date("2026-06-01T00:00:00.000Z"),
+    limit: 5
+  });
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0].id, leanTx._id);
+  assert.equal(capturedFilter.ownerId, OWNER_OID);
+  assert.equal(capturedFilter.type, "credit");
+  assert.ok(capturedFilter.createdAt);
+  assert.deepEqual(capturedSort, { createdAt: -1 });
+  assert.equal(capturedLimit, 5);
+});
+
+test("lastForOwner: returns the single newest matching record", async (t) => {
+  let capturedLimit = -1;
+  const fakeChain = {
+    sort: () => fakeChain,
+    limit: (n: number) => { capturedLimit = n; return fakeChain; },
+    lean: async () => [leanTx]
+  };
+  patch(Transaction, "find", ((_f: unknown) => fakeChain) as unknown as typeof Transaction.find, t);
+
+  const record = await mongoTransactionRepository.lastForOwner({ ownerId: OWNER_OID, type: "debit" });
+
+  assert.ok(record);
+  assert.equal(record?.id, leanTx._id);
+  assert.equal(capturedLimit, 1);
+});
+
+test("lastForOwner: returns null when nothing matches", async (t) => {
+  const fakeChain = {
+    sort: () => fakeChain,
+    limit: () => fakeChain,
+    lean: async () => []
+  };
+  patch(Transaction, "find", ((_f: unknown) => fakeChain) as unknown as typeof Transaction.find, t);
+
+  const record = await mongoTransactionRepository.lastForOwner({ ownerId: OWNER_OID, type: "debit" });
+
+  assert.equal(record, null);
+});
+
+// ---------------------------------------------------------------------------
+// hasDebitToCounterparty
+// ---------------------------------------------------------------------------
+
+test("hasDebitToCounterparty: true when a debit exists", async (t) => {
+  let capturedFilter: unknown;
+  patch(
+    Transaction,
+    "exists",
+    (((filter: unknown) => { capturedFilter = filter; return Promise.resolve({ _id: "x" }); }) as unknown) as typeof Transaction.exists,
+    t
+  );
+
+  const result = await mongoTransactionRepository.hasDebitToCounterparty({
+    ownerId: OWNER_OID,
+    counterpartyEmail: "bob@example.com"
+  });
+
+  assert.equal(result, true);
+  assert.deepEqual(capturedFilter, {
+    ownerId: OWNER_OID,
+    counterpartyEmail: "bob@example.com",
+    type: "debit"
+  });
+});
+
+test("hasDebitToCounterparty: false when no debit exists", async (t) => {
+  patch(
+    Transaction,
+    "exists",
+    (((_filter: unknown) => Promise.resolve(null)) as unknown) as typeof Transaction.exists,
+    t
+  );
+
+  const result = await mongoTransactionRepository.hasDebitToCounterparty({
+    ownerId: OWNER_OID,
+    counterpartyEmail: "bob@example.com"
+  });
+
+  assert.equal(result, false);
+});

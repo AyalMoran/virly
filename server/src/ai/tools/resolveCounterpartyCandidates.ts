@@ -1,4 +1,4 @@
-import { Transaction } from "../../models/Transaction.js";
+import { getRepositories } from "../../repositories/index.js";
 import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, CounterpartyRef, ToolContext } from "../state.js";
 import {
@@ -190,10 +190,10 @@ export async function resolveCounterpartyCandidates(
     );
   }
 
-  const transactions = await Transaction.find({ ownerId: context.userId })
-    .sort({ createdAt: -1 })
-    .limit(200)
-    .select("counterpartyEmail amount type createdAt");
+  const transactions = await getRepositories().transactions.recentForOwner({
+    ownerId: context.userId,
+    limit: 200
+  });
   const transactionEmails = [
     ...new Set(transactions.map((transaction) => normalizeCounterpartyEmail(transaction.counterpartyEmail)))
   ];

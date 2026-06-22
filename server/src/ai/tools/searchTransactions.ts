@@ -1,8 +1,8 @@
-import { Transaction } from "../../models/Transaction.js";
+import { getRepositories } from "../../repositories/index.js";
 import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, ToolContext } from "../state.js";
 import {
-  buildTransactionFilter,
+  buildTransactionFilterCriteria,
   getTransactionLimit,
   getTransactionQueryContext,
   getTransactionSortFromMessage,
@@ -54,9 +54,12 @@ export async function searchTransactions(
   context: ToolContext
 ): Promise<RuntimeToolResult> {
   const limit = getTransactionLimit(context, 10);
-  const transactions = await Transaction.find(buildTransactionFilter(context))
-    .sort(getTransactionSortFromMessage(context.message))
-    .limit(limit);
+  const transactions = await getRepositories().transactions.listForOwnerFiltered(
+    buildTransactionFilterCriteria(context, {
+      limit,
+      sort: getTransactionSortFromMessage(context.message)
+    })
+  );
   const rows = await toSafeTransactionRows(transactions);
 
   if (rows.length === 0) {
