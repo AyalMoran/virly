@@ -1,4 +1,4 @@
-import { Transaction } from "../../models/Transaction.js";
+import { getRepositories } from "../../repositories/index.js";
 import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, ToolContext } from "../state.js";
 import {
@@ -22,16 +22,17 @@ export async function getCounterpartySummary(
   }
 
   const email = normalizeCounterpartyEmail(counterparty.email);
-  const transactions = await Transaction.find({
-    ownerId: context.userId,
-    counterpartyEmail: email
-  })
-    .sort({ createdAt: -1 })
-    .select("amount type createdAt");
+  const transactionRepo = getRepositories().transactions;
+  const [directionalTotals, recent] = await Promise.all([
+    transactionRepo.getDirectionalTotals({ ownerId: context.userId, counterpartyEmail: email }),
+    transactionRepo.recentWithCounterparty({ ownerId: context.userId, counterpartyEmail: email, limit: 1 })
+  ]);
+  const transactionCount =
+    directionalTotals.creditCount + directionalTotals.debitCount;
   const displays = await getCounterpartyDisplays([email]);
   const display = getDisplayOrFallback(displays, email);
 
-  if (transactions.length === 0) {
+  if (transactionCount === 0) {
     return createToolResult({
       toolName: "getCounterpartySummary",
       status: "empty",
@@ -62,26 +63,13 @@ export async function getCounterpartySummary(
     });
   }
 
-  const totals = transactions.reduce(
-    (summary, transaction) => {
-      if (transaction.type === "debit") {
-        summary.totalSent += transaction.amount;
-        summary.sentCount += 1;
-      } else {
-        summary.totalReceived += transaction.amount;
-        summary.receivedCount += 1;
-      }
-
-      return summary;
-    },
-    {
-      totalSent: 0,
-      totalReceived: 0,
-      sentCount: 0,
-      receivedCount: 0
-    }
-  );
-  const lastTransaction = transactions[0];
+  const totals = {
+    totalSent: directionalTotals.debitTotal,
+    totalReceived: directionalTotals.creditTotal,
+    sentCount: directionalTotals.debitCount,
+    receivedCount: directionalTotals.creditCount
+  };
+  const lastTransaction = recent[0];
   const lastDirection = lastTransaction?.type === "debit" ? "sent" : "received";
   const lastDirectionHe = lastTransaction?.type === "debit" ? "שלחת" : "קיבלת";
   const net = totals.totalReceived - totals.totalSent;
@@ -115,7 +103,7 @@ export async function getCounterpartySummary(
       `נטו ${net.toFixed(2)} ₪. אינטראקציה אחרונה: ${lastDirectionHe} ` +
       `${(lastTransaction?.amount ?? 0).toFixed(2)} ₪.`,
     metadata: {
-      recordCount: transactions.length,
+      recordCount: transactionCount,
       amount: net,
       counterpartyEmail: email,
       maskedLabel: display.emailMasked,

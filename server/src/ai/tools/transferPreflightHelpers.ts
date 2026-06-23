@@ -1,6 +1,5 @@
 import { config } from "../../config.js";
-import { Transaction } from "../../models/Transaction.js";
-import { User } from "../../models/User.js";
+import { getRepositories } from "../../repositories/index.js";
 import type { CurrencySlotValue, ToolContext } from "../state.js";
 import { getExactAmountFromMessage } from "./transactionHelpers.js";
 
@@ -79,18 +78,14 @@ export function getRecipientEmailFromContext(context: ToolContext) {
 export async function getSenderPreflightProfile(
   userId: string
 ): Promise<SenderPreflightProfile | null> {
-  const sender = await User.findById(userId).select("email balance").lean<{
-    _id: unknown;
-    email: string;
-    balance: number;
-  } | null>();
+  const sender = await getRepositories().users.findById(userId);
 
   if (!sender) {
     return null;
   }
 
   return {
-    id: String(sender._id),
+    id: sender.id,
     email: sender.email.toLowerCase(),
     balance: Number(sender.balance)
   };
@@ -102,27 +97,19 @@ export async function getDailyTransferUsage(
 ): Promise<DailyTransferUsage> {
   const from = startOfLocalDay(now);
   const to = nextLocalDayStart(now);
-  const debits = await Transaction.find({
-    ownerId: userId,
-    type: "debit",
-    createdAt: {
-      $gte: from,
-      $lt: to
-    }
-  })
-    .select("amount")
-    .lean<Array<{ amount: number }>>();
-  const usedToday = debits.reduce(
-    (total, transaction) => total + transaction.amount,
-    0
-  );
+  const { total: usedToday, count: transferCountToday } =
+    await getRepositories().transactions.getDailyDebitUsage({
+      ownerId: userId,
+      dayStart: from,
+      dayEnd: to
+    });
   const dailyLimit = config.ai.dailyTransferLimit;
 
   return {
     dailyLimit,
     usedToday,
     remainingToday: Math.max(0, dailyLimit - usedToday),
-    transferCountToday: debits.length,
+    transferCountToday,
     resetAt: to
   };
 }
@@ -181,11 +168,8 @@ export async function hasPriorDebitToRecipient(input: {
   userId: string;
   recipientEmail: string;
 }) {
-  const existing = await Transaction.exists({
+  return getRepositories().transactions.hasDebitToCounterparty({
     ownerId: input.userId,
-    counterpartyEmail: input.recipientEmail,
-    type: "debit"
+    counterpartyEmail: input.recipientEmail
   });
-
-  return Boolean(existing);
 }

@@ -1,16 +1,4 @@
-import { InferSchemaType } from "mongoose";
-import { Transaction } from "../models/Transaction.js";
-import { User } from "../models/User.js";
-
-type UserDocument = InferSchemaType<typeof User.schema> & {
-  _id: unknown;
-  createdAt?: Date;
-};
-
-type TransactionDocument = InferSchemaType<typeof Transaction.schema> & {
-  _id: unknown;
-  createdAt?: Date;
-};
+import type { PublicUserRecord, TransactionRecord, UserRecord } from "../repositories/types.js";
 
 export type PublicUserProfileDto = {
   id: string;
@@ -64,7 +52,7 @@ export function deriveDisplayNameFromEmail(email: string) {
 }
 
 export function toPublicUserProfileDto(
-  user: UserDocument,
+  user: UserRecord | PublicUserRecord,
   personalName?: { firstName?: string | null; lastName?: string | null } | null
 ): PublicUserProfileDto {
   const fullName = [personalName?.firstName, personalName?.lastName]
@@ -73,7 +61,7 @@ export function toPublicUserProfileDto(
     .trim();
 
   return {
-    id: String(user._id),
+    id: user.id,
     email: user.email,
     displayName: fullName || deriveDisplayNameFromEmail(user.email),
     isVerified: Boolean(user.isVerified),
@@ -82,14 +70,14 @@ export function toPublicUserProfileDto(
 }
 
 export function toRelationshipTransactionDto(
-  transaction: TransactionDocument
+  transaction: TransactionRecord
 ): UserRelationshipTransactionDto {
   return {
-    id: String(transaction._id),
+    id: transaction.id,
     amount: transaction.amount,
     direction: transaction.type === "debit" ? "sent" : "received",
     status: "completed",
-    createdAt: transaction.createdAt?.toISOString(),
+    createdAt: transaction.createdAt.toISOString(),
     description: transaction.reason ?? undefined
   };
 }

@@ -1,4 +1,4 @@
-import { Transaction } from "../../models/Transaction.js";
+import { getRepositories } from "../../repositories/index.js";
 import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, ToolContext } from "../state.js";
 import {
@@ -24,13 +24,11 @@ export async function getCounterpartyActivityTimeline(
 
   const email = normalizeCounterpartyEmail(counterparty.email);
   const limit = getLimitFromMessage(context.message, 5, 10);
-  const transactions = await Transaction.find({
+  const transactions = await getRepositories().transactions.recentWithCounterparty({
     ownerId: context.userId,
-    counterpartyEmail: email
-  })
-    .sort({ createdAt: -1 })
-    .limit(limit)
-    .select("amount type reason createdAt");
+    counterpartyEmail: email,
+    limit
+  });
   const displays = await getCounterpartyDisplays([email]);
   const display = getDisplayOrFallback(displays, email);
 

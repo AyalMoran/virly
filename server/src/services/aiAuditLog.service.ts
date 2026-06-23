@@ -1,8 +1,8 @@
-import { AiAuditLog } from "../models/AiAuditLog.js";
+import { getRepositories } from "../repositories/index.js";
 import { AuditLogInput } from "../ai/state.js";
 
 export async function writeAiAuditLog(input: AuditLogInput) {
-  await AiAuditLog.create({
+  await getRepositories().aiAuditLogs.create({
     userId: input.userId,
     conversationId: input.conversationId,
     requestId: input.requestId ?? null,

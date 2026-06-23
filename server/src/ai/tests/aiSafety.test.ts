@@ -5,7 +5,6 @@ import http from "node:http";
 import { AIMessage, BaseMessage, HumanMessage } from "@langchain/core/messages";
 import { app } from "../../app.js";
 import { config } from "../../config.js";
-import { Transaction } from "../../models/Transaction.js";
 import { createToken } from "../../utils/auth.js";
 import { hashCsrfToken } from "../../utils/session.js";
 import {
@@ -57,9 +56,12 @@ import {
   TransferPreparationService
 } from "../state.js";
 import {
-  buildTransactionFilter,
+  buildTransactionFilterCriteria,
   getReasonQueryFromMessage
 } from "../tools/transactionHelpers.js";
+import { setRepositories, getRepositories } from "../../repositories/index.js";
+import { createMongoRepositories } from "../../repositories/mongo/index.js";
+import type { TransactionRecord } from "../../repositories/types.js";
 import {
   getLimitReasons,
   getMaxSendableNow
@@ -81,6 +83,27 @@ import { runAiEvalFixtures } from "../evals/runner.js";
 import { loadAiEvalFixtureFiles } from "../evals/loadFixtures.js";
 import { buildSeededMongoEvalSeedData } from "../evals/seededMongo.js";
 import type { AiEvalFixtureFile } from "../evals/types.js";
+
+/**
+ * Installs a transactions-repository stub for the duration of `fn`, restoring
+ * the base mongo repositories afterwards. Used by tool tests that exercise the
+ * repository seam (Task 6b) instead of monkeypatching the Transaction model.
+ */
+async function withTransactionRepoStub(
+  overrides: Partial<ReturnType<typeof createMongoRepositories>["transactions"]>,
+  fn: () => Promise<void>
+): Promise<void> {
+  const base = createMongoRepositories();
+  setRepositories({
+    ...base,
+    transactions: { ...base.transactions, ...overrides }
+  });
+  try {
+    await fn();
+  } finally {
+    setRepositories(base);
+  }
+}
 
 function extractOpenApiEnumValues(schemaName: string) {
   const openApiText = readFileSync(
@@ -2454,14 +2477,18 @@ test("hebrew transaction search and detail requests route to phase three tools",
 });
 
 test("transaction date phrase does not infer received direction from bare from", () => {
-  const filter = buildTransactionFilter({
-    userId: "507f1f77bcf86cd799439011",
-    conversationId: "test-transaction-filter",
-    message: "Show transactions from last week"
-  });
+  const criteria = buildTransactionFilterCriteria(
+    {
+      userId: "507f1f77bcf86cd799439011",
+      conversationId: "test-transaction-filter",
+      message: "Show transactions from last week"
+    },
+    { limit: 10 }
+  );
 
-  assert.equal(filter.type, undefined);
-  assert.ok(filter.createdAt);
+  assert.equal(criteria.type, undefined);
+  assert.ok(criteria.dateFrom);
+  assert.ok(criteria.dateTo);
 });
 
 test("transaction reason filter stops before common date phrase", () => {
@@ -4016,140 +4043,121 @@ test("amount reference classifier maps directional references", () => {
 });
 
 test("received-total tool aggregates credits by authenticated user and counterparty", async () => {
-  const originalAggregate = Transaction.aggregate;
-  const pipelines: unknown[][] = [];
+  const calls: Array<{ ownerId: string; counterpartyEmail: string }> = [];
 
-  (Transaction as unknown as {
-    aggregate: (pipeline: unknown[]) => Promise<Array<{ total: number; count: number }>>;
-  }).aggregate = async (pipeline: unknown[]) => {
-    pipelines.push(pipeline);
-    return [{ total: 35, count: 2 }];
-  };
-
-  try {
-    const result = await getTotalReceivedFromCounterparty({
-      userId: "507f1f77bcf86cd799439011",
-      conversationId: "test-received-total-tool",
-      message: "How much did Alex send me?",
-      resolvedCounterparty: {
-        email: "Alex@Example.com",
-        maskedLabel: "a***@example.com",
-        userLabel: "Alex Example (alex@example.com)",
-        displayName: "Alex Example",
-        firstMentionedAtTurn: 1,
-        lastReferencedAtTurn: 1
+  await withTransactionRepoStub(
+    {
+      getDirectionalTotals: async ({ ownerId, counterpartyEmail }) => {
+        calls.push({ ownerId, counterpartyEmail });
+        return { creditTotal: 35, creditCount: 2, debitTotal: 0, debitCount: 0 };
       }
-    });
-    const match = (pipelines[0][0] as { $match: Record<string, unknown> }).$match;
+    },
+    async () => {
+      const result = await getTotalReceivedFromCounterparty({
+        userId: "507f1f77bcf86cd799439011",
+        conversationId: "test-received-total-tool",
+        message: "How much did Alex send me?",
+        resolvedCounterparty: {
+          email: "Alex@Example.com",
+          maskedLabel: "a***@example.com",
+          userLabel: "Alex Example (alex@example.com)",
+          displayName: "Alex Example",
+          firstMentionedAtTurn: 1,
+          lastReferencedAtTurn: 1
+        }
+      });
 
-    assert.equal(result.status, "ok");
-    assert.equal(result.displayData?.metadata.amount, 35);
-    assert.equal(String(match.ownerId), "507f1f77bcf86cd799439011");
-    assert.equal(match.counterpartyEmail, "alex@example.com");
-    assert.equal(match.type, "credit");
-    assert.equal(JSON.stringify(pipelines[0]).includes("$set"), false);
-    assert.equal(JSON.stringify(pipelines[0]).includes("$out"), false);
-  } finally {
-    Transaction.aggregate = originalAggregate;
-  }
+      assert.equal(result.status, "ok");
+      assert.equal(result.displayData?.metadata.amount, 35);
+      // The repo is scoped to the authenticated user and the normalized email.
+      assert.equal(calls[0].ownerId, "507f1f77bcf86cd799439011");
+      assert.equal(calls[0].counterpartyEmail, "alex@example.com");
+    }
+  );
 });
 
 test("net-total tool aggregates credits and debits by authenticated user and counterparty", async () => {
-  const originalAggregate = Transaction.aggregate;
-  const pipelines: unknown[][] = [];
+  const calls: Array<{ ownerId: string; counterpartyEmail: string }> = [];
 
-  (Transaction as unknown as {
-    aggregate: (
-      pipeline: unknown[]
-    ) => Promise<Array<{ _id: "credit" | "debit"; total: number; count: number }>>;
-  }).aggregate = async (pipeline: unknown[]) => {
-    pipelines.push(pipeline);
-    return [
-      { _id: "credit", total: 90, count: 2 },
-      { _id: "debit", total: 35, count: 1 }
-    ];
-  };
-
-  try {
-    const result = await getNetWithCounterparty({
-      userId: "507f1f77bcf86cd799439011",
-      conversationId: "test-net-total-tool",
-      message: "What is my net with Alex?",
-      resolvedCounterparty: {
-        email: "Alex@Example.com",
-        maskedLabel: "a***@example.com",
-        userLabel: "Alex Example (alex@example.com)",
-        displayName: "Alex Example",
-        firstMentionedAtTurn: 1,
-        lastReferencedAtTurn: 1
+  await withTransactionRepoStub(
+    {
+      getDirectionalTotals: async ({ ownerId, counterpartyEmail }) => {
+        calls.push({ ownerId, counterpartyEmail });
+        return { creditTotal: 90, creditCount: 2, debitTotal: 35, debitCount: 1 };
       }
-    });
-    const match = (pipelines[0][0] as { $match: Record<string, unknown> }).$match;
+    },
+    async () => {
+      const result = await getNetWithCounterparty({
+        userId: "507f1f77bcf86cd799439011",
+        conversationId: "test-net-total-tool",
+        message: "What is my net with Alex?",
+        resolvedCounterparty: {
+          email: "Alex@Example.com",
+          maskedLabel: "a***@example.com",
+          userLabel: "Alex Example (alex@example.com)",
+          displayName: "Alex Example",
+          firstMentionedAtTurn: 1,
+          lastReferencedAtTurn: 1
+        }
+      });
 
-    assert.equal(result.status, "ok");
-    assert.equal(result.displayData?.metadata.amount, 55);
-    assert.equal(result.displayData?.metadata.netAmount, 55);
-    assert.equal(result.displayData?.metadata.receivedAmount, 90);
-    assert.equal(result.displayData?.metadata.sentAmount, 35);
-    assert.equal(String(match.ownerId), "507f1f77bcf86cd799439011");
-    assert.equal(match.counterpartyEmail, "alex@example.com");
-    assert.deepEqual(match.type, { $in: ["credit", "debit"] });
-    assert.equal(JSON.stringify(pipelines[0]).includes("$set"), false);
-    assert.equal(JSON.stringify(pipelines[0]).includes("$out"), false);
-  } finally {
-    Transaction.aggregate = originalAggregate;
-  }
+      assert.equal(result.status, "ok");
+      assert.equal(result.displayData?.metadata.amount, 55);
+      assert.equal(result.displayData?.metadata.netAmount, 55);
+      assert.equal(result.displayData?.metadata.receivedAmount, 90);
+      assert.equal(result.displayData?.metadata.sentAmount, 35);
+      assert.equal(calls[0].ownerId, "507f1f77bcf86cd799439011");
+      assert.equal(calls[0].counterpartyEmail, "alex@example.com");
+    }
+  );
 });
 
 test("default contextual amount resolver scopes latest received lookup by user and counterparty", async () => {
-  const originalFindOne = Transaction.findOne;
-  const queries: unknown[] = [];
+  const queries: Array<{ ownerId: string; counterpartyEmail?: string; type?: string }> = [];
 
-  (Transaction as unknown as {
-    findOne: (query: unknown) => {
-      sort: () => {
-        select: () => Promise<{ amount: number }>;
-      };
-    };
-  }).findOne = (query: unknown) => {
-    queries.push(query);
-    return {
-      sort() {
-        return {
-          async select() {
-            return { amount: 88 };
-          }
+  await withTransactionRepoStub(
+    {
+      lastForOwner: async (criteria) => {
+        queries.push(criteria);
+        const record: TransactionRecord = {
+          id: "60d5ec49f1b2c8a1f8e4e1b1",
+          ownerId: "507f1f77bcf86cd799439011",
+          counterpartyEmail: "alex@example.com",
+          amount: 88,
+          type: "credit",
+          directionLabel: "Received",
+          reason: null,
+          createdAt: new Date("2026-06-01T12:00:00.000Z"),
+          updatedAt: new Date("2026-06-01T12:00:00.000Z")
         };
+        return record;
       }
-    };
-  };
+    },
+    async () => {
+      const result = await resolveContextualAmount({
+        userId: "507f1f77bcf86cd799439011",
+        conversationId: "test-default-amount-resolver",
+        transferDraft: {
+          amountReferenceText: "same amount he sent me"
+        },
+        resolvedCounterparty: {
+          email: "Alex@Example.com",
+          maskedLabel: "a***@example.com",
+          firstMentionedAtTurn: 1,
+          lastReferencedAtTurn: 1
+        },
+        counterpartyMemory: createEmptyCounterpartyMemory()
+      });
 
-  try {
-    const result = await resolveContextualAmount({
-      userId: "507f1f77bcf86cd799439011",
-      conversationId: "test-default-amount-resolver",
-      transferDraft: {
-        amountReferenceText: "same amount he sent me"
-      },
-      resolvedCounterparty: {
-        email: "Alex@Example.com",
-        maskedLabel: "a***@example.com",
-        firstMentionedAtTurn: 1,
-        lastReferencedAtTurn: 1
-      },
-      counterpartyMemory: createEmptyCounterpartyMemory()
-    });
-
-    assert.equal(result.status, "resolved");
-    assert.equal(result.status === "resolved" ? result.amount.amount : 0, 88);
-    assert.deepEqual(queries[0], {
-      ownerId: "507f1f77bcf86cd799439011",
-      counterpartyEmail: "alex@example.com",
-      type: "credit"
-    });
-  } finally {
-    Transaction.findOne = originalFindOne;
-  }
+      assert.equal(result.status, "resolved");
+      assert.equal(result.status === "resolved" ? result.amount.amount : 0, 88);
+      assert.deepEqual(queries[0], {
+        ownerId: "507f1f77bcf86cd799439011",
+        counterpartyEmail: "alex@example.com",
+        type: "credit"
+      });
+    }
+  );
 });
 
 test("contextual amount resolver uses latest positive total answer for resolved counterparty", async () => {

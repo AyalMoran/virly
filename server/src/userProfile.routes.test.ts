@@ -3,11 +3,12 @@ import http from "node:http";
 import test from "node:test";
 import express from "express";
 import { parseCookies } from "./middleware/cookies.js";
-import { PersonalDetails } from "./models/PersonalDetails.js";
 import { Transaction } from "./models/Transaction.js";
-import { User } from "./models/User.js";
 import userProfileRoutes from "./routes/userProfile.routes.js";
 import { setAuthCookies } from "./utils/session.js";
+import { getRepositories, setRepositories } from "./repositories/index.js";
+import { createMongoRepositories } from "./repositories/mongo/index.js";
+import type { PersonalDetailsRecord, Repositories, UserRecord } from "./repositories/types.js";
 
 const viewerId = "507f1f77bcf86cd799439011";
 const viewedId = "507f191e810c19729de860ea";
@@ -67,7 +68,9 @@ function patchTransactionFind(t: test.TestContext, results: unknown[]) {
       const chain = {
         sort: () => chain,
         skip: () => chain,
-        limit: async () => mock.results
+        limit: () => chain,
+        session: () => chain,
+        lean: async () => mock.results
       };
       return chain;
     }) as unknown as typeof Transaction.find,
@@ -77,35 +80,74 @@ function patchTransactionFind(t: test.TestContext, results: unknown[]) {
   return mock;
 }
 
-function patchUsers(t: test.TestContext, users: MockUser[]) {
-  const byId = new Map(users.map((user) => [user._id, user]));
-  const byEmail = new Map(users.map((user) => [user.email, user]));
-
-  patchModel(
-    User,
-    "findById",
-    (async (id: unknown) => byId.get(String(id)) ?? null) as unknown as typeof User.findById,
-    t
-  );
-  patchModel(
-    User,
-    "findOne",
-    (async (filter: { email?: string }) =>
-      filter.email ? byEmail.get(filter.email) ?? null : null) as unknown as typeof User.findOne,
-    t
-  );
+function toUserRecord(user: MockUser): UserRecord {
+  return {
+    id: user.id,
+    email: user.email,
+    passwordHash: user.passwordHash,
+    phone: user.phone,
+    isVerified: user.isVerified,
+    personalDetails: null,
+    verificationTokenHash: null,
+    verificationTokenExpiresAt: null,
+    balance: user.balance,
+    role: user.role as UserRecord["role"],
+    createdAt: user.createdAt,
+    updatedAt: user.createdAt
+  };
 }
 
+// The route now reaches the User store through getRepositories().users, so we
+// stub the repository instead of the Mongoose model. Transaction access still
+// flows through the Mongoose model (Task 6), so those patches stay.
+function patchUsers(t: test.TestContext, users: MockUser[]) {
+  const records = users.map(toUserRecord);
+  const byId = new Map(records.map((user) => [user.id, user]));
+  const byEmail = new Map(records.map((user) => [user.email.toLowerCase(), user]));
+
+  const base = createMongoRepositories();
+  setRepositories({
+    ...base,
+    users: {
+      ...base.users,
+      findById: async (id: string) => byId.get(id) ?? null,
+      findByEmail: async (email: string) => byEmail.get(email.trim().toLowerCase()) ?? null
+    } as Repositories["users"]
+  });
+  t.after(() => {
+    setRepositories(base);
+  });
+}
+
+// The profile route reads display name through getRepositories().personalDetails
+// (the seam), so we stub the repository instead of the Mongoose model.
 function patchPersonalDetails(
   t: test.TestContext,
   details: { status: string; firstName?: string | null; lastName?: string | null } | null
 ) {
-  patchModel(
-    PersonalDetails,
-    "findOne",
-    (async () => details) as unknown as typeof PersonalDetails.findOne,
-    t
-  );
+  const record: PersonalDetailsRecord | null = details
+    ? {
+        id: "507f191e810c19729de860ea",
+        userId: viewedId,
+        status: details.status as PersonalDetailsRecord["status"],
+        firstName: details.firstName ?? null,
+        lastName: details.lastName ?? null,
+        dateOfBirth: null,
+        address: {},
+        lastSkippedAt: null,
+        createdAt: new Date(0),
+        updatedAt: new Date(0)
+      }
+    : null;
+  const current = getRepositories();
+  setRepositories({
+    ...current,
+    personalDetails: {
+      ...current.personalDetails,
+      findByUserId: async () => record
+    } as Repositories["personalDetails"]
+  });
+  t.after(() => setRepositories(current));
 }
 
 function patchAggregate(t: test.TestContext, stats: unknown[]) {

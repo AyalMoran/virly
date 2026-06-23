@@ -1,0 +1,19 @@
+
+
+// src/repositories/mongo/stub.ts
+// Shared helper for Stage-A stub repositories.
+// Every method is a function that throws a clear "not yet implemented" error.
+// Stage B replaces each stub file with the real Mongoose implementation.
+
+export function stubRepository<T extends object>(name: string): T {
+  return new Proxy({} as T, {
+    get(_target, prop) {
+      if (typeof prop === "symbol") return undefined;
+      return async () => {
+        throw new Error(
+          `${name}.${String(prop)} not implemented yet (stub — replaced in Stage B)`
+        );
+      };
+    },
+  });
+}
