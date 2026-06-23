@@ -55,5 +55,33 @@ export const mongoPersonalDetailsRepository: PersonalDetailsRepository = {
     // Returns null when no doc exists for the user; the caller decides how to
     // signal that (the service maps it to AppError(404)).
     return doc ? toRecord((doc as unknown as { toObject(): Lean }).toObject()) : null;
+  },
+
+  async findProvidedByUserIds(userIds, tx) {
+    const q = PersonalDetails.find({
+      userId: { $in: userIds },
+      status: "provided"
+    });
+    const s = asSession(tx);
+    if (s) q.session(s);
+    const docs = await q.lean();
+    return (docs as Lean[]).map(toRecord);
+  },
+
+  async findProvidedByName({ firstName, lastName, limit }, tx) {
+    const exact = (value: string) =>
+      new RegExp(`^${value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`, "i");
+    const filter: Record<string, unknown> = {
+      firstName: exact(firstName),
+      status: "provided"
+    };
+    if (lastName && lastName.length > 0) {
+      filter.lastName = exact(lastName);
+    }
+    const q = PersonalDetails.find(filter).limit(limit);
+    const s = asSession(tx);
+    if (s) q.session(s);
+    const docs = await q.lean();
+    return (docs as Lean[]).map(toRecord);
   }
 };

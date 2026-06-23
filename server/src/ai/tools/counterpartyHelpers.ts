@@ -1,5 +1,5 @@
-import { PersonalDetails } from "../../models/PersonalDetails.js";
 import { User } from "../../models/User.js";
+import { getRepositories } from "../../repositories/index.js";
 import {
   buildCounterpartyUserLabel,
   maskEmail
@@ -40,18 +40,9 @@ export async function getCounterpartyDisplays(
   const userIdByEmail = new Map(
     users.map((user) => [normalizeCounterpartyEmail(user.email), String(user._id)])
   );
-  const details = await PersonalDetails.find({
-    userId: { $in: users.map((user) => user._id) },
-    status: "provided"
-  })
-    .select("userId firstName lastName")
-    .lean<
-      Array<{
-        userId: unknown;
-        firstName?: string | null;
-        lastName?: string | null;
-      }>
-    >();
+  const details = await getRepositories().personalDetails.findProvidedByUserIds(
+    users.map((user) => String(user._id))
+  );
   const detailsByUserId = new Map(details.map((detail) => [String(detail.userId), detail]));
   const displays = new Map<string, CounterpartyDisplay>();
 

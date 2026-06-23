@@ -241,3 +241,91 @@ test("update: returns null when no doc exists for the user", async (t) => {
   const rec = await mongoPersonalDetailsRepository.update(USER_OID, { status: "provided" });
   assert.equal(rec, null);
 });
+
+// ---------------------------------------------------------------------------
+// findProvidedByUserIds
+// ---------------------------------------------------------------------------
+
+test("findProvidedByUserIds: filters by $in userIds + provided, maps records", async (t) => {
+  let captured: Record<string, unknown> = {};
+  const chain = {
+    session: () => chain,
+    lean: async () => [{ ...leanPd, status: "provided", firstName: "Alice" }]
+  };
+  patch(
+    PersonalDetails,
+    "find",
+    ((f: Record<string, unknown>) => {
+      captured = f;
+      return chain;
+    }) as unknown as typeof PersonalDetails.find,
+    t
+  );
+
+  const recs = await mongoPersonalDetailsRepository.findProvidedByUserIds([USER_OID]);
+  assert.equal(recs.length, 1);
+  assert.equal(recs[0].id, PD_OID);
+  assert.equal((recs[0] as Record<string, unknown>)._id, undefined);
+  assert.deepEqual((captured.userId as { $in: string[] }).$in, [USER_OID]);
+  assert.equal(captured.status, "provided");
+});
+
+// ---------------------------------------------------------------------------
+// findProvidedByName
+// ---------------------------------------------------------------------------
+
+test("findProvidedByName: case-insensitive first+last name match, provided, limited", async (t) => {
+  let captured: Record<string, unknown> = {};
+  let limitVal: unknown;
+  const chain = {
+    limit(n: unknown) {
+      limitVal = n;
+      return chain;
+    },
+    session: () => chain,
+    lean: async () => [{ ...leanPd, status: "provided", firstName: "Alice", lastName: "Smith" }]
+  };
+  patch(
+    PersonalDetails,
+    "find",
+    ((f: Record<string, unknown>) => {
+      captured = f;
+      return chain;
+    }) as unknown as typeof PersonalDetails.find,
+    t
+  );
+
+  const recs = await mongoPersonalDetailsRepository.findProvidedByName({
+    firstName: "alice",
+    lastName: "smith",
+    limit: 2
+  });
+  assert.equal(recs.length, 1);
+  assert.equal(captured.status, "provided");
+  assert.ok(captured.firstName instanceof RegExp);
+  assert.ok((captured.firstName as RegExp).test("ALICE"), "first name match is case-insensitive");
+  assert.ok(captured.lastName instanceof RegExp);
+  assert.ok((captured.lastName as RegExp).test("SMITH"));
+  assert.equal(limitVal, 2);
+});
+
+test("findProvidedByName: omits lastName constraint when not supplied", async (t) => {
+  let captured: Record<string, unknown> = {};
+  const chain = {
+    limit: () => chain,
+    session: () => chain,
+    lean: async () => []
+  };
+  patch(
+    PersonalDetails,
+    "find",
+    ((f: Record<string, unknown>) => {
+      captured = f;
+      return chain;
+    }) as unknown as typeof PersonalDetails.find,
+    t
+  );
+
+  await mongoPersonalDetailsRepository.findProvidedByName({ firstName: "alice", limit: 2 });
+  assert.equal("lastName" in captured, false, "first-name-only must not constrain lastName");
+});
