@@ -254,7 +254,6 @@ export interface TransactionRepository {
   recentWithCounterparty(input: { ownerId: string; counterpartyEmail: string; limit: number }, tx?: TxContext): Promise<TransactionRecord[]>;
   getRelationshipStats(input: { ownerId: string; counterpartyEmail: string }, tx?: TxContext): Promise<{ totalSent: number; totalReceived: number; transactionCount: number; lastTransactionAt: Date | null }>;
   getDirectionalTotals(input: { ownerId: string; counterpartyEmail: string }, tx?: TxContext): Promise<{ creditTotal: number; creditCount: number; debitTotal: number; debitCount: number }>;
-  sumSameDayDebits(input: { ownerId: string; dayStart: Date; dayEnd: Date }, tx?: TxContext): Promise<number>;
   /** Sum and count of debits in a day window (preflight daily-limit usage). */
   getDailyDebitUsage(input: { ownerId: string; dayStart: Date; dayEnd: Date }, tx?: TxContext): Promise<{ total: number; count: number }>;
   /** Single ledger entry owned by `ownerId`. Returns null for malformed or foreign ids. */

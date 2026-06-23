@@ -275,56 +275,6 @@ test("getDirectionalTotals: returns zeros when aggregate is empty", async (t) =>
 });
 
 // ---------------------------------------------------------------------------
-// sumSameDayDebits
-// ---------------------------------------------------------------------------
-
-test("sumSameDayDebits: returns sum of debit amounts in day window", async (t) => {
-  const dayStart = new Date("2026-06-22T00:00:00.000Z");
-  const dayEnd = new Date("2026-06-23T00:00:00.000Z");
-
-  let capturedFilter: unknown;
-  const fakeChain = {
-    select: () => fakeChain,
-    session: () => fakeChain,
-    lean: async () => [{ amount: 100 }, { amount: 50.5 }]
-  };
-  patch(
-    Transaction,
-    "find",
-    ((filter: unknown) => { capturedFilter = filter; return fakeChain; }) as unknown as typeof Transaction.find,
-    t
-  );
-
-  const result = await mongoTransactionRepository.sumSameDayDebits({
-    ownerId: OWNER_OID,
-    dayStart,
-    dayEnd
-  });
-
-  assert.equal(result, 150.5);
-  const filter = capturedFilter as Record<string, unknown>;
-  assert.equal(filter.ownerId, OWNER_OID);
-  assert.equal(filter.type, "debit");
-});
-
-test("sumSameDayDebits: returns 0 when no debits found", async (t) => {
-  const fakeChain = {
-    select: () => fakeChain,
-    session: () => fakeChain,
-    lean: async () => []
-  };
-  patch(Transaction, "find", ((_f: unknown) => fakeChain) as unknown as typeof Transaction.find, t);
-
-  const result = await mongoTransactionRepository.sumSameDayDebits({
-    ownerId: OWNER_OID,
-    dayStart: new Date("2026-06-22T00:00:00.000Z"),
-    dayEnd: new Date("2026-06-23T00:00:00.000Z")
-  });
-
-  assert.equal(result, 0);
-});
-
-// ---------------------------------------------------------------------------
 // getDailyDebitUsage
 // ---------------------------------------------------------------------------
 

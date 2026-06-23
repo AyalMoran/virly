@@ -107,3 +107,13 @@ test("findManyByIds passes the session through when a tx is supplied", async (t)
   await mongoUserRepository.findManyByIds([ID], fakeSession);
   assert.equal(sessionArg, fakeSession);
 });
+
+test("findManyByIds does NOT call session when no tx is supplied", async (t) => {
+  let sessionCalled = false;
+  patch(User, "find", (() => ({
+    session() { sessionCalled = true; return this; },
+    lean: async () => []
+  })) as never, t);
+  await mongoUserRepository.findManyByIds([ID]);
+  assert.equal(sessionCalled, false);
+});
