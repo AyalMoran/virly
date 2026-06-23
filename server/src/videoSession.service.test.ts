@@ -6,9 +6,8 @@ import { parseCookies } from "./middleware/cookies.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import videoSessionRoutes from "./routes/videoSession.routes.js";
 import { User } from "./models/User.js";
-import { VideoAuditLog } from "./models/VideoAuditLog.js";
 import { setRepositories, getRepositories } from "./repositories/index.js";
-import type { VideoSessionRecord, VideoSessionRepository, Repositories } from "./repositories/types.js";
+import type { VideoSessionRecord, VideoSessionRepository, VideoAuditLogRepository, Repositories } from "./repositories/types.js";
 import {
   createVideoSession,
   endVideoSession,
@@ -108,6 +107,23 @@ function makeSessionRepo(
   };
 }
 
+/** A no-op VideoAuditLogRepository stub that records calls for inspection. */
+function makeAuditLogRepo(): VideoAuditLogRepository & { events: unknown[] } {
+  const events: unknown[] = [];
+  return {
+    events,
+    async create(input) {
+      events.push(input);
+      return {
+        id: "audit-log-stub-id",
+        ...input,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    }
+  };
+}
+
 /** Install a mock repo for the duration of the test, restoring after. */
 function withRepo(
   t: test.TestContext,
@@ -117,9 +133,10 @@ function withRepo(
     try { return getRepositories(); } catch { return null; }
   })();
 
-  // Build a full Repositories shell — only videoSessions is exercised here
+  // Build a full Repositories shell — only videoSessions and videoAuditLogs are exercised here
   const stub = {
     videoSessions: makeSessionRepo(sessions),
+    videoAuditLogs: makeAuditLogRepo(),
     // stubs for other repos (not called in these tests)
     users: {} as never,
     transactions: {} as never,
@@ -128,7 +145,6 @@ function withRepo(
     aiConversations: {} as never,
     aiPendingTransfers: {} as never,
     aiAuditLogs: {} as never,
-    videoAuditLogs: {} as never,
     async runInTransaction<T>(fn: (tx: unknown) => Promise<T>) { return fn(undefined); }
   } as unknown as Repositories;
 
@@ -152,19 +168,8 @@ function patchModel<T extends object, K extends keyof T>(
   });
 }
 
-function patchAuditLog(t: test.TestContext) {
-  const events: unknown[] = [];
-  patchModel(
-    VideoAuditLog,
-    "create",
-    (async (input: unknown) => {
-      events.push(input);
-      return input;
-    }) as unknown as typeof VideoAuditLog.create,
-    t
-  );
-  return events;
-}
+// patchAuditLog is no longer needed — writeVideoAuditLog now goes through
+// getRepositories().videoAuditLogs.create(), which is stubbed by withRepo().
 
 async function withServer<T>(fn: (baseUrl: string) => Promise<T>) {
   const app = express();
@@ -216,7 +221,6 @@ test("unauthenticated users cannot create video sessions", async () => {
 });
 
 test("created room names do not leak user identity data", async (t) => {
-  patchAuditLog(t);
   const user = createMockUser(userId, "user", "sensitive.customer@example.com");
   const sessions = withRepo(t);
 
@@ -274,7 +278,6 @@ test("unauthorized user roles cannot list agent video sessions", async (t) => {
 });
 
 test("sales agents cannot join support video sessions", async (t) => {
-  patchAuditLog(t);
   withRepo(t, [createMockSession({ type: "support" })]);
   patchModel(
     User,
@@ -298,7 +301,6 @@ test("sales agents cannot join support video sessions", async (t) => {
 });
 
 test("agent join activates a waiting session and ending marks it ended", async (t) => {
-  patchAuditLog(t);
   const sessions = withRepo(t, [createMockSession()]);
 
   patchModel(
@@ -332,7 +334,6 @@ test("agent join activates a waiting session and ending marks it ended", async (
 });
 
 test("user ending a waiting session cancels it", async (t) => {
-  patchAuditLog(t);
   withRepo(t, [createMockSession({ status: "waiting_for_agent" })]);
 
   patchModel(
