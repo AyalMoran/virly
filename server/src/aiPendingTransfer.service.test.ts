@@ -3,131 +3,99 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AiPendingTransfer } from "./models/AiPendingTransfer.js";
+import { createMongoRepositories } from "./repositories/mongo/index.js";
+import { setRepositories, type AiPendingTransferRecord } from "./repositories/index.js";
 import { getResumablePendingForUser } from "./services/aiPendingTransfer.service.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-type MockPending = {
-  _id: string;
-  userId: string;
-  conversationId: string;
-};
+const pendingTransferId = "507f1f77bcf86cd799439011";
+const userId = "507f1f77bcf86cd799439022";
 
-function patchModel<T extends object, K extends keyof T>(
-  model: T,
-  key: K,
-  value: T[K],
-  t: test.TestContext
-) {
-  const original = model[key];
-  model[key] = value;
-  t.after(() => {
-    model[key] = original;
-  });
-}
-
-// Simulate Mongoose .select().lean() chaining — returns a thenable that also
-// exposes .select() (which returns a thenable with .lean()).
-function buildFindOneChain(doc: MockPending | null) {
-  const leanResult = Promise.resolve(doc);
-  const selectChain = {
-    lean() {
-      return leanResult;
-    }
-  };
+function baseRecord(overrides: Partial<AiPendingTransferRecord> = {}): AiPendingTransferRecord {
   return {
-    select(_projection: string) {
-      return selectChain;
-    }
+    id: pendingTransferId,
+    userId,
+    conversationId: "conv-abc",
+    assistantId: "oshri",
+    recipientEmail: "alice@example.com",
+    version: 1,
+    currency: "ILS",
+    recipientFirstName: null,
+    recipientLastName: null,
+    amount: 100,
+    reason: null,
+    status: "pending",
+    supersededById: null,
+    supersedesId: null,
+    idempotencyResults: {},
+    expiresAt: new Date("2026-01-01T00:10:00.000Z"),
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    ...overrides
   };
 }
 
-// Patches AiPendingTransfer.findOne and records the filter it was called with.
-function patchFindOne(
+/**
+ * Installs a repository set whose aiPendingTransfers.findById is stubbed, then
+ * restores the real Mongo repositories afterwards. Captures the id passed in.
+ */
+function stubFindById(
   t: test.TestContext,
-  doc: MockPending | null
-): { capturedFilter: Record<string, unknown> | null } {
-  const capture: { capturedFilter: Record<string, unknown> | null } = {
-    capturedFilter: null
+  doc: AiPendingTransferRecord | null
+): { capturedId: string | null } {
+  const capture: { capturedId: string | null } = { capturedId: null };
+  const repos = createMongoRepositories();
+  repos.aiPendingTransfers = {
+    ...repos.aiPendingTransfers,
+    async findById(id: string) {
+      capture.capturedId = id;
+      return doc;
+    }
   };
-  patchModel(
-    AiPendingTransfer,
-    "findOne",
-    ((filter: Record<string, unknown>) => {
-      capture.capturedFilter = filter;
-      return buildFindOneChain(doc);
-    }) as unknown as typeof AiPendingTransfer.findOne,
-    t
-  );
+  setRepositories(repos);
+  t.after(() => {
+    setRepositories(createMongoRepositories());
+  });
   return capture;
 }
 
 // ---------------------------------------------------------------------------
-// Tests
+// getResumablePendingForUser (non-transaction path, routes through the repo)
 // ---------------------------------------------------------------------------
 
-const pendingTransferId = "507f1f77bcf86cd799439011";
-const userId = "507f1f77bcf86cd799439022";
-
-test("getResumablePendingForUser queries by pendingTransferId and userId", async (t) => {
-  const mockDoc: MockPending = {
-    _id: pendingTransferId,
-    userId,
-    conversationId: "conv-abc"
-  };
-  const capture = patchFindOne(t, mockDoc);
+test("getResumablePendingForUser queries the repo by pendingTransferId", async (t) => {
+  const capture = stubFindById(t, baseRecord());
 
   await getResumablePendingForUser(pendingTransferId, userId);
 
-  assert.ok(capture.capturedFilter !== null, "findOne was not called");
-  assert.equal(
-    String(capture.capturedFilter._id),
-    pendingTransferId,
-    "_id filter must match pendingTransferId"
-  );
-  assert.equal(
-    capture.capturedFilter.userId,
-    userId,
-    "userId filter must match the supplied userId"
-  );
+  assert.equal(capture.capturedId, pendingTransferId, "must look up by pendingTransferId");
 });
 
-test("getResumablePendingForUser returns the document the model resolves", async (t) => {
-  const mockDoc: MockPending = {
-    _id: pendingTransferId,
-    userId,
-    conversationId: "conv-abc"
-  };
-  patchFindOne(t, mockDoc);
+test("getResumablePendingForUser returns the conversationId from the record", async (t) => {
+  stubFindById(t, baseRecord({ conversationId: "conv-abc" }));
 
   const result = await getResumablePendingForUser(pendingTransferId, userId);
 
-  assert.ok(result !== null, "expected a document to be returned");
-  assert.equal(
-    (result as unknown as MockPending).conversationId,
-    "conv-abc"
-  );
+  assert.ok(result !== null, "expected a result");
+  assert.equal(result.conversationId, "conv-abc");
 });
 
-test("getResumablePendingForUser returns null when no document is found", async (t) => {
-  patchFindOne(t, null);
+test("getResumablePendingForUser returns null when the record is missing", async (t) => {
+  stubFindById(t, null);
 
   const result = await getResumablePendingForUser(pendingTransferId, userId);
 
   assert.equal(result, null);
 });
 
-test("getResumablePendingForUser filter contains no extra undocumented conditions", async (t) => {
-  const capture = patchFindOne(t, null);
+test("getResumablePendingForUser returns null when the record belongs to another user", async (t) => {
+  // Preserves the original `{ _id, userId }` ownership scoping.
+  stubFindById(t, baseRecord({ userId: "507f1f77bcf86cd799439099" }));
 
-  await getResumablePendingForUser(pendingTransferId, userId);
+  const result = await getResumablePendingForUser(pendingTransferId, userId);
 
-  assert.ok(capture.capturedFilter !== null, "findOne was not called");
-  const keys = Object.keys(capture.capturedFilter);
-  // The only filter fields must be _id and userId — matching the route's
-  // original predicate verbatim (no status/expiresAt in this lookup).
-  assert.deepEqual(keys.sort(), ["_id", "userId"].sort());
+  assert.equal(result, null, "must not resume a foreign user's pending transfer");
 });

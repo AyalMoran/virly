@@ -235,6 +235,12 @@ export interface PersonalDetailsRepository {
   findByUserId(userId: string, tx?: TxContext): Promise<PersonalDetailsRecord | null>;
   ensureForUser(userId: string, tx?: TxContext): Promise<PersonalDetailsRecord>;
   update(userId: string, patch: Partial<Omit<PersonalDetailsRecord, "id" | "userId" | "createdAt" | "updatedAt">>, tx?: TxContext): Promise<PersonalDetailsRecord | null>;
+  /** Provided records for a set of user ids (counterparty name enrichment). */
+  findProvidedByUserIds(userIds: string[], tx?: TxContext): Promise<PersonalDetailsRecord[]>;
+  /** Provided records whose name matches (case-insensitive exact). `lastName`
+   * omitted means match on first name only. `limit` caps the result (ambiguity
+   * detection). Repo owns the case-insensitive match shape. */
+  findProvidedByName(input: { firstName: string; lastName?: string; limit: number }, tx?: TxContext): Promise<PersonalDetailsRecord[]>;
 }
 
 export interface ExchangeRateRepository {
@@ -248,11 +254,33 @@ export interface AiConversationRepository {
   upsert(record: Omit<AiConversationRecord, "id" | "createdAt" | "updatedAt">, tx?: TxContext): Promise<AiConversationRecord>;
 }
 
+/**
+ * Optional match guards for a conditional status update (the AI deny/confirm
+ * predicate). When supplied, the underlying update only applies if the stored
+ * doc still satisfies them — otherwise the method returns null (caller maps that
+ * to a 409). `idempotencyKey`/`idempotencyResult` write a single keyed result
+ * under `idempotencyResults` atomically with the status flip.
+ */
+export type AiPendingTransferStatusUpdate = {
+  userId?: string;
+  version?: number;
+  expectedStatus?: AiPendingTransferRecord["status"];
+  notExpired?: boolean;
+  idempotencyKey?: string;
+  idempotencyResult?: unknown;
+};
+
 export interface AiPendingTransferRepository {
   findById(id: string, tx?: TxContext): Promise<AiPendingTransferRecord | null>;
   findActiveForConversation(userId: string, conversationId: string, tx?: TxContext): Promise<AiPendingTransferRecord | null>;
+  /** Active pending doc owned by `userId` (status=pending, not expired). Used to find
+   * a transfer to update by id; null when missing/foreign/expired/not pending. */
+  findActivePendingForUser(id: string, userId: string, conversationId: string, tx?: TxContext): Promise<AiPendingTransferRecord | null>;
+  /** Active pending transfers for a user, newest-first, capped at `limit`.
+   * When `conversationId` is given, scopes to that conversation. */
+  listActivePendingForUser(input: { userId: string; conversationId?: string; limit: number }, tx?: TxContext): Promise<AiPendingTransferRecord[]>;
   create(input: Omit<AiPendingTransferRecord, "id" | "createdAt" | "updatedAt">, tx?: TxContext): Promise<AiPendingTransferRecord>;
-  updateStatus(id: string, status: AiPendingTransferRecord["status"], patch?: Partial<AiPendingTransferRecord>, tx?: TxContext): Promise<AiPendingTransferRecord | null>;
+  updateStatus(id: string, status: AiPendingTransferRecord["status"], update?: AiPendingTransferStatusUpdate, tx?: TxContext): Promise<AiPendingTransferRecord | null>;
   setIdempotencyResult(id: string, key: string, value: unknown, tx?: TxContext): Promise<void>;
 }
 
