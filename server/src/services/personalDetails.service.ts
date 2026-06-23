@@ -1,9 +1,10 @@
-import { PersonalDetails } from "../models/PersonalDetails.js";
 import { AppError } from "../utils/app-error.js";
 import { getRepositories } from "../repositories/index.js";
-import type { PublicUserRecord, UserRecord } from "../repositories/types.js";
-
-export type PersonalDetailsDocument = InstanceType<typeof PersonalDetails>;
+import type {
+  PersonalDetailsRecord,
+  PublicUserRecord,
+  UserRecord
+} from "../repositories/types.js";
 
 export type PersonalDetailsInput = {
   firstName: string;
@@ -21,8 +22,8 @@ export type PersonalDetailsInput = {
 
 export const personalDetailsService = {
   /**
-   * Idempotent upsert — finds or creates the PersonalDetails doc for the
-   * given user via a single atomic findOneAndUpdate with { upsert: true }.
+   * Idempotent upsert — finds or creates the PersonalDetails record for the
+   * given user via the repository's atomic ensureForUser.
    *
    * Only back-fills the User->PersonalDetails FK (via the user repository) when
    * the field is currently null/absent, so GET paths do not perform
@@ -30,26 +31,22 @@ export const personalDetailsService = {
    */
   async ensureForUser(
     user: UserRecord | PublicUserRecord
-  ): Promise<PersonalDetailsDocument> {
-    const details = await PersonalDetails.findOneAndUpdate(
-      { userId: user.id },
-      { $setOnInsert: { userId: user.id, status: "not_provided" } },
-      { upsert: true, new: true, setDefaultsOnInsert: true }
-    );
+  ): Promise<PersonalDetailsRecord> {
+    const details = await getRepositories().personalDetails.ensureForUser(user.id);
 
     // Back-fill the FK on the user record only when it is absent.
     if (!user.personalDetails) {
-      await getRepositories().users.setPersonalDetails(user.id, String(details._id));
+      await getRepositories().users.setPersonalDetails(user.id, details.id);
     }
 
     return details;
   },
 
   /**
-   * Plain read — returns the PersonalDetails doc for a userId, or null.
+   * Plain read — returns the PersonalDetails record for a userId, or null.
    */
-  async getForUser(userId: string): Promise<PersonalDetailsDocument | null> {
-    return PersonalDetails.findOne({ userId });
+  async getForUser(userId: string): Promise<PersonalDetailsRecord | null> {
+    return getRepositories().personalDetails.findByUserId(userId);
   },
 
   /**
@@ -59,7 +56,7 @@ export const personalDetailsService = {
   async getDisplayName(
     userId: string
   ): Promise<{ firstName: string | null; lastName: string | null } | null> {
-    const details = await PersonalDetails.findOne({ userId });
+    const details = await getRepositories().personalDetails.findByUserId(userId);
 
     if (!details || details.status !== "provided") {
       return null;
@@ -70,25 +67,19 @@ export const personalDetailsService = {
 
   /**
    * Update personal details for a user. Sets status to "provided".
-   * Throws AppError(404) if no PersonalDetails doc exists for the user.
+   * Throws AppError(404) if no PersonalDetails record exists for the user.
    */
   async update(
     userId: string,
     input: PersonalDetailsInput
-  ): Promise<PersonalDetailsDocument> {
-    const details = await PersonalDetails.findOneAndUpdate(
-      { userId },
-      {
-        $set: {
-          status: "provided",
-          firstName: input.firstName,
-          lastName: input.lastName,
-          dateOfBirth: new Date(input.dateOfBirth),
-          address: input.address
-        }
-      },
-      { new: true }
-    );
+  ): Promise<PersonalDetailsRecord> {
+    const details = await getRepositories().personalDetails.update(userId, {
+      status: "provided",
+      firstName: input.firstName,
+      lastName: input.lastName,
+      dateOfBirth: new Date(input.dateOfBirth),
+      address: input.address
+    });
 
     if (!details) {
       throw new AppError(404, "Personal details not found.");
@@ -99,14 +90,12 @@ export const personalDetailsService = {
 
   /**
    * Mark personal details as skipped by recording the current timestamp.
-   * Throws AppError(404) if no PersonalDetails doc exists for the user.
+   * Throws AppError(404) if no PersonalDetails record exists for the user.
    */
-  async markSkipped(userId: string): Promise<PersonalDetailsDocument> {
-    const details = await PersonalDetails.findOneAndUpdate(
-      { userId },
-      { $set: { lastSkippedAt: new Date() } },
-      { new: true }
-    );
+  async markSkipped(userId: string): Promise<PersonalDetailsRecord> {
+    const details = await getRepositories().personalDetails.update(userId, {
+      lastSkippedAt: new Date()
+    });
 
     if (!details) {
       throw new AppError(404, "Personal details not found.");
