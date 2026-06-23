@@ -1,4 +1,5 @@
 
+
 /**
  * Application error carrying an HTTP status and optional machine-readable code.
  *
