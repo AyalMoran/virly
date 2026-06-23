@@ -119,6 +119,7 @@ test("ensureForUser: calls findOneAndUpdate with upsert and returns record", asy
   const setOnInsert = (capturedUpdate as { $setOnInsert?: Record<string, unknown> }).$setOnInsert;
   assert.ok(setOnInsert, "$setOnInsert must be present");
   assert.equal(setOnInsert.userId, USER_OID);
+  assert.equal(setOnInsert.status, "not_provided", "new records seed status not_provided");
 });
 
 test("ensureForUser: returns a record without _id when existing doc found", async (t) => {

@@ -38,8 +38,11 @@ export const mongoPersonalDetailsRepository: PersonalDetailsRepository = {
       { $setOnInsert: { userId, status: "not_provided" } },
       { upsert: true, new: true, setDefaultsOnInsert: true, session: asSession(tx) }
     );
-    // findOneAndUpdate returns a full Mongoose document when not using .lean()
-    // Call toObject() to get a plain object suitable for toRecord.
+    // findOneAndUpdate with upsert+new should always return a document; guard
+    // the non-null contract so an unexpected null fails loudly, not silently.
+    if (!doc) {
+      throw new Error(`ensureForUser: upsert returned null for userId ${userId}`);
+    }
     return toRecord((doc as unknown as { toObject(): Lean }).toObject());
   },
 
