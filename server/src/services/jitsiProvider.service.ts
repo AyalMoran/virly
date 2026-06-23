@@ -3,7 +3,7 @@ import { config } from "../config.js";
 import type {
   VideoSessionProvider,
   VideoSessionType
-} from "../models/VideoSession.js";
+} from "../repositories/types.js";
 import type { UserRole } from "../models/User.js";
 
 export type VideoJoinActorKind = "user" | "agent";
