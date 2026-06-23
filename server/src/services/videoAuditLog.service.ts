@@ -1,6 +1,5 @@
 import type { Types } from "mongoose";
-import type { VideoSessionType } from "../repositories/types.js";
-import type { UserRole } from "../models/User.js";
+import type { UserRole, VideoSessionType } from "../repositories/types.js";
 import { getRepositories } from "../repositories/index.js";
 
 export type WriteVideoAuditLogInput = {
