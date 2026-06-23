@@ -3,6 +3,6 @@ declare namespace Express {
     cookies: Record<string, string>;
     csrfToken?: string;
     userId?: string;
-    userRole?: import("../models/User.js").UserRole;
+    userRole?: import("../repositories/types.js").UserRole;
   }
 }

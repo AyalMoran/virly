@@ -162,18 +162,6 @@ export const mongoTransactionRepository: TransactionRepository = {
     return { creditTotal, creditCount, debitTotal, debitCount };
   },
 
-  async sumSameDayDebits({ ownerId, dayStart, dayEnd }, tx) {
-    const q = Transaction.find({
-      ownerId,
-      type: "debit",
-      createdAt: { $gte: dayStart, $lt: dayEnd }
-    }).select("amount");
-    const s = asSession(tx);
-    if (s) q.session(s);
-    const docs = await q.lean<Array<{ amount: number }>>();
-    return docs.reduce((total, d) => total + d.amount, 0);
-  },
-
   async getDailyDebitUsage({ ownerId, dayStart, dayEnd }, tx) {
     const q = Transaction.find({
       ownerId,
