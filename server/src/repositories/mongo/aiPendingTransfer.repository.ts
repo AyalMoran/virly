@@ -136,6 +136,9 @@ export const mongoAiPendingTransferRepository: AiPendingTransferRepository = {
     if (update?.idempotencyKey !== undefined) {
       set[`idempotencyResults.${update.idempotencyKey}`] = update.idempotencyResult;
     }
+    if (update?.supersededById !== undefined) {
+      set.supersededById = update.supersededById;
+    }
 
     const doc = await AiPendingTransfer.findOneAndUpdate(
       filter,

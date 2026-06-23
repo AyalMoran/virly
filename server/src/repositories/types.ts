@@ -302,6 +302,9 @@ export type AiPendingTransferStatusUpdate = {
   notExpired?: boolean;
   idempotencyKey?: string;
   idempotencyResult?: unknown;
+  /** When set, also `$set`s the `supersededById` pointer alongside the status
+   * flip (the modify/supersede path links the old doc to its replacement). */
+  supersededById?: string;
 };
 
 export interface AiPendingTransferRepository {

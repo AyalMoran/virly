@@ -1,6 +1,3 @@
-import mongoose from "mongoose";
-import { AiPendingTransfer } from "../models/AiPendingTransfer.js";
-import { User } from "../models/User.js";
 import { getRepositories } from "../repositories/index.js";
 import type {
   ModifyPendingTransferConfirmationInput,
@@ -15,11 +12,9 @@ import {
   executeTransferWithSession,
   type ExecuteTransferResult
 } from "./transfer.service.js";
-import type { AiPendingTransferRecord } from "../repositories/types.js";
+import type { AiPendingTransferRecord, TxContext } from "../repositories/types.js";
 
 const PENDING_TRANSFER_TTL_MS = 10 * 60 * 1000;
-
-type PendingTransferDocument = InstanceType<typeof AiPendingTransfer>;
 
 export type AiConfirmationAction = "confirm" | "deny";
 
@@ -43,9 +38,8 @@ type ValidatedAiTransferDraft = {
   reason: string | null;
 };
 
-/** Fields `toConfirmation` reads — satisfied by both the repo record and a
- * Mongoose pending-transfer Document (the latter still produced inside the
- * untouched transaction blocks). */
+/** Fields `toConfirmation` reads — satisfied by the repo record (the only
+ * source now that every persistence path returns a POJO record). */
 type ConfirmationSource = {
   id: string;
   version?: number | null;
@@ -59,7 +53,7 @@ type ConfirmationSource = {
 };
 
 function toConfirmation(
-  pendingTransfer: ConfirmationSource | PendingTransferDocument
+  pendingTransfer: ConfirmationSource
 ): TransferConfirmation {
   const recipientFirstName = pendingTransfer.recipientFirstName ?? null;
   const recipientLastName = pendingTransfer.recipientLastName ?? null;
@@ -190,7 +184,7 @@ async function resolveRecipientEmailFromName(reference?: string | null) {
     return undefined;
   }
 
-  const recipient = await User.findById(matches[0].userId).select("email");
+  const recipient = await getRepositories().users.findById(matches[0].userId);
   return recipient?.email;
 }
 
@@ -240,9 +234,10 @@ async function validateAiTransferDraft(input: {
     };
   }
 
+  const repos = getRepositories();
   const [sender, recipient] = await Promise.all([
-    User.findById(input.userId),
-    User.findOne({ email: recipientEmail })
+    repos.users.findById(input.userId),
+    repos.users.findByEmail(recipientEmail)
   ]);
 
   if (!sender) {
@@ -274,8 +269,8 @@ async function validateAiTransferDraft(input: {
     };
   }
 
-  const personalDetails = await getRepositories().personalDetails.findByUserId(
-    String(recipient._id)
+  const personalDetails = await repos.personalDetails.findByUserId(
+    recipient.id
   );
   const hasProvidedDetails = personalDetails?.status === "provided";
 
@@ -321,39 +316,21 @@ function buildPendingTransferFields(input: CreatePendingTransferInput) {
   };
 }
 
-/** Repo-backed create for the non-transaction (prepare) path. Returns a record. */
+/** Repo-backed create. Returns a record. Pass `tx` to enlist in a transaction
+ * (the modify/supersede path); omit it for the standalone (prepare) path. */
 async function createPendingTransferRecord(
-  input: CreatePendingTransferInput
+  input: CreatePendingTransferInput,
+  tx?: TxContext
 ): Promise<AiPendingTransferRecord> {
-  return getRepositories().aiPendingTransfers.create({
-    ...buildPendingTransferFields(input),
-    version: 1,
-    supersededById: null,
-    idempotencyResults: {}
-  });
-}
-
-/**
- * Model-backed create used INSIDE the (untouched) modify transaction block,
- * which needs a Mongoose Document (it reads `_id` and `.save()`s a sibling doc).
- * The non-transaction prepare path uses `createPendingTransferRecord` instead.
- */
-async function createPendingTransfer(input: CreatePendingTransferInput & {
-  session?: mongoose.ClientSession;
-}) {
-  const [pendingTransfer] = await AiPendingTransfer.create(
-    [buildPendingTransferFields(input)],
+  return getRepositories().aiPendingTransfers.create(
     {
-      ordered: true,
-      ...(input.session ? { session: input.session } : {})
-    }
+      ...buildPendingTransferFields(input),
+      version: 1,
+      supersededById: null,
+      idempotencyResults: {}
+    },
+    tx
   );
-
-  if (!pendingTransfer) {
-    throw new Error("Could not create pending transfer.");
-  }
-
-  return pendingTransfer;
 }
 
 export async function prepareAiPendingTransfer(
@@ -421,39 +398,43 @@ export async function modifyAiPendingTransfer(
     return validation;
   }
 
-  const session = await mongoose.startSession();
+  return getRepositories().runInTransaction(async (tx) => {
+    const repos = getRepositories();
 
-  try {
-    let newPendingTransfer: PendingTransferDocument | undefined;
+    // Re-read the old pending under the transaction with the SAME guards the
+    // model query used (own/pending/not-expired) so a concurrent confirm/deny
+    // between validation and here is caught.
+    const lockedOldPending = await repos.aiPendingTransfers.findActivePendingForUser(
+      input.activePendingTransferId,
+      input.userId,
+      input.conversationId,
+      tx
+    );
 
-    await session.withTransaction(async () => {
-      const lockedOldPending = await AiPendingTransfer.findOne({
-        _id: input.activePendingTransferId,
-        userId: input.userId,
-        conversationId: input.conversationId,
-        status: "pending",
-        expiresAt: { $gt: new Date() }
-      }).session(session);
+    if (!lockedOldPending) {
+      throw getStatusError();
+    }
 
-      if (!lockedOldPending) {
-        throw getStatusError();
-      }
-
-      newPendingTransfer = await createPendingTransfer({
+    const newPendingTransfer = await createPendingTransferRecord(
+      {
         userId: input.userId,
         conversationId: input.conversationId,
         assistantId: input.assistantId,
         draft: validation.draft,
-        supersedesId: lockedOldPending.id,
-        session
-      });
+        supersedesId: lockedOldPending.id
+      },
+      tx
+    );
 
-      lockedOldPending.status = "superseded";
-      lockedOldPending.supersededById = newPendingTransfer._id;
-      await lockedOldPending.save({ session });
-    });
+    // Link + retire the old card atomically with the new one's creation.
+    const superseded = await repos.aiPendingTransfers.updateStatus(
+      lockedOldPending.id,
+      "superseded",
+      { supersededById: newPendingTransfer.id },
+      tx
+    );
 
-    if (!newPendingTransfer) {
+    if (!superseded) {
       throw new Error("Could not update pending transfer.");
     }
 
@@ -462,9 +443,7 @@ export async function modifyAiPendingTransfer(
       confirmation: toConfirmation(newPendingTransfer),
       supersededConfirmationId: input.activePendingTransferId
     };
-  } finally {
-    await session.endSession();
-  }
+  });
 }
 
 export async function getResumablePendingForUser(
@@ -490,10 +469,6 @@ export async function respondToAiPendingTransfer(
     idempotencyKey?: string;
   }
 ): Promise<AiConfirmationResult> {
-  const idempotencyPath = input.idempotencyKey
-    ? `idempotencyResults.${input.idempotencyKey}`
-    : undefined;
-
   const repos = getRepositories();
 
   if (input.action === "deny") {
@@ -544,84 +519,90 @@ export async function respondToAiPendingTransfer(
     };
   }
 
-  const session = await mongoose.startSession();
+  return getRepositories().runInTransaction(async (tx) => {
+    // One read under the transaction serves the superseded check, the
+    // idempotency replay, and the optimistic lock — snapshot isolation makes
+    // the original three identical `_id`/`userId`-scoped reads equivalent.
+    const current = await repos.aiPendingTransfers.findById(
+      input.pendingTransferId,
+      tx
+    );
+    // Preserve the original `{ _id, userId }` ownership scoping.
+    const owned =
+      current && current.userId === input.userId ? current : null;
 
-  try {
-    let result: AiConfirmationResult | undefined;
+    if (owned?.status === "superseded") {
+      throw getSupersededError(owned.supersededById);
+    }
 
-    await session.withTransaction(async () => {
-      const current = await AiPendingTransfer.findOne({
-        _id: input.pendingTransferId,
-        userId: input.userId
-      })
-        .select("status supersededById")
-        .session(session);
-      if (current?.status === "superseded") {
-        throw getSupersededError(current.supersededById);
+    if (input.idempotencyKey) {
+      const previous = readIdempotencyResult(
+        owned?.idempotencyResults,
+        input.idempotencyKey
+      );
+      if (previous) {
+        return previous;
       }
+    }
 
-      if (input.idempotencyKey) {
-        const existing = await AiPendingTransfer.findOne({
-          _id: input.pendingTransferId,
-          userId: input.userId,
-          [idempotencyPath as string]: { $exists: true }
-        }).session(session);
-        const previous = readIdempotencyResult(
-          existing?.idempotencyResults,
-          input.idempotencyKey
-        );
-        if (previous) {
-          result = previous;
-          return;
-        }
-      }
+    // Optimistic lock: same guards as the original lock query
+    // (own/version/pending/not-expired). Any mismatch is a 409.
+    if (
+      !owned ||
+      owned.version !== input.version ||
+      owned.status !== "pending" ||
+      owned.expiresAt.getTime() <= Date.now()
+    ) {
+      throw getStatusError();
+    }
 
-      const pendingTransfer = await AiPendingTransfer.findOne({
-        _id: input.pendingTransferId,
+    await assertAiTransferWithinLimits(
+      { senderId: input.userId, amount: owned.amount },
+      tx
+    );
+
+    const transferResult = await executeTransferWithSession(
+      {
+        senderId: input.userId,
+        recipientEmail: owned.recipientEmail,
+        amount: owned.amount,
+        reason: owned.reason
+      },
+      tx
+    );
+
+    const result: AiConfirmationResult = {
+      status: "confirmed",
+      message: transferResult.message,
+      newBalance: transferResult.newBalance,
+      transaction: transferResult.transaction
+    };
+
+    // Flip to "confirmed" (and persist the idempotency result) atomically with
+    // the settlement above. The guards re-apply the optimistic lock at write
+    // time; a null result means the doc changed under us -> 409.
+    const confirmed = await repos.aiPendingTransfers.updateStatus(
+      input.pendingTransferId,
+      "confirmed",
+      {
         userId: input.userId,
         version: input.version,
-        status: "pending",
-        expiresAt: { $gt: new Date() }
-      }).session(session);
+        expectedStatus: "pending",
+        notExpired: true,
+        ...(input.idempotencyKey
+          ? {
+              idempotencyKey: input.idempotencyKey,
+              idempotencyResult: result
+            }
+          : {})
+      },
+      tx
+    );
 
-      if (!pendingTransfer) {
-        throw getStatusError();
-      }
-
-      await assertAiTransferWithinLimits(
-        { senderId: input.userId, amount: pendingTransfer.amount },
-        session
-      );
-
-      const transferResult = await executeTransferWithSession(
-        {
-          senderId: input.userId,
-          recipientEmail: pendingTransfer.recipientEmail,
-          amount: pendingTransfer.amount,
-          reason: pendingTransfer.reason
-        },
-        session
-      );
-
-      result = {
-        status: "confirmed",
-        message: transferResult.message,
-        newBalance: transferResult.newBalance,
-        transaction: transferResult.transaction
-      };
-      pendingTransfer.status = "confirmed";
-      if (input.idempotencyKey) {
-        pendingTransfer.set(`idempotencyResults.${input.idempotencyKey}`, result);
-      }
-      await pendingTransfer.save({ session });
-    });
-
-    if (!result) {
-      throw new Error("Transfer confirmation failed.");
+    if (!confirmed) {
+      throw getStatusError();
     }
 
     return result;
-  } finally {
-    await session.endSession();
-  }
+  });
 }
