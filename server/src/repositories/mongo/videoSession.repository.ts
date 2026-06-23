@@ -35,16 +35,6 @@ function toRecord(d: Lean): VideoSessionRecord {
   };
 }
 
-/**
- * Status set considered "active" for the agent queue view:
- * sessions that need attention (not yet terminal, not ended).
- */
-const ACTIVE_STATUSES: VideoSessionRecord["status"][] = [
-  "requested",
-  "waiting_for_agent",
-  "active"
-];
-
 export const mongoVideoSessionRepository: VideoSessionRepository = {
   async findById(id, tx) {
     if (!Types.ObjectId.isValid(id)) return null;
@@ -109,11 +99,12 @@ export const mongoVideoSessionRepository: VideoSessionRepository = {
     return (docs as Lean[]).map(toRecord);
   },
 
-  async listActiveForType(type, tx) {
-    const q = VideoSession.find({
-      type,
-      status: { $in: ACTIVE_STATUSES }
-    }).sort({ createdAt: -1 });
+  async listForAgentQueue({ types, status, limit }, tx) {
+    const filter: Record<string, unknown> = {
+      type: types.length === 1 ? types[0] : { $in: types }
+    };
+    if (status) filter.status = status;
+    const q = VideoSession.find(filter).sort({ createdAt: -1 }).limit(limit);
     const s = asSession(tx);
     if (s) q.session(s);
     const docs = await q.lean();

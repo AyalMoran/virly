@@ -350,7 +350,7 @@ export async function endVideoSession(input: EndVideoSessionInput): Promise<Vide
       endedAt: new Date()
     })) ?? session;
     await writeVideoAuditLog({
-      event: session.status === "cancelled"
+      event: newStatus === "cancelled"
         ? "video_session_cancelled"
         : "video_session_ended",
       actorId: actor._id,
@@ -387,16 +387,14 @@ export async function listAgentVideoSessions(input: ListAgentSessionsInput) {
     ensureAgentCanHandle(actorRole, input.type);
   }
 
-  // Fetch active sessions per type, then merge, optionally narrow by status, cap at 50
+  // Single query reproducing the original: type ?? $in(allowedTypes), optional
+  // exact status (any status, including terminal), newest-first, capped at 50.
   const typesToFetch = input.type ? [input.type] : allowedTypes;
-  const sessionArrays = await Promise.all(
-    typesToFetch.map((type) => getRepositories().videoSessions.listActiveForType(type))
-  );
-  let sessions = sessionArrays.flat();
-  if (input.status) sessions = sessions.filter((s) => s.status === input.status);
-  sessions = sessions
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-    .slice(0, 50);
+  const sessions = await getRepositories().videoSessions.listForAgentQueue({
+    types: typesToFetch,
+    status: input.status,
+    limit: 50
+  });
 
   const userIds = [...new Set(sessions.map((s) => s.userId))];
   const users = await User.find({ _id: { $in: userIds } }).select("email");

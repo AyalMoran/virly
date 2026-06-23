@@ -235,27 +235,52 @@ test("listForUser: filters by userId and sorts newest-first", async (t) => {
 });
 
 // ---------------------------------------------------------------------------
-// listActiveForType
+// listForAgentQueue
 // ---------------------------------------------------------------------------
 
-test("listActiveForType: filters by type and active statuses (requested/waiting_for_agent/active)", async (t) => {
-  let capturedFilter: Record<string, unknown> = {};
-  const chain = {
-    sort: () => chain,
-    session: () => chain,
+function agentQueueChain(captured: { filter?: Record<string, unknown>; sort?: unknown; limit?: number; session?: unknown }) {
+  const chain: Record<string, unknown> = {
+    sort: (spec: unknown) => { captured.sort = spec; return chain; },
+    limit: (n: number) => { captured.limit = n; return chain; },
+    session: (s: unknown) => { captured.session = s; return chain; },
     lean: async () => [leanSession]
   };
-  patch(VideoSession, "find", ((f: Record<string, unknown>) => { capturedFilter = f; return chain; }) as unknown as typeof VideoSession.find, t);
+  return chain;
+}
 
-  const recs = await mongoVideoSessionRepository.listActiveForType("support");
+test("listForAgentQueue: single type → exact type filter, no status, newest-first, limited", async (t) => {
+  const captured: { filter?: Record<string, unknown>; sort?: unknown; limit?: number } = {};
+  patch(VideoSession, "find", ((f: Record<string, unknown>) => { captured.filter = f; return agentQueueChain(captured); }) as unknown as typeof VideoSession.find, t);
+
+  const recs = await mongoVideoSessionRepository.listForAgentQueue({ types: ["support"], limit: 50 });
   assert.equal(recs.length, 1);
-  assert.equal(capturedFilter.type, "support");
-  const statusIn = (capturedFilter.status as { $in: string[] }).$in;
-  assert.ok(statusIn.includes("requested"), "must include requested");
-  assert.ok(statusIn.includes("waiting_for_agent"), "must include waiting_for_agent");
-  assert.ok(statusIn.includes("active"), "must include active");
-  assert.equal(statusIn.includes("ended"), false, "must exclude terminal statuses");
-  assert.equal(statusIn.includes("cancelled"), false);
-  assert.equal(statusIn.includes("failed"), false);
-  assert.equal(statusIn.includes("missed"), false);
+  assert.equal(captured.filter?.type, "support");
+  assert.equal(captured.filter?.status, undefined, "no status filter when none provided (any status)");
+  assert.deepEqual(captured.sort, { createdAt: -1 });
+  assert.equal(captured.limit, 50);
+});
+
+test("listForAgentQueue: multiple types → $in filter", async (t) => {
+  const captured: { filter?: Record<string, unknown> } = {};
+  patch(VideoSession, "find", ((f: Record<string, unknown>) => { captured.filter = f; return agentQueueChain(captured); }) as unknown as typeof VideoSession.find, t);
+
+  await mongoVideoSessionRepository.listForAgentQueue({ types: ["support", "sales"], limit: 50 });
+  assert.deepEqual(captured.filter?.type, { $in: ["support", "sales"] });
+});
+
+test("listForAgentQueue: applies exact status filter when provided (incl. terminal)", async (t) => {
+  const captured: { filter?: Record<string, unknown> } = {};
+  patch(VideoSession, "find", ((f: Record<string, unknown>) => { captured.filter = f; return agentQueueChain(captured); }) as unknown as typeof VideoSession.find, t);
+
+  await mongoVideoSessionRepository.listForAgentQueue({ types: ["support"], status: "ended", limit: 50 });
+  assert.equal(captured.filter?.status, "ended", "terminal status passes through as an exact filter");
+});
+
+test("listForAgentQueue: forwards session when tx provided", async (t) => {
+  const captured: { session?: unknown } = {};
+  patch(VideoSession, "find", (() => agentQueueChain(captured)) as unknown as typeof VideoSession.find, t);
+
+  const fakeSession = { id: "tx-1" };
+  await mongoVideoSessionRepository.listForAgentQueue({ types: ["support"], limit: 10 }, fakeSession);
+  assert.equal(captured.session, fakeSession);
 });

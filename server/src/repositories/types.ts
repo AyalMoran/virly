@@ -328,7 +328,7 @@ export interface VideoSessionRepository {
   create(input: Omit<VideoSessionRecord, "id" | "createdAt" | "updatedAt">, tx?: TxContext): Promise<VideoSessionRecord>;
   update(id: string, patch: Partial<VideoSessionRecord>, tx?: TxContext): Promise<VideoSessionRecord | null>;
   listForUser(userId: string, tx?: TxContext): Promise<VideoSessionRecord[]>;
-  listActiveForType(type: VideoSessionRecord["type"], tx?: TxContext): Promise<VideoSessionRecord[]>;
+  listForAgentQueue(input: { types: VideoSessionType[]; status?: VideoSessionStatus; limit: number }, tx?: TxContext): Promise<VideoSessionRecord[]>;
 }
 
 export interface VideoAuditLogRepository {

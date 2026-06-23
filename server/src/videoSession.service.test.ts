@@ -65,7 +65,7 @@ function createMockSession(overrides: Partial<MockSession> = {}): MockSession {
 }
 
 /** Build a minimal VideoSessionRepository stub for testing.
- *  Pass `sessions` for findById/listActiveForType lookups.
+ *  Pass `sessions` for findById/listForAgentQueue lookups.
  *  `update` merges the patch into the session and returns it.
  */
 function makeSessionRepo(
@@ -97,9 +97,13 @@ function makeSessionRepo(
     async listForUser(uid) {
       return sessions.filter((s) => s.userId === uid);
     },
-    async listActiveForType(type) {
-      const ACTIVE = ["requested", "waiting_for_agent", "active"];
-      return sessions.filter((s) => s.type === type && ACTIVE.includes(s.status));
+    async listForAgentQueue({ types, status, limit }) {
+      let result = sessions.filter((s) => types.includes(s.type));
+      if (status) result = result.filter((s) => s.status === status);
+      result = [...result].sort(
+        (a, b) => b.createdAt.getTime() - a.createdAt.getTime()
+      );
+      return result.slice(0, limit);
     }
   };
 }
