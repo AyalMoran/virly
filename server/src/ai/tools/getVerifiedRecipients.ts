@@ -1,4 +1,3 @@
-import { User } from "../../models/User.js";
 import { getRepositories } from "../../repositories/index.js";
 import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, ToolContext } from "../state.js";
@@ -25,10 +24,9 @@ export async function getVerifiedRecipients(
     });
   }
 
-  const verifiedUsers = await User.find({
-    email: { $in: emails },
-    isVerified: true
-  }).select("email");
+  const verifiedUsers = (await getRepositories().users.findByEmails(emails)).filter(
+    (user) => user.isVerified
+  );
   const displays = await getCounterpartyDisplays(verifiedUsers.map((user) => user.email));
   const recipients = verifiedUsers.map((user) => getDisplayOrFallback(displays, user.email));
 

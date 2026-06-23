@@ -5,9 +5,8 @@ import express from "express";
 import { parseCookies } from "./middleware/cookies.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import videoSessionRoutes from "./routes/videoSession.routes.js";
-import { User } from "./models/User.js";
 import { setRepositories, getRepositories } from "./repositories/index.js";
-import type { VideoSessionRecord, VideoSessionRepository, VideoAuditLogRepository, Repositories } from "./repositories/types.js";
+import type { PublicUserRecord, UserRepository, VideoSessionRecord, VideoSessionRepository, VideoAuditLogRepository, Repositories } from "./repositories/types.js";
 import {
   createVideoSession,
   endVideoSession,
@@ -23,21 +22,40 @@ const supportAgentId = "507f1f77bcf86cd799439012";
 const salesAgentId = "507f1f77bcf86cd799439013";
 const sessionId = "507f1f77bcf86cd799439099";
 
-type MockUser = {
-  _id: string;
-  id: string;
-  email: string;
-  role?: string;
-};
+type MockUser = PublicUserRecord;
 
 type MockSession = VideoSessionRecord;
 
 function createMockUser(id: string, role = "user", email = "user@example.com"): MockUser {
   return {
-    _id: id,
     id,
     email,
-    role
+    phone: "+972000000000",
+    isVerified: true,
+    personalDetails: null,
+    verificationTokenExpiresAt: null,
+    balance: 0,
+    role: role as MockUser["role"],
+    createdAt: new Date("2026-06-09T00:00:00.000Z"),
+    updatedAt: new Date("2026-06-09T00:00:00.000Z")
+  };
+}
+
+/** Minimal UserRepository stub. `users` are matched by id for findByIdSafe and
+ *  findManyByIds; the actor for getActor() is resolved from this same list. */
+function makeUserRepo(users: MockUser[] = []): UserRepository {
+  const find = (id: string) => users.find((u) => u.id === id) ?? null;
+  return {
+    async findById(id) { return find(id) as never; },
+    async findByIdSafe(id) { return find(id); },
+    async findByEmail() { return null; },
+    async findByEmails() { return []; },
+    async findManyByIds(ids) { return users.filter((u) => ids.includes(u.id)) as never; },
+    async create() { throw new Error("not implemented"); },
+    async setBalance() {},
+    async setVerificationToken() {},
+    async markVerified() {},
+    async setPersonalDetails() {}
   };
 }
 
@@ -124,21 +142,23 @@ function makeAuditLogRepo(): VideoAuditLogRepository & { events: unknown[] } {
   };
 }
 
-/** Install a mock repo for the duration of the test, restoring after. */
+/** Install a mock repo for the duration of the test, restoring after.
+ *  `users` are exposed via the users repo (getActor/listAgentVideoSessions). */
 function withRepo(
   t: test.TestContext,
-  sessions: MockSession[] = []
+  sessions: MockSession[] = [],
+  users: MockUser[] = []
 ): MockSession[] {
   const previous = (() => {
     try { return getRepositories(); } catch { return null; }
   })();
 
-  // Build a full Repositories shell — only videoSessions and videoAuditLogs are exercised here
+  // Build a full Repositories shell — only users, videoSessions and videoAuditLogs are exercised here
   const stub = {
     videoSessions: makeSessionRepo(sessions),
     videoAuditLogs: makeAuditLogRepo(),
+    users: makeUserRepo(users),
     // stubs for other repos (not called in these tests)
-    users: {} as never,
     transactions: {} as never,
     personalDetails: {} as never,
     exchangeRates: {} as never,
@@ -155,21 +175,10 @@ function withRepo(
   return sessions;
 }
 
-function patchModel<T extends object, K extends keyof T>(
-  model: T,
-  key: K,
-  value: T[K],
-  t: test.TestContext
-) {
-  const original = model[key];
-  model[key] = value;
-  t.after(() => {
-    model[key] = original;
-  });
-}
-
 // patchAuditLog is no longer needed — writeVideoAuditLog now goes through
 // getRepositories().videoAuditLogs.create(), which is stubbed by withRepo().
+// The actor lookup (getActor) now goes through getRepositories().users.findByIdSafe,
+// which is stubbed by withRepo()'s third `users` argument.
 
 async function withServer<T>(fn: (baseUrl: string) => Promise<T>) {
   const app = express();
@@ -222,14 +231,7 @@ test("unauthenticated users cannot create video sessions", async () => {
 
 test("created room names do not leak user identity data", async (t) => {
   const user = createMockUser(userId, "user", "sensitive.customer@example.com");
-  const sessions = withRepo(t);
-
-  patchModel(
-    User,
-    "findById",
-    (async () => user) as unknown as typeof User.findById,
-    t
-  );
+  const sessions = withRepo(t, [], [user]);
 
   const session = await createVideoSession({
     userId,
@@ -260,13 +262,7 @@ test("users cannot read another user's video session", async (t) => {
 });
 
 test("unauthorized user roles cannot list agent video sessions", async (t) => {
-  withRepo(t);
-  patchModel(
-    User,
-    "findById",
-    (async () => createMockUser(userId, "user")) as unknown as typeof User.findById,
-    t
-  );
+  withRepo(t, [], [createMockUser(userId, "user")]);
 
   await assert.rejects(
     () => listAgentVideoSessions({ actorId: userId }),
@@ -278,13 +274,7 @@ test("unauthorized user roles cannot list agent video sessions", async (t) => {
 });
 
 test("sales agents cannot join support video sessions", async (t) => {
-  withRepo(t, [createMockSession({ type: "support" })]);
-  patchModel(
-    User,
-    "findById",
-    (async () => createMockUser(salesAgentId, "sales_agent")) as unknown as typeof User.findById,
-    t
-  );
+  withRepo(t, [createMockSession({ type: "support" })], [createMockUser(salesAgentId, "sales_agent")]);
 
   await assert.rejects(
     () =>
@@ -301,14 +291,7 @@ test("sales agents cannot join support video sessions", async (t) => {
 });
 
 test("agent join activates a waiting session and ending marks it ended", async (t) => {
-  const sessions = withRepo(t, [createMockSession()]);
-
-  patchModel(
-    User,
-    "findById",
-    (async () => createMockUser(supportAgentId, "support_agent")) as unknown as typeof User.findById,
-    t
-  );
+  const sessions = withRepo(t, [createMockSession()], [createMockUser(supportAgentId, "support_agent")]);
 
   const joinResult = await issueVideoJoinConfig({
     actorId: supportAgentId,
@@ -334,14 +317,7 @@ test("agent join activates a waiting session and ending marks it ended", async (
 });
 
 test("user ending a waiting session cancels it", async (t) => {
-  withRepo(t, [createMockSession({ status: "waiting_for_agent" })]);
-
-  patchModel(
-    User,
-    "findById",
-    (async () => createMockUser(userId, "user")) as unknown as typeof User.findById,
-    t
-  );
+  withRepo(t, [createMockSession({ status: "waiting_for_agent" })], [createMockUser(userId, "user")]);
 
   const cancelled = await endVideoSession({
     actorId: userId,
