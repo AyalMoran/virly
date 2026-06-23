@@ -1,10 +1,10 @@
 import jwt from "jsonwebtoken";
 import { config } from "../config.js";
 import type {
+  UserRole,
   VideoSessionProvider,
   VideoSessionType
 } from "../repositories/types.js";
-import type { UserRole } from "../models/User.js";
 
 export type VideoJoinActorKind = "user" | "agent";
 

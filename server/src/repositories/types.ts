@@ -203,6 +203,10 @@ export interface UserRepository {
   findById(id: string, tx?: TxContext): Promise<UserRecord | null>;
   findByIdSafe(id: string, tx?: TxContext): Promise<PublicUserRecord | null>;
   findByEmail(email: string, tx?: TxContext): Promise<UserRecord | null>;
+  /** Full records for a set of emails (`email $in emails`). Order is not guaranteed. */
+  findByEmails(emails: string[], tx?: TxContext): Promise<UserRecord[]>;
+  /** Full records for a set of ids (`_id $in ids`). Order is not guaranteed. */
+  findManyByIds(ids: string[], tx?: TxContext): Promise<UserRecord[]>;
   create(input: {
     email: string;
     passwordHash: string;

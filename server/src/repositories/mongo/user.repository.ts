@@ -51,6 +51,20 @@ export const mongoUserRepository: UserRepository = {
     const d = await q.lean();
     return d ? toRecord(d as Lean) : null;
   },
+  async findByEmails(emails, tx) {
+    const q = User.find({ email: { $in: emails } });
+    const s = asSession(tx);
+    if (s) q.session(s);
+    const docs = await q.lean();
+    return (docs as Lean[]).map(toRecord);
+  },
+  async findManyByIds(ids, tx) {
+    const q = User.find({ _id: { $in: ids } });
+    const s = asSession(tx);
+    if (s) q.session(s);
+    const docs = await q.lean();
+    return (docs as Lean[]).map(toRecord);
+  },
   async create(input, tx) {
     try {
       const [doc] = await User.create([{ ...input, balance: input.balance }], { session: asSession(tx) });

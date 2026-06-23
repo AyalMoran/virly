@@ -1,5 +1,4 @@
 import { config } from "../../config.js";
-import { User } from "../../models/User.js";
 import { getRepositories } from "../../repositories/index.js";
 import type { CurrencySlotValue, ToolContext } from "../state.js";
 import { getExactAmountFromMessage } from "./transactionHelpers.js";
@@ -79,18 +78,14 @@ export function getRecipientEmailFromContext(context: ToolContext) {
 export async function getSenderPreflightProfile(
   userId: string
 ): Promise<SenderPreflightProfile | null> {
-  const sender = await User.findById(userId).select("email balance").lean<{
-    _id: unknown;
-    email: string;
-    balance: number;
-  } | null>();
+  const sender = await getRepositories().users.findById(userId);
 
   if (!sender) {
     return null;
   }
 
   return {
-    id: String(sender._id),
+    id: sender.id,
     email: sender.email.toLowerCase(),
     balance: Number(sender.balance)
   };

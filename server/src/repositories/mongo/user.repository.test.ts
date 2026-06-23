@@ -41,3 +41,69 @@ test("create maps a duplicate-key (E11000) to DuplicateKeyError", async (t) => {
     (e: unknown) => (e as Error).name === "DuplicateKeyError"
   );
 });
+
+const ID2 = "507f1f77bcf86cd799439012";
+const lean2 = { ...lean, _id: ID2, email: "c@d.com", balance: 200 };
+
+test("findByEmails issues a $in(email) query and maps lean docs to records", async (t) => {
+  let captured: unknown;
+  patch(User, "find", ((filter: unknown) => {
+    captured = filter;
+    return { lean: async () => [lean, lean2] };
+  }) as never, t);
+  const recs = await mongoUserRepository.findByEmails(["a@b.com", "c@d.com"]);
+  assert.deepEqual(captured, { email: { $in: ["a@b.com", "c@d.com"] } });
+  assert.equal(recs.length, 2);
+  assert.equal(recs[0].id, ID);
+  assert.equal(recs[0].email, "a@b.com");
+  assert.equal(recs[0].isVerified, true);
+  assert.equal((recs[0] as Record<string, unknown>)._id, undefined);
+  assert.equal(recs[1].id, ID2);
+});
+
+test("findByEmails passes the session through when a tx is supplied", async (t) => {
+  let sessionArg: unknown = "unset";
+  const fakeSession = { marker: "S" };
+  patch(User, "find", (() => ({
+    session(s: unknown) { sessionArg = s; return this; },
+    lean: async () => []
+  })) as never, t);
+  await mongoUserRepository.findByEmails(["a@b.com"], fakeSession);
+  assert.equal(sessionArg, fakeSession);
+});
+
+test("findByEmails does NOT call session when no tx is supplied", async (t) => {
+  let sessionCalled = false;
+  patch(User, "find", (() => ({
+    session() { sessionCalled = true; return this; },
+    lean: async () => []
+  })) as never, t);
+  await mongoUserRepository.findByEmails(["a@b.com"]);
+  assert.equal(sessionCalled, false);
+});
+
+test("findManyByIds issues a $in(_id) query and maps lean docs to records", async (t) => {
+  let captured: unknown;
+  patch(User, "find", ((filter: unknown) => {
+    captured = filter;
+    return { lean: async () => [lean, lean2] };
+  }) as never, t);
+  const recs = await mongoUserRepository.findManyByIds([ID, ID2]);
+  assert.deepEqual(captured, { _id: { $in: [ID, ID2] } });
+  assert.equal(recs.length, 2);
+  assert.equal(recs[0].id, ID);
+  assert.equal((recs[0] as Record<string, unknown>)._id, undefined);
+  assert.equal(recs[1].id, ID2);
+  assert.equal(recs[1].email, "c@d.com");
+});
+
+test("findManyByIds passes the session through when a tx is supplied", async (t) => {
+  let sessionArg: unknown = "unset";
+  const fakeSession = { marker: "S" };
+  patch(User, "find", (() => ({
+    session(s: unknown) { sessionArg = s; return this; },
+    lean: async () => []
+  })) as never, t);
+  await mongoUserRepository.findManyByIds([ID], fakeSession);
+  assert.equal(sessionArg, fakeSession);
+});
