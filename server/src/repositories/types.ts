@@ -332,7 +332,7 @@ export interface VideoSessionRepository {
   findById(id: string, tx?: TxContext): Promise<VideoSessionRecord | null>;
   findByRoomName(roomName: string, tx?: TxContext): Promise<VideoSessionRecord | null>;
   create(input: Omit<VideoSessionRecord, "id" | "createdAt" | "updatedAt">, tx?: TxContext): Promise<VideoSessionRecord>;
-  update(id: string, patch: Partial<VideoSessionRecord>, tx?: TxContext): Promise<VideoSessionRecord | null>;
+  update(id: string, patch: Partial<Omit<VideoSessionRecord, "id" | "createdAt" | "updatedAt">>, tx?: TxContext): Promise<VideoSessionRecord | null>;
   listForUser(userId: string, tx?: TxContext): Promise<VideoSessionRecord[]>;
   listForAgentQueue(input: { types: VideoSessionType[]; status?: VideoSessionStatus; limit: number }, tx?: TxContext): Promise<VideoSessionRecord[]>;
 }
