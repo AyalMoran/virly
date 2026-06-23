@@ -452,6 +452,44 @@ test("updateStatus: returns null for malformed id without touching the model", a
   assert.equal(called, false);
 });
 
+test("updateStatus: $sets supersededById alongside the status flip when provided", async (t) => {
+  let capturedUpdate: Record<string, unknown> = {};
+  patch(
+    AiPendingTransfer,
+    "findOneAndUpdate",
+    (async (_f: unknown, u: Record<string, unknown>) => {
+      capturedUpdate = u;
+      return { ...leanApt, status: "superseded", toObject: () => ({ ...leanApt, status: "superseded" }) };
+    }) as unknown as typeof AiPendingTransfer.findOneAndUpdate,
+    t
+  );
+
+  const rec = await mongoAiPendingTransferRepository.updateStatus(APT_OID, "superseded", {
+    supersededById: SUPERSEDED_OID
+  });
+  assert.ok(rec);
+  const set = (capturedUpdate.$set ?? {}) as Record<string, unknown>;
+  assert.equal(set.status, "superseded");
+  assert.equal(set.supersededById, SUPERSEDED_OID);
+});
+
+test("updateStatus: omits supersededById $set when not provided", async (t) => {
+  let capturedUpdate: Record<string, unknown> = {};
+  patch(
+    AiPendingTransfer,
+    "findOneAndUpdate",
+    (async (_f: unknown, u: Record<string, unknown>) => {
+      capturedUpdate = u;
+      return { ...leanApt, toObject: () => leanApt };
+    }) as unknown as typeof AiPendingTransfer.findOneAndUpdate,
+    t
+  );
+
+  await mongoAiPendingTransferRepository.updateStatus(APT_OID, "confirmed", { version: 1 });
+  const set = (capturedUpdate.$set ?? {}) as Record<string, unknown>;
+  assert.equal("supersededById" in set, false, "must not touch supersededById unless asked");
+});
+
 test("updateStatus: omits idempotency $set when no key provided", async (t) => {
   let capturedUpdate: Record<string, unknown> = {};
   patch(
