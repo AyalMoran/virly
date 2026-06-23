@@ -3,13 +3,12 @@ import http from "node:http";
 import test from "node:test";
 import express from "express";
 import { parseCookies } from "./middleware/cookies.js";
-import { PersonalDetails } from "./models/PersonalDetails.js";
 import { Transaction } from "./models/Transaction.js";
 import userProfileRoutes from "./routes/userProfile.routes.js";
 import { setAuthCookies } from "./utils/session.js";
-import { setRepositories } from "./repositories/index.js";
+import { getRepositories, setRepositories } from "./repositories/index.js";
 import { createMongoRepositories } from "./repositories/mongo/index.js";
-import type { Repositories, UserRecord } from "./repositories/types.js";
+import type { PersonalDetailsRecord, Repositories, UserRecord } from "./repositories/types.js";
 
 const viewerId = "507f1f77bcf86cd799439011";
 const viewedId = "507f191e810c19729de860ea";
@@ -120,16 +119,35 @@ function patchUsers(t: test.TestContext, users: MockUser[]) {
   });
 }
 
+// The profile route reads display name through getRepositories().personalDetails
+// (the seam), so we stub the repository instead of the Mongoose model.
 function patchPersonalDetails(
   t: test.TestContext,
   details: { status: string; firstName?: string | null; lastName?: string | null } | null
 ) {
-  patchModel(
-    PersonalDetails,
-    "findOne",
-    (async () => details) as unknown as typeof PersonalDetails.findOne,
-    t
-  );
+  const record: PersonalDetailsRecord | null = details
+    ? {
+        id: "507f191e810c19729de860ea",
+        userId: viewedId,
+        status: details.status as PersonalDetailsRecord["status"],
+        firstName: details.firstName ?? null,
+        lastName: details.lastName ?? null,
+        dateOfBirth: null,
+        address: {},
+        lastSkippedAt: null,
+        createdAt: new Date(0),
+        updatedAt: new Date(0)
+      }
+    : null;
+  const current = getRepositories();
+  setRepositories({
+    ...current,
+    personalDetails: {
+      ...current.personalDetails,
+      findByUserId: async () => record
+    } as Repositories["personalDetails"]
+  });
+  t.after(() => setRepositories(current));
 }
 
 function patchAggregate(t: test.TestContext, stats: unknown[]) {

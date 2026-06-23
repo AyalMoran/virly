@@ -4,13 +4,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import bcrypt from "bcryptjs";
-import { PersonalDetails } from "./models/PersonalDetails.js";
 import { AppError } from "./utils/app-error.js";
 import { createVerificationToken } from "./utils/auth.js";
 import { hashToken, verificationTokenExpiry } from "./utils/token.js";
 import { config } from "./config.js";
 import { authService } from "./services/auth.service.js";
-import { setRepositories } from "./repositories/index.js";
+import { getRepositories, setRepositories } from "./repositories/index.js";
 import { createMongoRepositories } from "./repositories/mongo/index.js";
 import type { Repositories, UserRecord } from "./repositories/types.js";
 
@@ -46,29 +45,31 @@ function withUsers(stub: Partial<Repositories["users"]>) {
   setRepositories({ ...base, users: { ...base.users, ...stub } as Repositories["users"] });
 }
 
-function patchModel<T extends object, K extends keyof T>(
-  model: T,
-  key: K,
-  value: T[K],
-  t: test.TestContext
-) {
-  const original = model[key];
-  model[key] = value;
-  t.after(() => {
-    model[key] = original;
-  });
-}
-
-// personalDetailsService.ensureForUser hits PersonalDetails.findOneAndUpdate
-// (upsert). Returning a doc avoids a real MongoDB round-trip so register
-// stays focused on auth behavior.
+// personalDetailsService.ensureForUser now reaches PersonalDetails through the
+// repository seam (getRepositories().personalDetails.ensureForUser), so we stub
+// the repository instead of the Mongoose model. Returning a record avoids a real
+// MongoDB round-trip so register stays focused on auth behavior.
 function patchPersonalDetails(t: test.TestContext) {
-  patchModel(
-    PersonalDetails,
-    "findOneAndUpdate",
-    (async () => ({ _id: "507f191e810c19729de860ea", id: "507f191e810c19729de860ea", status: "not_provided" })) as unknown as typeof PersonalDetails.findOneAndUpdate,
-    t
-  );
+  const current = getRepositories();
+  setRepositories({
+    ...current,
+    personalDetails: {
+      ...current.personalDetails,
+      ensureForUser: async (userId: string) => ({
+        id: "507f191e810c19729de860ea",
+        userId,
+        status: "not_provided",
+        firstName: null,
+        lastName: null,
+        dateOfBirth: null,
+        address: {},
+        lastSkippedAt: null,
+        createdAt: new Date(0),
+        updatedAt: new Date(0)
+      })
+    } as Repositories["personalDetails"]
+  });
+  t.after(() => setRepositories(current));
 }
 
 // Observe WHETHER a verification email was triggered (the enumeration-safety

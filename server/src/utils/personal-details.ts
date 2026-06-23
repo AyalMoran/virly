@@ -1,11 +1,12 @@
-import { PersonalDetails } from "../models/PersonalDetails.js";
-import type { PublicUserRecord, UserRecord } from "../repositories/types.js";
-
-type PersonalDetailsDocument = InstanceType<typeof PersonalDetails>;
+import type {
+  PersonalDetailsRecord,
+  PublicUserRecord,
+  UserRecord
+} from "../repositories/types.js";
 
 export function toAuthUserDto(
   user: UserRecord | PublicUserRecord,
-  details: PersonalDetailsDocument
+  details: PersonalDetailsRecord
 ) {
   return {
     id: user.id,
@@ -19,7 +20,7 @@ export function toAuthUserDto(
   };
 }
 
-export function toPersonalDetailsDto(details: PersonalDetailsDocument) {
+export function toPersonalDetailsDto(details: PersonalDetailsRecord) {
   return {
     id: details.id,
     status: details.status,

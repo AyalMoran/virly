@@ -234,7 +234,7 @@ export interface TransactionRepository {
 export interface PersonalDetailsRepository {
   findByUserId(userId: string, tx?: TxContext): Promise<PersonalDetailsRecord | null>;
   ensureForUser(userId: string, tx?: TxContext): Promise<PersonalDetailsRecord>;
-  update(userId: string, patch: Partial<Omit<PersonalDetailsRecord, "id" | "userId" | "createdAt" | "updatedAt">>, tx?: TxContext): Promise<PersonalDetailsRecord>;
+  update(userId: string, patch: Partial<Omit<PersonalDetailsRecord, "id" | "userId" | "createdAt" | "updatedAt">>, tx?: TxContext): Promise<PersonalDetailsRecord | null>;
 }
 
 export interface ExchangeRateRepository {
