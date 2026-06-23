@@ -1,10 +1,9 @@
 import type { Types } from "mongoose";
-import { VideoAuditLog, type VideoAuditEvent } from "../models/VideoAuditLog.js";
-import type { VideoSessionType } from "../models/VideoSession.js";
-import type { UserRole } from "../models/User.js";
+import type { UserRole, VideoSessionType } from "../repositories/types.js";
+import { getRepositories } from "../repositories/index.js";
 
 export type WriteVideoAuditLogInput = {
-  event: VideoAuditEvent;
+  event: string;
   actorId: string | Types.ObjectId;
   actorRole: UserRole;
   targetUserId: string | Types.ObjectId;
@@ -17,12 +16,12 @@ export type WriteVideoAuditLogInput = {
 };
 
 export async function writeVideoAuditLog(input: WriteVideoAuditLogInput) {
-  await VideoAuditLog.create({
+  await getRepositories().videoAuditLogs.create({
     event: input.event,
-    actorId: input.actorId,
+    actorId: String(input.actorId),
     actorRole: input.actorRole,
-    targetUserId: input.targetUserId,
-    videoSessionId: input.videoSessionId,
+    targetUserId: String(input.targetUserId),
+    videoSessionId: String(input.videoSessionId),
     sessionType: input.sessionType,
     result: input.result ?? "success",
     ipAddress: input.ipAddress ?? null,
@@ -30,4 +29,3 @@ export async function writeVideoAuditLog(input: WriteVideoAuditLogInput) {
     details: input.details ?? {}
   });
 }
-

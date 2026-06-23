@@ -26,14 +26,14 @@ router.get("/:userId/profile", requireAuth, async (req, res, next) => {
       return res.status(404).json({ message: "User not found." });
     }
 
-    const isSelf = String(viewed._id) === String(viewer._id);
-    const personalName = await personalDetailsService.getDisplayName(String(viewed._id));
+    const isSelf = viewed.id === viewer.id;
+    const personalName = await personalDetailsService.getDisplayName(viewed.id);
     const userDto = toPublicUserProfileDto(viewed, personalName);
 
     if (isSelf) {
       const relationship: UserRelationshipSummaryDto = {
-        viewerUserId: String(viewer._id),
-        viewedUserId: String(viewed._id),
+        viewerUserId: viewer.id,
+        viewedUserId: viewed.id,
         totalSentToUser: 0,
         totalReceivedFromUser: 0,
         netAmount: 0,
@@ -49,19 +49,19 @@ router.get("/:userId/profile", requireAuth, async (req, res, next) => {
 
     const [stats, recentTransactions] = await Promise.all([
       transactionQueryService.getRelationshipStats({
-        ownerId: String(viewer._id),
+        ownerId: viewer.id,
         counterpartyEmail: viewed.email
       }),
       transactionQueryService.recentWithCounterparty({
-        ownerId: String(viewer._id),
+        ownerId: viewer.id,
         counterpartyEmail: viewed.email,
         limit: 5
       })
     ]);
 
     const relationship: UserRelationshipSummaryDto = {
-      viewerUserId: String(viewer._id),
-      viewedUserId: String(viewed._id),
+      viewerUserId: viewer.id,
+      viewedUserId: viewed.id,
       totalSentToUser: roundMoney(stats.totalSent),
       totalReceivedFromUser: roundMoney(stats.totalReceived),
       netAmount: roundMoney(stats.totalSent - stats.totalReceived),
@@ -102,7 +102,7 @@ router.get("/:userId/transactions", requireAuth, async (req, res, next) => {
 
     // Viewer's own ledger only; self-profile naturally yields an empty list.
     const { transactions, total } = await transactionQueryService.listForOwner({
-      ownerId: String(viewer._id),
+      ownerId: viewer.id,
       counterpartyEmail: viewed.email,
       page,
       limit

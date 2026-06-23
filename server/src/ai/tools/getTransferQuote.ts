@@ -1,4 +1,4 @@
-import { User } from "../../models/User.js";
+import { getRepositories } from "../../repositories/index.js";
 import { maskEmail } from "../counterpartyMemory.js";
 import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, ToolContext } from "../state.js";
@@ -43,9 +43,7 @@ export async function getTransferQuote(
   }
 
   const [recipient, usage] = await Promise.all([
-    User.findOne({ email: recipientEmail }).select("email").lean<{
-      email: string;
-    } | null>(),
+    getRepositories().users.findByEmail(recipientEmail),
     getDailyTransferUsage(context.userId)
   ]);
   const warnings: TransferPreflightReason[] = getLimitReasons({

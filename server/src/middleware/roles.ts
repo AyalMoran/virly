@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from "express";
-import { User, type UserRole } from "../models/User.js";
+import { getRepositories } from "../repositories/index.js";
+import type { UserRole } from "../repositories/types.js";
 
 export function isSupportVideoRole(role: UserRole) {
   return role === "support_agent" || role === "support_manager" || role === "admin";
@@ -26,7 +27,7 @@ export async function requireAnyVideoAgentRole(
       return res.status(401).json({ message: "Authentication required." });
     }
 
-    const user = await User.findById(req.userId).select("role");
+    const user = await getRepositories().users.findByIdSafe(req.userId);
     const role = (user?.role ?? "user") as UserRole;
     if (!user || (!isSupportVideoRole(role) && !isSalesVideoRole(role))) {
       return res.status(403).json({ message: "Video agent access required." });

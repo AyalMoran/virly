@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { config } from "../config.js";
-import { ExchangeRate } from "../models/ExchangeRate.js";
+import { getRepositories } from "../repositories/index.js";
 import { AppError } from "../utils/app-error.js";
 
 export const FX_BASE_CURRENCY = "ILS" as const;
@@ -217,48 +217,47 @@ export async function fetchRatesFromProvider(
   };
 }
 
-const mongoFxStore: FxStore = {
-  async findByDate(baseCurrency, validForDate) {
-    const doc = await ExchangeRate.findOne({ baseCurrency, validForDate })
-      .sort({ fetchedAt: -1 })
-      .lean();
-    return doc ? toStoredSnapshot(doc) : null;
-  },
-  async findLatest(baseCurrency) {
-    const doc = await ExchangeRate.findOne({ baseCurrency })
-      .sort({ fetchedAt: -1 })
-      .lean();
-    return doc ? toStoredSnapshot(doc) : null;
-  },
-  async upsert(snapshot) {
-    await ExchangeRate.updateOne(
-      { baseCurrency: snapshot.baseCurrency, validForDate: snapshot.validForDate },
-      { $set: snapshot },
-      { upsert: true }
-    );
-  }
-};
-
-function toStoredSnapshot(doc: {
-  baseCurrency?: unknown;
-  rates?: unknown;
-  provider?: unknown;
-  fetchedAt?: unknown;
-  validForDate?: unknown;
-  expiresAt?: unknown;
-  sourceResponseHash?: unknown;
+function recordToStoredSnapshot(rec: {
+  baseCurrency: string;
+  rates: Record<string, number>;
+  provider: string;
+  fetchedAt: Date;
+  validForDate: string;
+  expiresAt: Date;
+  sourceResponseHash: string | null;
 }): StoredFxSnapshot {
   return {
     baseCurrency: FX_BASE_CURRENCY,
-    rates: doc.rates as FxRates,
-    provider: String(doc.provider ?? "unknown"),
-    fetchedAt: new Date(doc.fetchedAt as string | Date),
-    validForDate: String(doc.validForDate ?? ""),
-    expiresAt: new Date(doc.expiresAt as string | Date),
-    sourceResponseHash:
-      doc.sourceResponseHash === undefined ? null : (doc.sourceResponseHash as string | null)
+    rates: rec.rates as FxRates,
+    provider: rec.provider,
+    fetchedAt: rec.fetchedAt,
+    validForDate: rec.validForDate,
+    expiresAt: rec.expiresAt,
+    sourceResponseHash: rec.sourceResponseHash
   };
 }
+
+const mongoFxStore: FxStore = {
+  async findByDate(baseCurrency, validForDate) {
+    const rec = await getRepositories().exchangeRates.findForDate(baseCurrency, validForDate);
+    return rec ? recordToStoredSnapshot(rec) : null;
+  },
+  async findLatest(baseCurrency) {
+    const rec = await getRepositories().exchangeRates.latestForBase(baseCurrency);
+    return rec ? recordToStoredSnapshot(rec) : null;
+  },
+  async upsert(snapshot) {
+    await getRepositories().exchangeRates.upsertForDate({
+      baseCurrency: snapshot.baseCurrency,
+      rates: snapshot.rates,
+      provider: snapshot.provider,
+      fetchedAt: snapshot.fetchedAt,
+      validForDate: snapshot.validForDate,
+      expiresAt: snapshot.expiresAt,
+      sourceResponseHash: snapshot.sourceResponseHash
+    });
+  }
+};
 
 function defaultDeps(): FxDeps {
   return {

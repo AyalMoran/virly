@@ -1,49 +1,32 @@
+// src/personalDetails.service.test.ts
 
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { PersonalDetails } from "./models/PersonalDetails.js";
 import { AppError } from "./utils/app-error.js";
 import { personalDetailsService } from "./services/personalDetails.service.js";
+import { setRepositories } from "./repositories/index.js";
+import { createMongoRepositories } from "./repositories/mongo/index.js";
+import type {
+  PersonalDetailsRecord,
+  Repositories,
+  UserRecord
+} from "./repositories/types.js";
 
 // ---------------------------------------------------------------------------
-// Helpers
+// Helpers — the service now talks to the repository seam, so tests mock the
+// `personalDetails` (and `users`) repositories, not the Mongoose model.
 // ---------------------------------------------------------------------------
 
-function patchModel<T extends object, K extends keyof T>(
-  model: T,
-  key: K,
-  value: T[K],
-  t: test.TestContext
-) {
-  const original = model[key];
-  model[key] = value;
-  t.after(() => {
-    model[key] = original;
-  });
-}
+const PD_ID = "507f191e810c19729de860ea";
+const USER_ID = "507f1f77bcf86cd799439011";
 
-type MockPersonalDetails = {
-  _id: string;
-  id: string;
-  userId: string;
-  status: string;
-  firstName: string | null;
-  lastName: string | null;
-  dateOfBirth: Date | null;
-  address: Record<string, string | null>;
-  lastSkippedAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-  saveCalls: number;
-  save: () => Promise<void>;
-};
-
-function createMockDetails(overrides: Partial<MockPersonalDetails> = {}): MockPersonalDetails {
-  const doc: MockPersonalDetails = {
-    _id: "507f191e810c19729de860ea",
-    id: "507f191e810c19729de860ea",
-    userId: "507f1f77bcf86cd799439011",
+function createDetailsRecord(
+  overrides: Partial<PersonalDetailsRecord> = {}
+): PersonalDetailsRecord {
+  return {
+    id: PD_ID,
+    userId: USER_ID,
     status: "not_provided",
     firstName: null,
     lastName: null,
@@ -52,156 +35,116 @@ function createMockDetails(overrides: Partial<MockPersonalDetails> = {}): MockPe
     lastSkippedAt: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
-    saveCalls: 0,
-    save: async () => {
-      doc.saveCalls += 1;
-    },
     ...overrides
   };
-  return doc;
 }
 
-type MockUser = {
-  _id: string;
-  id: string;
-  personalDetails: unknown;
-  saveCalls: number;
-  save: () => Promise<void>;
-};
-
-function createMockUser(overrides: Partial<MockUser> = {}): MockUser {
-  const user: MockUser = {
-    _id: "507f1f77bcf86cd799439011",
-    id: "507f1f77bcf86cd799439011",
+function createUserRecord(overrides: Partial<UserRecord> = {}): UserRecord {
+  return {
+    id: USER_ID,
+    email: "alice@example.com",
+    passwordHash: "placeholder-hash",
+    phone: "+972500000000",
+    isVerified: true,
+    balance: 0,
+    role: "user",
     personalDetails: null,
-    saveCalls: 0,
-    save: async () => {
-      user.saveCalls += 1;
-    },
+    verificationTokenHash: null,
+    verificationTokenExpiresAt: null,
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...overrides
   };
-  return user;
+}
+
+/**
+ * Install repository stubs. Captures users.setPersonalDetails calls (the FK
+ * back-fill) so tests can assert on them.
+ */
+function withRepos(
+  personalDetails: Partial<Repositories["personalDetails"]>,
+  t: test.TestContext
+): { setPersonalDetailsCalls: Array<{ id: string; personalDetailsId: string }> } {
+  const calls: Array<{ id: string; personalDetailsId: string }> = [];
+  const base = createMongoRepositories();
+  setRepositories({
+    ...base,
+    personalDetails: {
+      ...base.personalDetails,
+      ...personalDetails
+    } as Repositories["personalDetails"],
+    users: {
+      ...base.users,
+      setPersonalDetails: async (id: string, personalDetailsId: string) => {
+        calls.push({ id, personalDetailsId });
+      }
+    } as Repositories["users"]
+  });
+  t.after(() => setRepositories(base));
+  return { setPersonalDetailsCalls: calls };
 }
 
 // ---------------------------------------------------------------------------
 // ensureForUser
 // ---------------------------------------------------------------------------
 
-test("ensureForUser: uses findOneAndUpdate upsert — does not call findOne or create", async (t) => {
-  const details = createMockDetails({ status: "not_provided" });
-  const user = createMockUser({ personalDetails: null });
+test("ensureForUser: returns the record from the repository", async (t) => {
+  const record = createDetailsRecord();
+  withRepos({ ensureForUser: async () => record }, t);
 
-  let findOneAndUpdateCalled = false;
-  let findOneCalled = false;
-
-  patchModel(
-    PersonalDetails,
-    "findOneAndUpdate",
-    (async () => {
-      findOneAndUpdateCalled = true;
-      return details;
-    }) as unknown as typeof PersonalDetails.findOneAndUpdate,
-    t
-  );
-
-  patchModel(
-    PersonalDetails,
-    "findOne",
-    (async () => {
-      findOneCalled = true;
-      return details;
-    }) as unknown as typeof PersonalDetails.findOne,
-    t
-  );
-
-  const result = await personalDetailsService.ensureForUser(user as never);
-
-  assert.equal(result, details);
-  assert.equal(findOneAndUpdateCalled, true, "must use findOneAndUpdate for upsert");
-  assert.equal(findOneCalled, false, "must NOT fall back to findOne");
+  const result = await personalDetailsService.ensureForUser(createUserRecord());
+  assert.equal(result, record);
 });
 
-test("ensureForUser: patches user.personalDetails and calls user.save when personalDetails is null", async (t) => {
-  const details = createMockDetails();
-  const user = createMockUser({ personalDetails: null });
+test("ensureForUser: back-fills the FK via setPersonalDetails when personalDetails is null", async (t) => {
+  const record = createDetailsRecord();
+  const { setPersonalDetailsCalls } = withRepos({ ensureForUser: async () => record }, t);
 
-  patchModel(
-    PersonalDetails,
-    "findOneAndUpdate",
-    (async () => details) as unknown as typeof PersonalDetails.findOneAndUpdate,
-    t
-  );
+  await personalDetailsService.ensureForUser(createUserRecord({ personalDetails: null }));
 
-  await personalDetailsService.ensureForUser(user as never);
-
-  assert.equal(user.personalDetails, details._id, "should patch user.personalDetails to the returned doc._id");
-  assert.equal(user.saveCalls, 1, "should call user.save() once when personalDetails was null");
+  assert.equal(setPersonalDetailsCalls.length, 1, "should back-fill the FK once");
+  assert.equal(setPersonalDetailsCalls[0]?.id, USER_ID);
+  assert.equal(setPersonalDetailsCalls[0]?.personalDetailsId, record.id);
 });
 
-test("ensureForUser: does NOT call user.save when user.personalDetails is already set", async (t) => {
-  const existingId = { _id: "507f191e810c19729de860ea" };
-  const details = createMockDetails();
-  const user = createMockUser({ personalDetails: existingId });
+test("ensureForUser: does NOT back-fill when user.personalDetails is already set", async (t) => {
+  const record = createDetailsRecord();
+  const { setPersonalDetailsCalls } = withRepos({ ensureForUser: async () => record }, t);
 
-  patchModel(
-    PersonalDetails,
-    "findOneAndUpdate",
-    (async () => details) as unknown as typeof PersonalDetails.findOneAndUpdate,
-    t
-  );
+  await personalDetailsService.ensureForUser(createUserRecord({ personalDetails: PD_ID }));
 
-  await personalDetailsService.ensureForUser(user as never);
-
-  assert.equal(user.saveCalls, 0, "must NOT call user.save when personalDetails was already set");
+  assert.equal(setPersonalDetailsCalls.length, 0, "must NOT back-fill when FK already set");
 });
 
-test("ensureForUser: idempotent — calling twice does not double-save the user", async (t) => {
-  const details = createMockDetails();
-  // First call: no personalDetails; after first call user.personalDetails is set
-  const user = createMockUser({ personalDetails: null });
+test("ensureForUser: idempotent — a record that already has the FK is not back-filled again", async (t) => {
+  const record = createDetailsRecord();
+  const { setPersonalDetailsCalls } = withRepos({ ensureForUser: async () => record }, t);
 
-  patchModel(
-    PersonalDetails,
-    "findOneAndUpdate",
-    (async () => details) as unknown as typeof PersonalDetails.findOneAndUpdate,
-    t
-  );
+  // First call: no FK yet -> exactly one back-fill.
+  await personalDetailsService.ensureForUser(createUserRecord({ personalDetails: null }));
+  assert.equal(setPersonalDetailsCalls.length, 1);
 
-  await personalDetailsService.ensureForUser(user as never);
-  assert.equal(user.saveCalls, 1);
-
-  // Second call: personalDetails now set (as it would be after first call)
-  await personalDetailsService.ensureForUser(user as never);
-  assert.equal(user.saveCalls, 1, "second call must NOT call user.save again");
+  // Second call: FK already populated (as after a reload) -> no further back-fill.
+  await personalDetailsService.ensureForUser(createUserRecord({ personalDetails: record.id }));
+  assert.equal(setPersonalDetailsCalls.length, 1, "second call must NOT back-fill again");
 });
 
 // ---------------------------------------------------------------------------
 // getForUser
 // ---------------------------------------------------------------------------
 
-test("getForUser: returns the doc when found", async (t) => {
-  const details = createMockDetails({ userId: "507f1f77bcf86cd799439011" });
+test("getForUser: returns the record when found", async (t) => {
+  const record = createDetailsRecord();
+  withRepos({ findByUserId: async (id) => (id === USER_ID ? record : null) }, t);
 
-  patchModel(
-    PersonalDetails,
-    "findOne",
-    (async () => details) as unknown as typeof PersonalDetails.findOne,
-    t
-  );
-
-  const result = await personalDetailsService.getForUser("507f1f77bcf86cd799439011");
-  assert.equal(result, details);
+  const result = await personalDetailsService.getForUser(USER_ID);
+  assert.equal(result, record);
 });
 
 test("getForUser: returns null when not found", async (t) => {
-  patchModel(
-    PersonalDetails,
-    "findOne",
-    (async () => null) as unknown as typeof PersonalDetails.findOne,
-    t
-  );
+  withRepos({ findByUserId: async () => null }, t);
 
-  const result = await personalDetailsService.getForUser("507f1f77bcf86cd799439011");
+  const result = await personalDetailsService.getForUser(USER_ID);
   assert.equal(result, null);
 });
 
@@ -210,46 +153,25 @@ test("getForUser: returns null when not found", async (t) => {
 // ---------------------------------------------------------------------------
 
 test("getDisplayName: returns firstName/lastName only when status is 'provided'", async (t) => {
-  const details = createMockDetails({
-    status: "provided",
-    firstName: "Alice",
-    lastName: "Goldberg"
-  });
+  const record = createDetailsRecord({ status: "provided", firstName: "Alice", lastName: "Goldberg" });
+  withRepos({ findByUserId: async () => record }, t);
 
-  patchModel(
-    PersonalDetails,
-    "findOne",
-    (async () => details) as unknown as typeof PersonalDetails.findOne,
-    t
-  );
-
-  const result = await personalDetailsService.getDisplayName("507f1f77bcf86cd799439011");
+  const result = await personalDetailsService.getDisplayName(USER_ID);
   assert.deepEqual(result, { firstName: "Alice", lastName: "Goldberg" });
 });
 
 test("getDisplayName: returns null when status is 'not_provided'", async (t) => {
-  const details = createMockDetails({ status: "not_provided", firstName: "Bob" });
+  const record = createDetailsRecord({ status: "not_provided", firstName: "Bob" });
+  withRepos({ findByUserId: async () => record }, t);
 
-  patchModel(
-    PersonalDetails,
-    "findOne",
-    (async () => details) as unknown as typeof PersonalDetails.findOne,
-    t
-  );
-
-  const result = await personalDetailsService.getDisplayName("507f1f77bcf86cd799439011");
+  const result = await personalDetailsService.getDisplayName(USER_ID);
   assert.equal(result, null);
 });
 
-test("getDisplayName: returns null when no doc exists", async (t) => {
-  patchModel(
-    PersonalDetails,
-    "findOne",
-    (async () => null) as unknown as typeof PersonalDetails.findOne,
-    t
-  );
+test("getDisplayName: returns null when no record exists", async (t) => {
+  withRepos({ findByUserId: async () => null }, t);
 
-  const result = await personalDetailsService.getDisplayName("507f1f77bcf86cd799439011");
+  const result = await personalDetailsService.getDisplayName(USER_ID);
   assert.equal(result, null);
 });
 
@@ -257,72 +179,52 @@ test("getDisplayName: returns null when no doc exists", async (t) => {
 // update
 // ---------------------------------------------------------------------------
 
-test("update: sets status to 'provided' and persists all fields", async (t) => {
-  const details = createMockDetails({ status: "not_provided" });
+const VALID_INPUT = {
+  firstName: "Carol",
+  lastName: "Danvers",
+  dateOfBirth: "1990-03-05",
+  address: {
+    country: "US",
+    stateRegion: null,
+    city: "New York",
+    street: "5th Ave",
+    addressLine2: null,
+    postalCode: "10001"
+  }
+};
 
-  patchModel(
-    PersonalDetails,
-    "findOneAndUpdate",
-    (async (_filter: unknown, update: Record<string, unknown>, _opts: unknown) => {
-      // simulate applying the update to our mock doc
-      const set = (update as { $set?: Record<string, unknown> }).$set ?? {};
-      Object.assign(details, set);
-      details.saveCalls += 1;
-      return details;
-    }) as unknown as typeof PersonalDetails.findOneAndUpdate,
+test("update: sets status to 'provided' and returns the updated record", async (t) => {
+  let capturedPatch: Record<string, unknown> | undefined;
+  withRepos(
+    {
+      update: async (_userId, patch) => {
+        capturedPatch = patch as Record<string, unknown>;
+        return createDetailsRecord({
+          status: "provided",
+          firstName: "Carol",
+          lastName: "Danvers",
+          dateOfBirth: new Date("1990-03-05T00:00:00.000Z")
+        });
+      }
+    },
     t
   );
 
-  const input = {
-    firstName: "Carol",
-    lastName: "Danvers",
-    dateOfBirth: "1990-03-05",
-    address: {
-      country: "US",
-      stateRegion: null,
-      city: "New York",
-      street: "5th Ave",
-      addressLine2: null,
-      postalCode: "10001"
-    }
-  };
-
-  const result = await personalDetailsService.update("507f1f77bcf86cd799439011", input);
+  const result = await personalDetailsService.update(USER_ID, VALID_INPUT);
 
   assert.equal(result.status, "provided");
   assert.equal(result.firstName, "Carol");
   assert.equal(result.lastName, "Danvers");
-  assert.ok(result.dateOfBirth instanceof Date || typeof result.dateOfBirth === "string" || result.dateOfBirth !== undefined);
+  assert.equal(capturedPatch?.status, "provided");
+  assert.ok(capturedPatch?.dateOfBirth instanceof Date, "dateOfBirth must be parsed to a Date");
 });
 
-test("update: throws AppError(404) when doc does not exist", async (t) => {
-  patchModel(
-    PersonalDetails,
-    "findOneAndUpdate",
-    (async () => null) as unknown as typeof PersonalDetails.findOneAndUpdate,
-    t
-  );
+test("update: throws AppError(404) when the record does not exist", async (t) => {
+  withRepos({ update: async () => null }, t);
 
   await assert.rejects(
-    () =>
-      personalDetailsService.update("507f1f77bcf86cd799439011", {
-        firstName: "Carol",
-        lastName: "Danvers",
-        dateOfBirth: "1990-03-05",
-        address: {
-          country: "US",
-          stateRegion: null,
-          city: "New York",
-          street: "5th Ave",
-          addressLine2: null,
-          postalCode: "10001"
-        }
-      }),
-    (err: unknown) => {
-      assert.ok(err instanceof AppError);
-      assert.equal((err as AppError).status, 404);
-      return true;
-    }
+    () => personalDetailsService.update(USER_ID, VALID_INPUT),
+    (err: unknown) => err instanceof AppError && err.status === 404
   );
 });
 
@@ -330,43 +232,31 @@ test("update: throws AppError(404) when doc does not exist", async (t) => {
 // markSkipped
 // ---------------------------------------------------------------------------
 
-test("markSkipped: sets lastSkippedAt and persists", async (t) => {
-  const details = createMockDetails({ lastSkippedAt: null });
+test("markSkipped: sets lastSkippedAt and returns the record", async (t) => {
   const before = Date.now();
-
-  patchModel(
-    PersonalDetails,
-    "findOneAndUpdate",
-    (async (_filter: unknown, update: Record<string, unknown>, _opts: unknown) => {
-      const set = (update as { $set?: Record<string, unknown> }).$set ?? {};
-      Object.assign(details, set);
-      return details;
-    }) as unknown as typeof PersonalDetails.findOneAndUpdate,
+  let capturedPatch: Record<string, unknown> | undefined;
+  withRepos(
+    {
+      update: async (_userId, patch) => {
+        capturedPatch = patch as Record<string, unknown>;
+        return createDetailsRecord({ lastSkippedAt: new Date() });
+      }
+    },
     t
   );
 
-  const result = await personalDetailsService.markSkipped("507f1f77bcf86cd799439011");
+  const result = await personalDetailsService.markSkipped(USER_ID);
 
-  assert.ok(result.lastSkippedAt instanceof Date || result.lastSkippedAt !== null);
-  if (result.lastSkippedAt instanceof Date) {
-    assert.ok(result.lastSkippedAt.getTime() >= before);
-  }
+  assert.ok(result.lastSkippedAt instanceof Date);
+  assert.ok(capturedPatch?.lastSkippedAt instanceof Date);
+  assert.ok((capturedPatch?.lastSkippedAt as Date).getTime() >= before);
 });
 
-test("markSkipped: throws AppError(404) when doc does not exist", async (t) => {
-  patchModel(
-    PersonalDetails,
-    "findOneAndUpdate",
-    (async () => null) as unknown as typeof PersonalDetails.findOneAndUpdate,
-    t
-  );
+test("markSkipped: throws AppError(404) when the record does not exist", async (t) => {
+  withRepos({ update: async () => null }, t);
 
   await assert.rejects(
-    () => personalDetailsService.markSkipped("507f1f77bcf86cd799439011"),
-    (err: unknown) => {
-      assert.ok(err instanceof AppError);
-      assert.equal((err as AppError).status, 404);
-      return true;
-    }
+    () => personalDetailsService.markSkipped(USER_ID),
+    (err: unknown) => err instanceof AppError && err.status === 404
   );
 });

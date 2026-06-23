@@ -1,5 +1,8 @@
-import type { FilterQuery, SortOrder } from "mongoose";
-import { Transaction } from "../../models/Transaction.js";
+import type {
+  TransactionFilterCriteria,
+  TransactionListSort,
+  TransactionRecord
+} from "../../repositories/types.js";
 import type { ToolContext, ToolResultMetadata } from "../state.js";
 import { resolveCommonDateRange } from "../dateResolution.js";
 import {
@@ -8,8 +11,6 @@ import {
   getLimitFromMessage,
   normalizeCounterpartyEmail
 } from "./counterpartyHelpers.js";
-
-type TransactionDocument = InstanceType<typeof Transaction>;
 
 export type SafeTransactionRow = {
   transactionId: string;
@@ -37,7 +38,7 @@ export type TransactionDateRange = {
   label: string;
 };
 
-export function getTransactionDirection(transaction: Pick<TransactionDocument, "type">) {
+export function getTransactionDirection(transaction: Pick<TransactionRecord, "type">) {
   return transaction.type === "debit" ? "sent" : "received";
 }
 
@@ -109,20 +110,20 @@ export function getReasonQueryFromMessage(message: string) {
   );
 }
 
-export function getTransactionSortFromMessage(message: string): TransactionSort {
+export function getTransactionSortFromMessage(message: string): TransactionListSort {
   if (/\b(oldest|first)\b/i.test(message)) {
-    return { createdAt: 1 };
+    return "oldest";
   }
 
   if (/\b(biggest|largest|highest)\b/i.test(message) || /(הכי גדול|הגדולות)/.test(message)) {
-    return { amount: -1 };
+    return "amount_desc";
   }
 
   if (/\b(smallest|lowest)\b/i.test(message) || /(הכי קטן|הקטנות)/.test(message)) {
-    return { amount: 1 };
+    return "amount_asc";
   }
 
-  return { createdAt: -1 };
+  return "newest";
 }
 
 export function getTransactionSortLabel(message: string) {
@@ -152,61 +153,62 @@ export function getTransactionQueryContext(context: ToolContext) {
   };
 }
 
-export function buildTransactionFilter(context: ToolContext): FilterQuery<TransactionDocument> {
-  const {
-    direction,
-    amountFilters,
-    dateRange,
-    reasonQuery
-  } = getTransactionQueryContext(context);
-  const filter: FilterQuery<TransactionDocument> = {
-    ownerId: context.userId
+/**
+ * Translates a free-text query context into plain repository criteria. The repo
+ * (not the tool) builds the Mongoose query from these params — keeping the
+ * driver query shape behind the seam.
+ */
+export function buildTransactionFilterCriteria(
+  context: ToolContext,
+  options: { limit: number; sort?: TransactionListSort }
+): TransactionFilterCriteria {
+  const { direction, amountFilters, dateRange, reasonQuery } =
+    getTransactionQueryContext(context);
+
+  const criteria: TransactionFilterCriteria = {
+    ownerId: context.userId,
+    limit: options.limit,
+    sort: options.sort ?? "newest"
   };
 
   if (direction === "sent") {
-    filter.type = "debit";
+    criteria.type = "debit";
   } else if (direction === "received") {
-    filter.type = "credit";
+    criteria.type = "credit";
   }
 
   if (context.resolvedCounterparty?.email) {
-    filter.counterpartyEmail = normalizeCounterpartyEmail(
+    criteria.counterpartyEmail = normalizeCounterpartyEmail(
       context.resolvedCounterparty.email
     );
   }
 
-  if (amountFilters.minAmount !== undefined || amountFilters.maxAmount !== undefined) {
-    filter.amount = {
-      ...(amountFilters.minAmount !== undefined ? { $gte: amountFilters.minAmount } : {}),
-      ...(amountFilters.maxAmount !== undefined ? { $lte: amountFilters.maxAmount } : {})
-    };
+  if (amountFilters.minAmount !== undefined) {
+    criteria.minAmount = amountFilters.minAmount;
+  }
+
+  if (amountFilters.maxAmount !== undefined) {
+    criteria.maxAmount = amountFilters.maxAmount;
   }
 
   if (dateRange) {
-    filter.createdAt = {
-      $gte: dateRange.from,
-      $lt: dateRange.to
-    };
+    criteria.dateFrom = dateRange.from;
+    criteria.dateTo = dateRange.to;
   }
 
   if (reasonQuery) {
-    filter.reason = new RegExp(reasonQuery.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i");
+    criteria.reasonContains = reasonQuery;
   }
 
-  return filter;
+  return criteria;
 }
 
 export function getTransactionLimit(context: ToolContext, defaultLimit = 10) {
   return getLimitFromMessage(context.message, defaultLimit, 50);
 }
 
-function getTransactionId(transaction: TransactionDocument) {
-  const id = (transaction as { _id?: unknown })._id;
-  return id ? String(id) : transaction.id;
-}
-
 export async function toSafeTransactionRows(
-  transactions: TransactionDocument[]
+  transactions: TransactionRecord[]
 ): Promise<SafeTransactionRow[]> {
   const displays = await getCounterpartyDisplays(
     transactions.map((transaction) => transaction.counterpartyEmail)
@@ -220,7 +222,7 @@ export async function toSafeTransactionRows(
     const llmLabel = `${index + 1}. ${direction} ${amount.toFixed(2)} ILS with ${display.llmLabel}`;
 
     return {
-      transactionId: getTransactionId(transaction),
+      transactionId: transaction.id,
       label,
       llmLabel,
       direction,
@@ -230,7 +232,7 @@ export async function toSafeTransactionRows(
       counterpartyMaskedLabel: display.emailMasked,
       counterpartyEmail: display.email,
       reason: transaction.reason ?? null,
-      occurredAt: transaction.createdAt?.toISOString() ?? new Date(0).toISOString(),
+      occurredAt: transaction.createdAt.toISOString(),
       status: "completed"
     };
   });
@@ -295,5 +297,3 @@ export function sortForTransactionMemory(
 
   return left.turnIntroduced - right.turnIntroduced;
 }
-
-export type TransactionSort = Record<string, SortOrder>;

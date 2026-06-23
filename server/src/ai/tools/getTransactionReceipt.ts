@@ -1,4 +1,4 @@
-import { Transaction } from "../../models/Transaction.js";
+import { getRepositories } from "../../repositories/index.js";
 import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, ToolContext } from "../state.js";
 import {
@@ -20,10 +20,10 @@ export async function getTransactionReceipt(
     });
   }
 
-  const transaction = await Transaction.findOne({
-    _id: context.resolvedTransactionId,
-    ownerId: context.userId
-  });
+  const transaction = await getRepositories().transactions.findByIdForOwner(
+    context.resolvedTransactionId,
+    context.userId
+  );
 
   if (!transaction) {
     return createToolResult({

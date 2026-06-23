@@ -1,11 +1,11 @@
-import { User } from "../../models/User.js";
+import { getRepositories } from "../../repositories/index.js";
 import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, ToolContext } from "../state.js";
 
 export async function getUserAccounts(
   context: ToolContext
 ): Promise<RuntimeToolResult> {
-  const user = await User.findById(context.userId).select("email isVerified");
+  const user = await getRepositories().users.findByIdSafe(context.userId);
 
   if (!user) {
     throw Object.assign(new Error("Authenticated account not found."), {
