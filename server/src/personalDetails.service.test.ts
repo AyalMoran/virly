@@ -114,6 +114,19 @@ test("ensureForUser: does NOT back-fill when user.personalDetails is already set
   assert.equal(setPersonalDetailsCalls.length, 0, "must NOT back-fill when FK already set");
 });
 
+test("ensureForUser: idempotent — a record that already has the FK is not back-filled again", async (t) => {
+  const record = createDetailsRecord();
+  const { setPersonalDetailsCalls } = withRepos({ ensureForUser: async () => record }, t);
+
+  // First call: no FK yet -> exactly one back-fill.
+  await personalDetailsService.ensureForUser(createUserRecord({ personalDetails: null }));
+  assert.equal(setPersonalDetailsCalls.length, 1);
+
+  // Second call: FK already populated (as after a reload) -> no further back-fill.
+  await personalDetailsService.ensureForUser(createUserRecord({ personalDetails: record.id }));
+  assert.equal(setPersonalDetailsCalls.length, 1, "second call must NOT back-fill again");
+});
+
 // ---------------------------------------------------------------------------
 // getForUser
 // ---------------------------------------------------------------------------
