@@ -15,7 +15,7 @@ import {
   videoSessionSourceValues,
   videoSessionStatusValues,
   videoSessionTypeValues
-} from "../models/VideoSession.js";
+} from "../repositories/types.js";
 
 const router = Router();
 const adminRouter = Router();

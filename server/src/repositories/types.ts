@@ -4,6 +4,40 @@
 export const userRoleValues = ["user", "support_agent", "sales_agent", "support_manager", "admin"] as const;
 export type UserRole = (typeof userRoleValues)[number];
 
+// ---- VideoSession enum values (mirrors models/VideoSession.ts) ---------------
+// Exported here so consumers outside repositories/mongo/ can import without
+// touching models directly.
+
+export const videoSessionTypeValues = ["support", "sales"] as const;
+export type VideoSessionType = (typeof videoSessionTypeValues)[number];
+
+export const videoSessionStatusValues = [
+  "requested",
+  "waiting_for_agent",
+  "active",
+  "ended",
+  "missed",
+  "cancelled",
+  "failed"
+] as const;
+export type VideoSessionStatus = (typeof videoSessionStatusValues)[number];
+
+export const videoSessionProviderValues = [
+  "jitsi-jaas",
+  "jitsi-self-hosted",
+  "jitsi-public-demo",
+  "mock"
+] as const;
+export type VideoSessionProvider = (typeof videoSessionProviderValues)[number];
+
+export const videoSessionSourceValues = [
+  "dashboard",
+  "ai_assistant",
+  "transfer_flow",
+  "account_page"
+] as const;
+export type VideoSessionSource = (typeof videoSessionSourceValues)[number];
+
 /** Opaque per-driver transaction handle. Consumers pass it through; never inspect. */
 export type TxContext = unknown;
 
