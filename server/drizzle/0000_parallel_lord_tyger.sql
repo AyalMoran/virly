@@ -89,7 +89,8 @@ CREATE TABLE "transactions" (
 	"exchange_rate_fetched_at" timestamp with time zone,
 	"created_at" timestamp with time zone NOT NULL,
 	"updated_at" timestamp with time zone NOT NULL,
-	CONSTRAINT "transactions_type_ck" CHECK ("transactions"."type" in ('credit','debit'))
+	CONSTRAINT "transactions_type_ck" CHECK ("transactions"."type" in ('credit','debit')),
+	CONSTRAINT "transactions_entered_currency_ck" CHECK ("transactions"."entered_currency" is null or "transactions"."entered_currency" in ('ILS','USD','EUR'))
 );
 --> statement-breakpoint
 CREATE TABLE "users" (
@@ -122,7 +123,9 @@ CREATE TABLE "video_audit_logs" (
 	"details" jsonb DEFAULT '{}'::jsonb NOT NULL,
 	"created_at" timestamp with time zone NOT NULL,
 	"updated_at" timestamp with time zone NOT NULL,
-	CONSTRAINT "video_audit_result_ck" CHECK ("video_audit_logs"."result" in ('success','failure'))
+	CONSTRAINT "video_audit_result_ck" CHECK ("video_audit_logs"."result" in ('success','failure')),
+	CONSTRAINT "video_audit_session_type_ck" CHECK ("video_audit_logs"."session_type" in ('support','sales')),
+	CONSTRAINT "video_audit_actor_role_ck" CHECK ("video_audit_logs"."actor_role" in ('user','support_agent','sales_agent','support_manager','admin'))
 );
 --> statement-breakpoint
 CREATE TABLE "video_sessions" (
@@ -151,13 +154,14 @@ CREATE INDEX "ai_audit_conv_idx" ON "ai_audit_logs" USING btree ("conversation_i
 CREATE INDEX "ai_audit_request_idx" ON "ai_audit_logs" USING btree ("request_id");--> statement-breakpoint
 CREATE UNIQUE INDEX "ai_conversations_user_conv_uq" ON "ai_conversations" USING btree ("user_id","conversation_id");--> statement-breakpoint
 CREATE INDEX "ai_conversations_user_idx" ON "ai_conversations" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "ai_conversations_conv_idx" ON "ai_conversations" USING btree ("conversation_id");--> statement-breakpoint
 CREATE INDEX "ai_conversations_expires_idx" ON "ai_conversations" USING btree ("expires_at");--> statement-breakpoint
 CREATE INDEX "ai_pending_user_idx" ON "ai_pending_transfers" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "ai_pending_conv_idx" ON "ai_pending_transfers" USING btree ("conversation_id");--> statement-breakpoint
 CREATE INDEX "ai_pending_status_idx" ON "ai_pending_transfers" USING btree ("status");--> statement-breakpoint
 CREATE INDEX "ai_pending_expires_idx" ON "ai_pending_transfers" USING btree ("expires_at");--> statement-breakpoint
 CREATE UNIQUE INDEX "exchange_rates_base_date_uq" ON "exchange_rates" USING btree ("base_currency","valid_for_date");--> statement-breakpoint
-CREATE INDEX "exchange_rates_base_fetched_idx" ON "exchange_rates" USING btree ("base_currency","fetched_at");--> statement-breakpoint
+CREATE INDEX "exchange_rates_base_fetched_idx" ON "exchange_rates" USING btree ("base_currency","fetched_at" DESC NULLS LAST);--> statement-breakpoint
 CREATE UNIQUE INDEX "personal_details_user_uq" ON "personal_details" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "personal_details_name_idx" ON "personal_details" USING btree ("first_name","last_name");--> statement-breakpoint
 CREATE INDEX "transactions_owner_idx" ON "transactions" USING btree ("owner_id");--> statement-breakpoint

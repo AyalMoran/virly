@@ -44,7 +44,8 @@ export const transactions = pgTable("transactions", {
 }, (t) => [
   index("transactions_owner_idx").on(t.ownerId),
   index("transactions_owner_cp_created_idx").on(t.ownerId, t.counterpartyEmail, t.createdAt),
-  check("transactions_type_ck", sql`${t.type} in ('credit','debit')`)
+  check("transactions_type_ck", sql`${t.type} in ('credit','debit')`),
+  check("transactions_entered_currency_ck", sql`${t.enteredCurrency} is null or ${t.enteredCurrency} in ('ILS','USD','EUR')`)
 ]);
 
 export const personalDetails = pgTable("personal_details", {
@@ -77,7 +78,7 @@ export const exchangeRates = pgTable("exchange_rates", {
   updatedAt: updatedAt()
 }, (t) => [
   uniqueIndex("exchange_rates_base_date_uq").on(t.baseCurrency, t.validForDate),
-  index("exchange_rates_base_fetched_idx").on(t.baseCurrency, t.fetchedAt)
+  index("exchange_rates_base_fetched_idx").on(t.baseCurrency, t.fetchedAt.desc())
 ]);
 
 export const aiConversations = pgTable("ai_conversations", {
@@ -93,6 +94,7 @@ export const aiConversations = pgTable("ai_conversations", {
 }, (t) => [
   uniqueIndex("ai_conversations_user_conv_uq").on(t.userId, t.conversationId),
   index("ai_conversations_user_idx").on(t.userId),
+  index("ai_conversations_conv_idx").on(t.conversationId),
   index("ai_conversations_expires_idx").on(t.expiresAt)
 ]);
 
@@ -189,5 +191,7 @@ export const videoAuditLogs = pgTable("video_audit_logs", {
   index("video_audit_actor_idx").on(t.actorId),
   index("video_audit_target_idx").on(t.targetUserId),
   index("video_audit_session_idx").on(t.videoSessionId),
-  check("video_audit_result_ck", sql`${t.result} in ('success','failure')`)
+  check("video_audit_result_ck", sql`${t.result} in ('success','failure')`),
+  check("video_audit_session_type_ck", sql`${t.sessionType} in ('support','sales')`),
+  check("video_audit_actor_role_ck", sql`${t.actorRole} in ('user','support_agent','sales_agent','support_manager','admin')`)
 ]);
