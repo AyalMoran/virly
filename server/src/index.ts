@@ -5,7 +5,7 @@ import { startDailyFxRefresh } from "./services/fx.service.js";
 
 async function bootstrap() {
   await connectDb();
-  initRepositories();
+  await initRepositories();
   startDailyFxRefresh();
   app.listen(config.port, () => {
     console.log(`Server running on ${config.serverUrl}:${config.port}`);
