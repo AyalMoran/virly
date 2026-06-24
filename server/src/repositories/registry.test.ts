@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { createRepositories } from "./registry.js";
-import { getRepositories, setRepositories } from "./index.js";
+import { clearRepositories, getRepositories, setRepositories } from "./index.js";
 
 test("createRepositories('mongo') returns a full Repositories object", () => {
   const repos = createRepositories("mongo");
@@ -29,4 +29,6 @@ test("setRepositories then getRepositories returns the instance", () => {
   const repos = createRepositories("mongo");
   setRepositories(repos);
   assert.equal(getRepositories(), repos);
+  clearRepositories();
+  assert.throws(() => getRepositories(), /not initialised/i);
 });
