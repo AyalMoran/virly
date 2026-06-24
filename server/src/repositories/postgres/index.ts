@@ -8,6 +8,7 @@ import { postgresTransactionRepository } from "./transaction.repository.js";
 import { postgresPersonalDetailsRepository } from "./personalDetails.repository.js";
 import { postgresExchangeRateRepository } from "./exchangeRate.repository.js";
 import { postgresAiConversationRepository } from "./aiConversation.repository.js";
+import { postgresAiPendingTransferRepository } from "./aiPendingTransfer.repository.js";
 
 // Stub — Task 5+ fill in the real per-entity repos.
 export function createPostgresRepositories(_db?: PgDatabase): Repositories {
@@ -17,7 +18,7 @@ export function createPostgresRepositories(_db?: PgDatabase): Repositories {
     personalDetails: postgresPersonalDetailsRepository,
     exchangeRates: postgresExchangeRateRepository,
     aiConversations: postgresAiConversationRepository,
-    aiPendingTransfers: {} as Repositories["aiPendingTransfers"],
+    aiPendingTransfers: postgresAiPendingTransferRepository,
     aiAuditLogs: {} as Repositories["aiAuditLogs"],
     videoSessions: {} as Repositories["videoSessions"],
     videoAuditLogs: {} as Repositories["videoAuditLogs"],
