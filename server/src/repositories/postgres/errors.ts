@@ -3,9 +3,16 @@
 
 // src/repositories/postgres/errors.ts
 import { DuplicateKeyError } from "../types.js";
+
+function isPg23505(e: unknown): boolean {
+  if (!e || typeof e !== "object") return false;
+  if ((e as { code?: string }).code === "23505") return true;
+  // Drizzle wraps the pg error: check cause
+  const cause = (e as { cause?: unknown }).cause;
+  return cause !== undefined && isPg23505(cause);
+}
+
 export function mapPgError(e: unknown, key: string): never {
-  if (e && typeof e === "object" && (e as { code?: string }).code === "23505") {
-    throw new DuplicateKeyError(key);
-  }
+  if (isPg23505(e)) throw new DuplicateKeyError(key);
   throw e;
 }
