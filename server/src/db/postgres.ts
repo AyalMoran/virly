@@ -15,7 +15,10 @@ let db: PgDatabase | null = null;
 
 export function getPgDb(): PgDatabase {
   if (db) return db;
-  const url = config.postgresUrl;
+  // Read the live env var first so a late-set VIRLY_POSTGRES_URL (e.g. the
+  // contract harness sets it at runtime, after config.ts froze its snapshot)
+  // is honoured; fall back to the config snapshot (which also resolves aliases).
+  const url = process.env.VIRLY_POSTGRES_URL ?? config.postgresUrl;
   if (!url) throw new Error("VIRLY_POSTGRES_URL is required to use the postgres driver.");
   pool = new pg.Pool({ connectionString: url });
   db = drizzle(pool, { schema });
