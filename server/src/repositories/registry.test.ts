@@ -12,8 +12,12 @@ test("createRepositories('mongo') returns a full Repositories object", () => {
   assert.equal(typeof repos.runInTransaction, "function");
 });
 
-test("createRepositories('postgres') throws until Plan 2", () => {
-  assert.throws(() => createRepositories("postgres"), /not implemented/i);
+test("createRepositories('postgres') returns a full Repositories object", () => {
+  // The postgres repos are static objects that lazily resolve `getPgDb()` only at
+  // query time, so construction needs no DB connection or VIRLY_POSTGRES_URL.
+  const repos = createRepositories("postgres");
+  assert.equal(typeof repos.users.findById, "function");
+  assert.equal(typeof repos.runInTransaction, "function");
 });
 
 test("getRepositories throws before setRepositories", async () => {
