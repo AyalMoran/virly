@@ -41,7 +41,7 @@ Virly is a React + Express monorepo that looks and behaves like a modern fintech
 |---|---|
 | Frontend | React 19, TypeScript, Vite, Framer Motion, Tailwind CSS |
 | Backend | Node.js, Express, TypeScript |
-| Database | MongoDB + Mongoose |
+| Database | MongoDB + Mongoose (default); PostgreSQL + Drizzle (opt-in, Phase 1) |
 | AI | LangGraph (JS), LangChain OpenAI, Zod |
 | Auth | HttpOnly JWT cookies, CSRF tokens |
 | Email | Resend |
@@ -94,6 +94,56 @@ npm run dev:client
 npm run seed:personal-details   # fills display names
 npm run seed:transactions       # generates sample ledger entries
 ```
+
+---
+
+## Database driver: MongoDB → PostgreSQL (Phase 1)
+
+All data access goes through a repository seam, so the backing store is selected
+at boot by `VIRLY_DB_DRIVER` (`mongo`, the default, or `postgres`). The two
+drivers are behaviourally equivalent — proven by a contract test suite that runs
+every repository case against **both** real databases.
+
+**Phase-1 hybrid:** even in postgres mode the app still connects to Mongo, because
+the LangGraph checkpointer/store remain on Mongo. Only the application
+repositories move to Postgres. Postgres has no native TTL, so a sweeper deletes
+expired `ai_conversations`/`ai_pending_transfers` (replacing the Mongo `expires`
+indexes); active-row queries already filter `expires_at > now()`.
+
+### Run the tests against real databases
+
+```bash
+docker compose -f docker-compose.test.yml up -d   # postgres:5433, mongo:27018
+CONTRACT_PG_URL=postgres://virly:virly@localhost:5433/virly \
+CONTRACT_MONGO_URL="mongodb://localhost:27018/virly_contract?directConnection=true" \
+  npm run test:contract --workspace server
+```
+
+The contract suite self-skips a driver when its `CONTRACT_*` URL is unset, so the
+default `npm test` stays green with no database. Note: the dockerised single-node
+replica set advertises its container host, so connect from the host with
+`?directConnection=true` (not `?replicaSet=rs0`).
+
+### Cutover runbook (Mongo → Postgres)
+
+1. Provision Postgres and set `VIRLY_POSTGRES_URL`.
+2. `npm run db:migrate --workspace server` — apply the Drizzle schema.
+3. During a brief write-freeze window:
+   `tsx scripts/sync-mongo-to-postgres.ts` (run from `server/`) — copies every
+   collection (idempotent upsert by `id`).
+4. `tsx scripts/verify-parity.ts` — must report **all entities match** (it exits
+   non-zero on any count/checksum mismatch).
+5. Set `VIRLY_DB_DRIVER=postgres` and restart. Migrations run automatically at
+   boot and the TTL sweeper starts.
+
+### Rollback (Postgres → Mongo)
+
+1. During a write-freeze window: `tsx scripts/sync-postgres-to-mongo.ts` — copies
+   every table back to Mongo (idempotent upsert by `_id`, preserves timestamps).
+2. `tsx scripts/verify-parity.ts` — confirm all entities match.
+3. Set `VIRLY_DB_DRIVER=mongo` (or unset it) and restart.
+
+LangGraph is unaffected by either direction — it always uses Mongo.
 
 ---
 
