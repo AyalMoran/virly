@@ -22,29 +22,39 @@ export function describeContract(name: string, cases: Record<string, ContractCas
   const pgUrl = process.env.CONTRACT_PG_URL;
   test(`[postgres] ${name}`, { skip: pgUrl ? false : "set CONTRACT_PG_URL to run" }, async (t) => {
     process.env.VIRLY_POSTGRES_URL = pgUrl;
-    await runPgMigrations();
-    const db = getPgDb();
-    const repos = createPostgresRepositories(db);
-    for (const [label, fn] of Object.entries(cases)) {
-      await t.test(label, async (st) => {
-        await db.execute(`TRUNCATE ${PG_TABLES.join(", ")} CASCADE`);
-        await fn({ repos }, st);
-      });
+    try {
+      await runPgMigrations();
+      const db = getPgDb();
+      const repos = createPostgresRepositories(db);
+      for (const [label, fn] of Object.entries(cases)) {
+        await t.test(label, async (st) => {
+          await db.execute(`TRUNCATE ${PG_TABLES.join(", ")} CASCADE`);
+          await fn({ repos }, st);
+        });
+      }
+    } finally {
+      await closePgPool();
     }
-    await closePgPool();
   });
 
   // ---- Mongo driver ----
   const mongoUrl = process.env.CONTRACT_MONGO_URL;
   test(`[mongo] ${name}`, { skip: mongoUrl ? false : "set CONTRACT_MONGO_URL to run" }, async (t) => {
-    await mongoose.connect(mongoUrl!);
-    const repos = createMongoRepositories();
-    for (const [label, fn] of Object.entries(cases)) {
-      await t.test(label, async (st) => {
-        await mongoose.connection.dropDatabase();
-        await fn({ repos }, st);
-      });
+    try {
+      await mongoose.connect(mongoUrl!);
+      const repos = createMongoRepositories();
+      for (const [label, fn] of Object.entries(cases)) {
+        await t.test(label, async (st) => {
+          await mongoose.connection.dropDatabase();
+          // dropDatabase removes indexes too; rebuild them so unique
+          // constraints (e.g. users.email) are enforced like Postgres'
+          // TRUNCATE keeps the schema's indexes.
+          await mongoose.connection.syncIndexes();
+          await fn({ repos }, st);
+        });
+      }
+    } finally {
+      await mongoose.disconnect();
     }
-    await mongoose.disconnect();
   });
 }
