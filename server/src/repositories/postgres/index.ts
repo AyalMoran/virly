@@ -11,8 +11,9 @@ import { postgresAiConversationRepository } from "./aiConversation.repository.js
 import { postgresAiPendingTransferRepository } from "./aiPendingTransfer.repository.js";
 import { postgresAiAuditLogRepository } from "./aiAuditLog.repository.js";
 import { postgresVideoSessionRepository } from "./videoSession.repository.js";
+import { postgresVideoAuditLogRepository } from "./videoAuditLog.repository.js";
 
-// Stub — Task 5+ fill in the real per-entity repos.
+/** Build the full Postgres-backed {@link Repositories} (all 9 entities). */
 export function createPostgresRepositories(_db?: PgDatabase): Repositories {
   return {
     users: postgresUserRepository,
@@ -23,7 +24,7 @@ export function createPostgresRepositories(_db?: PgDatabase): Repositories {
     aiPendingTransfers: postgresAiPendingTransferRepository,
     aiAuditLogs: postgresAiAuditLogRepository,
     videoSessions: postgresVideoSessionRepository,
-    videoAuditLogs: {} as Repositories["videoAuditLogs"],
+    videoAuditLogs: postgresVideoAuditLogRepository,
     runInTransaction
   };
 }
