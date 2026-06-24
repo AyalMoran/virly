@@ -140,6 +140,24 @@ describeContract("TransactionRepository", {
     assert.equal(results[0].reason, "Hello World");
   },
 
+  "listForOwnerFiltered reasonContains treats %/_ as literals (ILIKE escaping)": async ({ repos }) => {
+    const ownerId = "0000000000000000000000f0";
+    await repos.transactions.createMany([
+      { ownerId, counterpartyEmail: "a@x.com", amount: 10, type: "debit", directionLabel: "sent", reason: "10% discount" },
+      { ownerId, counterpartyEmail: "a@x.com", amount: 20, type: "debit", directionLabel: "sent", reason: "100 discount" },
+      { ownerId, counterpartyEmail: "a@x.com", amount: 30, type: "debit", directionLabel: "sent", reason: "a_b code" },
+      { ownerId, counterpartyEmail: "a@x.com", amount: 40, type: "debit", directionLabel: "sent", reason: "axb code" }
+    ]);
+
+    // '%' is a literal here, not a wildcard: matches only "10% discount", not "100 discount".
+    const pct = await repos.transactions.listForOwnerFiltered({ ownerId, reasonContains: "10%", limit: 10 });
+    assert.deepEqual(pct.map((r) => r.reason).sort(), ["10% discount"]);
+
+    // '_' is a literal, not a single-char wildcard: matches only "a_b code", not "axb code".
+    const und = await repos.transactions.listForOwnerFiltered({ ownerId, reasonContains: "a_b", limit: 10 });
+    assert.deepEqual(und.map((r) => r.reason).sort(), ["a_b code"]);
+  },
+
   "listForOwnerFiltered dateFrom is inclusive, dateTo is exclusive": async ({ repos }) => {
     const ownerId = OWNER["G"];
     await repos.transactions.createMany([

@@ -2,7 +2,7 @@
 // Created: 2026-06-24
 
 // src/repositories/postgres/transaction.repository.ts
-import { eq, and, gte, lt, lte, sql, desc, asc, inArray } from "drizzle-orm";
+import { eq, and, gte, lt, lte, sql, desc, asc } from "drizzle-orm";
 import { transactions } from "./schema.js";
 import { asPgTx } from "./transaction.js";
 import { newObjectId, isObjectIdHex } from "./id.js";
@@ -84,10 +84,10 @@ export const postgresTransactionRepository: TransactionRepository = {
       ? and(eq(transactions.ownerId, ownerId), eq(transactions.counterpartyEmail, counterpartyEmail))
       : eq(transactions.ownerId, ownerId);
 
-    // Sequential queries to avoid any potential connection pool issues
+    // Sequential queries (rows page + DB-side COUNT(*), like Mongo's countDocuments).
     const rows = await db.select().from(transactions).where(rowsWhere).orderBy(desc(transactions.createdAt)).offset(skip).limit(limit);
-    const allIds = await db.select({ id: transactions.id }).from(transactions).where(countWhere);
-    const total = allIds.length;
+    const [counted] = await db.select({ total: sql<number>`count(*)::int` }).from(transactions).where(countWhere);
+    const total = Number(counted?.total ?? 0);
 
     return { transactions: rows.map(toRecord), total };
   },
