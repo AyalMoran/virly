@@ -16,7 +16,8 @@ docs
 
 # LangGraph API
 .langgraph_api
-
+.instance
+.claude
 
 scripts/fill-personal-details.api.js
 
