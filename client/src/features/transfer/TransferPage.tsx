@@ -20,7 +20,6 @@ import {
   convertIlsForDisplay,
   isDisplayCurrency
 } from "../../lib/currency";
-import { amountInWords } from "../../lib/amount-words";
 import { formatCurrency } from "../../lib/format";
 import type {
   AccountSummary,
@@ -34,6 +33,7 @@ import {
   validateReason
 } from "../../lib/validation";
 import { TransferQuoteSmallPrint } from "./TransferQuoteSmallPrint";
+import { TransferCheque } from "../../components/TransferCheque";
 
 type TransferErrors = {
   recipientEmail?: string;
@@ -41,27 +41,6 @@ type TransferErrors = {
   reason?: string;
   form?: string;
 };
-
-const CURRENCY_WORD: Record<DisplayCurrency, string> = {
-  ILS: "Shekels",
-  USD: "Dollars",
-  EUR: "Euros"
-};
-const CURRENCY_GLYPH: Record<DisplayCurrency, string> = { ILS: "₪", USD: "$", EUR: "€" };
-
-/** Best-effort human name from an email local-part, for the signature line. */
-function signatureName(email?: string | null): string {
-  if (!email) {
-    return "Virly Account";
-  }
-  const pretty = email
-    .split("@")[0]
-    .split(/[._-]+/)
-    .filter(Boolean)
-    .map((part) => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(" ");
-  return pretty || email;
-}
 
 export function TransferPage() {
   const auth = useAuth();
@@ -282,174 +261,31 @@ export function TransferPage() {
       }).format(new Date()),
     []
   );
-  const holderName = signatureName(auth.user?.email);
 
   const payee = (isSuccess ? result?.transaction.counterpartyEmail ?? recipientEmail : recipientEmail)
     .trim()
     .toLowerCase();
-  const hasAmount = amount.trim() !== "" && Number.isFinite(numericAmount) && numericAmount > 0;
-  const words = hasAmount ? amountInWords(numericAmount) : "";
-  const numericFigure = new Intl.NumberFormat("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2
-  }).format(hasAmount ? numericAmount : 0);
 
   const cheque = (
-    <article className="cheque" aria-label="Cheque">
-      <span className="cheque-watermark" aria-hidden="true">V</span>
-      <span className="cheque-guilloche" aria-hidden="true" />
-
-      {isSuccess ? (
-        <motion.span
-          className="cheque-stamp"
-          aria-hidden="true"
-          initial={{ opacity: 0, scale: 1.8, rotate: -24 }}
-          animate={{ opacity: 0.92, scale: 1, rotate: -12 }}
-          transition={{ delay: 0.18, type: "spring", stiffness: 340, damping: 13, mass: 0.7 }}
-        >
-          <span className="cheque-stamp-main">Cleared</span>
-          <span className="cheque-stamp-sub">Virly · Paid</span>
-        </motion.span>
-      ) : null}
-
-      <header className="cheque-head">
-        <div className="cheque-brand">
-          <span className="cheque-logo" aria-hidden="true">V</span>
-          <span className="cheque-brandname">
-            Virly
-            <small>Savings &amp; Trust</small>
-          </span>
-        </div>
-        <div className="cheque-meta">
-          <span className="cheque-no">No. {chequeNumber}</span>
-          <span className="cheque-dateline">
-            <span className="cheque-microlabel">Date</span> {issueDate}
-          </span>
-        </div>
-      </header>
-
-      <div className="cheque-payline">
-        <span className="cheque-microlabel">Pay to the order of</span>
-        <div className="cheque-payfields">
-          {isForm ? (
-            <input
-              className="cheque-input cheque-payee"
-              id="recipientEmail"
-              name="recipientEmail"
-              type="email"
-              aria-label="Recipient email"
-              value={recipientEmail}
-              placeholder="recipient@example.com"
-              aria-invalid={Boolean(errors.recipientEmail)}
-              onChange={(event) => setRecipientEmail(event.target.value)}
-            />
-          ) : (
-            <Link
-              className="cheque-payee cheque-payee-static counterparty-link"
-              to={`/users/${encodeURIComponent(payee)}`}
-            >
-              {payee}
-            </Link>
-          )}
-          <div className={`cheque-amountbox${errors.amount && isForm ? " has-error" : ""}`}>
-            <span className="cheque-amountbox-cur" aria-hidden="true">
-              {CURRENCY_GLYPH[currency]}
-            </span>
-            {isForm ? (
-              <input
-                className="cheque-input cheque-amount-input"
-                id="amount"
-                name="amount"
-                type="number"
-                inputMode="decimal"
-                min="0.01"
-                step="0.01"
-                aria-label={`Amount in ${CURRENCY_WORD[currency]}`}
-                value={amount}
-                placeholder="0.00"
-                aria-invalid={Boolean(errors.amount)}
-                onChange={(event) => setAmount(event.target.value)}
-              />
-            ) : (
-              <span className="cheque-amount-static">{numericFigure}</span>
-            )}
-          </div>
-        </div>
-        {isForm && errors.recipientEmail ? (
-          <span className="cheque-error">{errors.recipientEmail}</span>
-        ) : null}
-        {isForm && errors.amount ? (
-          <span className="cheque-error cheque-error-amount">{errors.amount}</span>
-        ) : null}
-      </div>
-
-      <div className="cheque-words">
-        <span className={words ? "cheque-words-text" : "cheque-words-text is-empty"}>
-          {words || "—"}
-        </span>
-        <span className="cheque-words-rule" aria-hidden="true" />
-        <span className="cheque-words-cur">{CURRENCY_WORD[currency]}</span>
-      </div>
-
-      {isForm ? (
-        <div className="cheque-currency">
-          <label className="cheque-microlabel" htmlFor="transfer-currency">
-            Currency
-          </label>
-          <select
-            id="transfer-currency"
-            name="currency"
-            value={currency}
-            onChange={(event) => {
-              const next = event.target.value;
-              if (isDisplayCurrency(next)) {
-                setCurrency(next);
-                setQuote(null);
-              }
-            }}
-          >
-            {SUPPORTED_DISPLAY_CURRENCIES.map((code) => (
-              <option key={code} value={code}>
-                {CURRENCY_LABELS[code]}
-              </option>
-            ))}
-          </select>
-        </div>
-      ) : null}
-
-      <div className="cheque-foot">
-        <div className="cheque-memo">
-          <span className="cheque-microlabel">Memo</span>
-          {isForm ? (
-            <input
-              className="cheque-input cheque-memo-input"
-              id="reason"
-              name="reason"
-              maxLength={200}
-              aria-label="Memo"
-              value={reason}
-              placeholder="What's it for?"
-              aria-invalid={Boolean(errors.reason)}
-              onChange={(event) => setReason(event.target.value)}
-            />
-          ) : (
-            <span className="cheque-memo-static">{reason.trim() || "—"}</span>
-          )}
-          {isForm && errors.reason ? <span className="cheque-error">{errors.reason}</span> : null}
-        </div>
-        <div className="cheque-sign">
-          <span className={isForm ? "cheque-sign-script is-ghost" : "cheque-sign-script"}>
-            {isForm ? "sign on send" : holderName}
-          </span>
-          <span className="cheque-sign-rule" aria-hidden="true" />
-          <span className="cheque-microlabel">Authorized signature</span>
-        </div>
-      </div>
-
-      <div className="cheque-micr" aria-hidden="true">
-        ⑆012345678⑆ {chequeNumber}⑈ 04⑇
-      </div>
-    </article>
+    <TransferCheque
+      mode={step}
+      chequeNumber={chequeNumber}
+      issueDate={issueDate}
+      holderEmail={auth.user?.email}
+      currency={currency}
+      payee={payee}
+      recipientEmail={recipientEmail}
+      amount={amount}
+      reason={reason}
+      errors={errors}
+      onRecipientEmailChange={setRecipientEmail}
+      onAmountChange={setAmount}
+      onReasonChange={setReason}
+      onCurrencyChange={(next) => {
+        setCurrency(next);
+        setQuote(null);
+      }}
+    />
   );
 
   return (
