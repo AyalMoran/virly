@@ -1,0 +1,15 @@
+
+// src/repositories/postgres/transaction.ts
+import type { TxContext } from "../types.js";
+import { getPgDb, type PgDatabase } from "../../db/postgres.js";
+
+type PgTx = Parameters<Parameters<PgDatabase["transaction"]>[0]>[0];
+
+/** The tx handle if inside a transaction, else the root db (so methods work both ways). */
+export function asPgTx(tx?: TxContext): PgDatabase | PgTx {
+  return (tx as PgTx | undefined) ?? getPgDb();
+}
+
+export async function runInTransaction<T>(fn: (tx: TxContext) => Promise<T>): Promise<T> {
+  return getPgDb().transaction(async (tx) => fn(tx));
+}

@@ -1,41 +1,10 @@
 import { Schema, model } from "mongoose";
 
-const addressSchema = new Schema(
-  {
-    country: {
-      type: String,
-      trim: true,
-      default: null
-    },
-    stateRegion: {
-      type: String,
-      trim: true,
-      default: null
-    },
-    city: {
-      type: String,
-      trim: true,
-      default: null
-    },
-    street: {
-      type: String,
-      trim: true,
-      default: null
-    },
-    addressLine2: {
-      type: String,
-      trim: true,
-      default: null
-    },
-    postalCode: {
-      type: String,
-      trim: true,
-      default: null
-    }
-  },
-  { _id: false }
-);
-
+// Address is stored as a free-form map (Record<string, string | null>) so that
+// the Mongo driver is behaviorally identical to the Postgres jsonb column:
+// exactly the keys written are the keys returned, with no implicit defaults.
+// Callers (service layer, DTOs) always supply the full set of keys they care
+// about, so this change is backwards-compatible with all current call sites.
 const personalDetailsSchema = new Schema(
   {
     userId: {
@@ -66,7 +35,7 @@ const personalDetailsSchema = new Schema(
       default: null
     },
     address: {
-      type: addressSchema,
+      type: Schema.Types.Mixed,
       default: () => ({})
     },
     lastSkippedAt: {

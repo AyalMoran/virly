@@ -71,7 +71,10 @@ const videoAuditLogSchema = new Schema(
     }
   },
   {
-    timestamps: true
+    timestamps: true,
+    // Keep empty objects (e.g. `details: {}`) instead of stripping them, so the
+    // opaque `details` blob round-trips identically to the Postgres `jsonb` column.
+    minimize: false
   }
 );
 

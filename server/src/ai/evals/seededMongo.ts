@@ -8,6 +8,13 @@ import { AiPendingTransfer } from "../../models/AiPendingTransfer.js";
 import { PersonalDetails } from "../../models/PersonalDetails.js";
 import { Transaction } from "../../models/Transaction.js";
 import { User } from "../../models/User.js";
+import { createMongoRepositories } from "../../repositories/mongo/index.js";
+import {
+  clearRepositories,
+  getRepositories,
+  setRepositories,
+  type Repositories
+} from "../../repositories/index.js";
 import { mongoConversationStore } from "../../services/aiConversation.service.js";
 import { loadAiEvalFixtureFiles } from "./loadFixtures.js";
 import {
@@ -63,6 +70,20 @@ function isSeededMongoEvalEnabled() {
 
 function shouldKeepSeededMongoAfterRun() {
   return process.env.VIRLY_AI_EVAL_KEEP_MONGO?.trim().toLowerCase() === "true";
+}
+
+function getCurrentRepositories(): Repositories | null {
+  try {
+    return getRepositories();
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      /Repositories not initialised/i.test(error.message)
+    ) {
+      return null;
+    }
+    throw error;
+  }
 }
 
 export function buildSeededMongoEvalSeedData(): SeededMongoEvalSeedData {
@@ -449,8 +470,10 @@ export async function runSeededMongoEvalFixtures(options: {
   let totalScenarios = 0;
   let totalTurns = 0;
   const mode = options.mode ?? "seeded-mongo";
+  const previousRepositories = getCurrentRepositories();
 
   await mongoose.connect(mongoUri);
+  setRepositories(createMongoRepositories());
 
   try {
     await mongoose.connection.dropDatabase();
@@ -507,7 +530,15 @@ export async function runSeededMongoEvalFixtures(options: {
         await mongoose.connection.dropDatabase();
       }
     } finally {
-      await mongoose.disconnect();
+      try {
+        if (previousRepositories) {
+          setRepositories(previousRepositories);
+        } else {
+          clearRepositories();
+        }
+      } finally {
+        await mongoose.disconnect();
+      }
     }
   }
 
