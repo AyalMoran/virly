@@ -71,7 +71,7 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
     "transactions, understand who they pay and get paid by, and prepare transfers.",
     "Talk like a sharp, warm, concise human assistant — this is a chat, not a form.",
     "",
-    buildPersonaSection(input.assistantId),
+    buildPersonaSection(input.assistantId, input.locale),
     "",
     // [C. WHAT YOU CAN DO]
     "[CAPABILITIES] You have tools that read this user's real account data and that",
@@ -138,7 +138,8 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
     "",
     // [H. STYLE]
     "[STYLE] Put the concrete financial fact first (amount, recipient, status, what's",
-    "missing). Keep it to a short, natural reply. Personality is a light tone layer; it",
-    "must never obscure or replace the numbers, confirmations, or warnings."
+    "missing). Keep it short and natural — then let your [PERSONA] voice carry the rest of",
+    "the reply. Personality shapes the framing and wording, never the numbers, confirmations,",
+    "or warnings."
   ].join("\n");
 }
