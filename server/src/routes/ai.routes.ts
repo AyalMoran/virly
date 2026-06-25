@@ -23,6 +23,7 @@ import {
   respondToAiPendingTransfer
 } from "../services/aiPendingTransfer.service.js";
 import { createVideoSession } from "../services/videoSession.service.js";
+import { AppError } from "../utils/app-error.js";
 
 const router = Router();
 const assistantLlmProvider = createConfiguredAssistantLlmProvider();
@@ -231,9 +232,16 @@ router.post("/chat/stream", requireAuth, async (req, res, next) => {
       return;
     }
 
+    // Headers are already sent, so the central error handler can't run here.
+    // Surface only deliberate AppError messages; mask everything else and log
+    // it server-side so internals don't leak into the stream.
+    if (!(error instanceof AppError)) {
+      console.error("[ai.routes] /chat/stream error after headers sent:", error);
+    }
     writeSseEvent(res, "error", {
       type: "error",
-      message: error instanceof Error ? error.message : "Streaming request failed."
+      message:
+        error instanceof AppError ? error.message : "Streaming request failed."
     });
     res.end();
   }
@@ -269,8 +277,15 @@ router.post("/confirmations/:id", requireAuth, async (req, res, next) => {
           if (resumed) {
             return res.json(resumed);
           }
-        } catch {
-          // No resumable checkpoint for this card — fall through to the service.
+        } catch (error) {
+          // resumeV2Confirmation throws when there is no resumable checkpoint
+          // for this card (expected) — fall through to the direct service path,
+          // which enforces its own version/idempotency guards. Log so a genuine
+          // resume failure is not silently swallowed.
+          console.error(
+            "[ai.routes] resumeV2Confirmation failed; falling back to service:",
+            error
+          );
         }
       }
     }
