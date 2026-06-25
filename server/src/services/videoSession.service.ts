@@ -1,13 +1,15 @@
 import { randomBytes, randomUUID } from "crypto";
-import type { Types } from "mongoose";
 import { config } from "../config.js";
+import { AppError } from "../utils/app-error.js";
 import {
-  VideoSession,
+  type PublicUserRecord,
+  type UserRole,
   type VideoSessionSource,
   type VideoSessionStatus,
-  type VideoSessionType
-} from "../models/VideoSession.js";
-import { User, type UserRole } from "../models/User.js";
+  type VideoSessionType,
+  type VideoSessionRecord
+} from "../repositories/types.js";
+import { getRepositories } from "../repositories/index.js";
 import {
   createVideoJoinConfig,
   type VideoJoinConfig
@@ -15,18 +17,23 @@ import {
 import { writeVideoAuditLog } from "./videoAuditLog.service.js";
 import { getAllowedVideoSessionTypes } from "../middleware/roles.js";
 
-export type VideoSessionDocument = InstanceType<typeof VideoSession>;
-type UserDocument = InstanceType<typeof User>;
+/** @deprecated Use VideoSessionRecord. Kept for backward-compatibility with callers. */
+export type VideoSessionDocument = VideoSessionRecord;
 
-export class VideoSessionServiceError extends Error {
-  readonly status: number;
+export class VideoSessionServiceError extends AppError {
   readonly error: string;
 
   constructor(status: number, message: string, error: string) {
-    super(message);
+    super(status, message);
     this.name = "VideoSessionServiceError";
-    this.status = status;
     this.error = error;
+  }
+
+  override toResponseBody(): Record<string, unknown> {
+    return {
+      message: this.message,
+      error: this.error
+    };
   }
 }
 
@@ -86,7 +93,7 @@ function sameId(a: unknown, b: unknown) {
   return String(a) === String(b);
 }
 
-function getRole(user: UserDocument | null | undefined): UserRole {
+function getRole(user: PublicUserRecord | null | undefined): UserRole {
   return (user?.role ?? "user") as UserRole;
 }
 
@@ -108,8 +115,8 @@ function maskEmail(email: string) {
   return `${visible}${"*".repeat(Math.max(2, name.length - visible.length))}@${domain}`;
 }
 
-async function getActor(actorId: string) {
-  const user = await User.findById(actorId);
+async function getActor(actorId: string): Promise<PublicUserRecord> {
+  const user = await getRepositories().users.findByIdSafe(actorId);
   if (!user) {
     throw new VideoSessionServiceError(404, "Actor not found.", "actor_not_found");
   }
@@ -117,8 +124,8 @@ async function getActor(actorId: string) {
   return user;
 }
 
-async function getSession(sessionId: string) {
-  const session = await VideoSession.findById(sessionId);
+async function getSession(sessionId: string): Promise<VideoSessionRecord> {
+  const session = await getRepositories().videoSessions.findById(sessionId);
   if (!session) {
     throw new VideoSessionServiceError(404, "Video session not found.", "session_not_found");
   }
@@ -138,15 +145,15 @@ function ensureAgentCanHandle(role: UserRole, type: VideoSessionType) {
 }
 
 function ensureAgentCanJoinAssignedSession(
-  actor: UserDocument,
-  session: VideoSessionDocument
+  actor: PublicUserRecord,
+  session: VideoSessionRecord
 ) {
   const role = getRole(actor);
   ensureAgentCanHandle(role, session.type as VideoSessionType);
 
   if (
     session.assignedAgentId &&
-    !sameId(session.assignedAgentId, actor._id) &&
+    !sameId(session.assignedAgentId, actor.id) &&
     !isManagerRole(role)
   ) {
     throw new VideoSessionServiceError(
@@ -157,7 +164,7 @@ function ensureAgentCanJoinAssignedSession(
   }
 }
 
-export function toVideoSessionDto(session: VideoSessionDocument) {
+export function toVideoSessionDto(session: VideoSessionRecord) {
   return {
     id: session.id,
     type: session.type as VideoSessionType,
@@ -177,16 +184,21 @@ export function toVideoSessionDto(session: VideoSessionDocument) {
   };
 }
 
-export async function createVideoSession(input: CreateVideoSessionInput) {
+export async function createVideoSession(input: CreateVideoSessionInput): Promise<VideoSessionRecord> {
   const user = await getActor(input.userId);
-  const session = await VideoSession.create({
-    userId: user._id,
+  const session = await getRepositories().videoSessions.create({
+    userId: user.id,
+    assignedAgentId: null,
     type: input.type,
     status: "waiting_for_agent",
     roomName: createOpaqueRoomName(input.type),
     provider: config.video.provider,
     topic: normalizeNullableText(input.topic),
     userProblemSummary: normalizeNullableText(input.userProblemSummary),
+    startedAt: null,
+    endedAt: null,
+    userJoinedAt: null,
+    agentJoinedAt: null,
     metadata: {
       userAgent: input.metadata?.userAgent ?? null,
       locale: input.metadata?.locale ?? null,
@@ -196,10 +208,10 @@ export async function createVideoSession(input: CreateVideoSessionInput) {
 
   await writeVideoAuditLog({
     event: "video_session_created",
-    actorId: user._id as Types.ObjectId,
+    actorId: user.id,
     actorRole: getRole(user),
-    targetUserId: user._id as Types.ObjectId,
-    videoSessionId: session._id as Types.ObjectId,
+    targetUserId: user.id,
+    videoSessionId: session.id,
     sessionType: input.type,
     ipAddress: input.metadata?.ipAddress,
     userAgent: input.metadata?.userAgent,
@@ -212,7 +224,7 @@ export async function createVideoSession(input: CreateVideoSessionInput) {
   return session;
 }
 
-export async function getOwnVideoSession(userId: string, sessionId: string) {
+export async function getOwnVideoSession(userId: string, sessionId: string): Promise<VideoSessionRecord> {
   const session = await getSession(sessionId);
   if (!sameId(session.userId, userId)) {
     throw new VideoSessionServiceError(
@@ -227,9 +239,9 @@ export async function getOwnVideoSession(userId: string, sessionId: string) {
 
 export async function issueVideoJoinConfig(
   input: IssueJoinConfigInput
-): Promise<{ session: VideoSessionDocument; jitsi: VideoJoinConfig }> {
+): Promise<{ session: VideoSessionRecord; jitsi: VideoJoinConfig }> {
   const actor = await getActor(input.actorId);
-  const session = await getSession(input.sessionId);
+  let session = await getSession(input.sessionId);
   const actorRole = getRole(actor);
 
   if (isTerminalStatus(session.status as VideoSessionStatus)) {
@@ -241,7 +253,7 @@ export async function issueVideoJoinConfig(
   }
 
   if (input.actorKind === "user") {
-    if (!sameId(session.userId, actor._id)) {
+    if (!sameId(session.userId, actor.id)) {
       throw new VideoSessionServiceError(
         404,
         "Video session not found.",
@@ -250,14 +262,15 @@ export async function issueVideoJoinConfig(
     }
 
     if (!session.userJoinedAt) {
-      session.userJoinedAt = new Date();
-      await session.save();
+      session = (await getRepositories().videoSessions.update(session.id, {
+        userJoinedAt: new Date()
+      })) ?? session;
       await writeVideoAuditLog({
         event: "video_session_user_joined",
-        actorId: actor._id as Types.ObjectId,
+        actorId: actor.id,
         actorRole,
-        targetUserId: session.userId as Types.ObjectId,
-        videoSessionId: session._id as Types.ObjectId,
+        targetUserId: session.userId,
+        videoSessionId: session.id,
         sessionType: session.type as VideoSessionType,
         ipAddress: input.metadata?.ipAddress,
         userAgent: input.metadata?.userAgent
@@ -265,25 +278,18 @@ export async function issueVideoJoinConfig(
     }
   } else {
     ensureAgentCanJoinAssignedSession(actor, session);
-    if (!session.assignedAgentId) {
-      session.assignedAgentId = actor._id;
-    }
-
     const now = new Date();
-    if (!session.agentJoinedAt) {
-      session.agentJoinedAt = now;
-    }
-    if (!session.startedAt) {
-      session.startedAt = now;
-    }
-    session.status = "active";
-    await session.save();
+    const patch: Partial<VideoSessionRecord> = { status: "active" };
+    if (!session.assignedAgentId) patch.assignedAgentId = actor.id;
+    if (!session.agentJoinedAt) patch.agentJoinedAt = now;
+    if (!session.startedAt) patch.startedAt = now;
+    session = (await getRepositories().videoSessions.update(session.id, patch)) ?? session;
     await writeVideoAuditLog({
       event: "video_session_agent_joined",
-      actorId: actor._id as Types.ObjectId,
+      actorId: actor.id,
       actorRole,
-      targetUserId: session.userId as Types.ObjectId,
-      videoSessionId: session._id as Types.ObjectId,
+      targetUserId: session.userId,
+      videoSessionId: session.id,
       sessionType: session.type as VideoSessionType,
       ipAddress: input.metadata?.ipAddress,
       userAgent: input.metadata?.userAgent
@@ -292,10 +298,10 @@ export async function issueVideoJoinConfig(
 
   await writeVideoAuditLog({
     event: "video_session_join_token_issued",
-    actorId: actor._id as Types.ObjectId,
+    actorId: actor.id,
     actorRole,
-    targetUserId: session.userId as Types.ObjectId,
-    videoSessionId: session._id as Types.ObjectId,
+    targetUserId: session.userId,
+    videoSessionId: session.id,
     sessionType: session.type as VideoSessionType,
     ipAddress: input.metadata?.ipAddress,
     userAgent: input.metadata?.userAgent,
@@ -319,13 +325,13 @@ export async function issueVideoJoinConfig(
   };
 }
 
-export async function endVideoSession(input: EndVideoSessionInput) {
+export async function endVideoSession(input: EndVideoSessionInput): Promise<VideoSessionRecord> {
   const actor = await getActor(input.actorId);
-  const session = await getSession(input.sessionId);
+  let session = await getSession(input.sessionId);
   const actorRole = getRole(actor);
 
   if (input.actorKind === "user") {
-    if (!sameId(session.userId, actor._id)) {
+    if (!sameId(session.userId, actor.id)) {
       throw new VideoSessionServiceError(
         404,
         "Video session not found.",
@@ -337,18 +343,20 @@ export async function endVideoSession(input: EndVideoSessionInput) {
   }
 
   if (!isTerminalStatus(session.status as VideoSessionStatus)) {
-    session.status =
+    const newStatus: VideoSessionStatus =
       input.actorKind === "user" && session.status !== "active" ? "cancelled" : "ended";
-    session.endedAt = new Date();
-    await session.save();
+    session = (await getRepositories().videoSessions.update(session.id, {
+      status: newStatus,
+      endedAt: new Date()
+    })) ?? session;
     await writeVideoAuditLog({
-      event: session.status === "cancelled"
+      event: newStatus === "cancelled"
         ? "video_session_cancelled"
         : "video_session_ended",
-      actorId: actor._id as Types.ObjectId,
+      actorId: actor.id,
       actorRole,
-      targetUserId: session.userId as Types.ObjectId,
-      videoSessionId: session._id as Types.ObjectId,
+      targetUserId: session.userId,
+      videoSessionId: session.id,
       sessionType: session.type as VideoSessionType,
       ipAddress: input.metadata?.ipAddress,
       userAgent: input.metadata?.userAgent,
@@ -379,38 +387,40 @@ export async function listAgentVideoSessions(input: ListAgentSessionsInput) {
     ensureAgentCanHandle(actorRole, input.type);
   }
 
-  const sessions = await VideoSession.find({
-    type: input.type ?? { $in: allowedTypes },
-    ...(input.status ? { status: input.status } : {})
-  })
-    .sort({ createdAt: -1 })
-    .limit(50);
-  const users = await User.find({
-    _id: { $in: sessions.map((session) => session.userId) }
-  }).select("email");
-  const userById = new Map(users.map((user) => [String(user._id), user]));
+  // Single query reproducing the original: type ?? $in(allowedTypes), optional
+  // exact status (any status, including terminal), newest-first, capped at 50.
+  const typesToFetch = input.type ? [input.type] : allowedTypes;
+  const sessions = await getRepositories().videoSessions.listForAgentQueue({
+    types: typesToFetch,
+    status: input.status,
+    limit: 50
+  });
+
+  const userIds = [...new Set(sessions.map((s) => s.userId))];
+  const users = await getRepositories().users.findManyByIds(userIds);
+  const emailById = new Map(users.map((u) => [u.id, u.email]));
 
   return sessions.map((session) => {
-    const user = userById.get(String(session.userId));
+    const email = emailById.get(String(session.userId));
     return {
       ...toVideoSessionDto(session),
       user: {
         id: String(session.userId),
-        emailMasked: user?.email ? maskEmail(user.email) : null
+        emailMasked: email ? maskEmail(email) : null
       }
     };
   });
 }
 
-export async function assignVideoSessionToAgent(input: AssignAgentSessionInput) {
+export async function assignVideoSessionToAgent(input: AssignAgentSessionInput): Promise<VideoSessionRecord> {
   const actor = await getActor(input.actorId);
-  const session = await getSession(input.sessionId);
+  let session = await getSession(input.sessionId);
   const actorRole = getRole(actor);
 
   ensureAgentCanHandle(actorRole, session.type as VideoSessionType);
   if (
     session.assignedAgentId &&
-    !sameId(session.assignedAgentId, actor._id) &&
+    !sameId(session.assignedAgentId, actor.id) &&
     !isManagerRole(actorRole)
   ) {
     throw new VideoSessionServiceError(
@@ -420,17 +430,16 @@ export async function assignVideoSessionToAgent(input: AssignAgentSessionInput) 
     );
   }
 
-  session.assignedAgentId = actor._id;
-  if (session.status === "requested") {
-    session.status = "waiting_for_agent";
-  }
-  await session.save();
+  const patch: Partial<VideoSessionRecord> = { assignedAgentId: actor.id };
+  if (session.status === "requested") patch.status = "waiting_for_agent";
+  session = (await getRepositories().videoSessions.update(session.id, patch)) ?? session;
+
   await writeVideoAuditLog({
     event: "video_session_assigned",
-    actorId: actor._id as Types.ObjectId,
+    actorId: actor.id,
     actorRole,
-    targetUserId: session.userId as Types.ObjectId,
-    videoSessionId: session._id as Types.ObjectId,
+    targetUserId: session.userId,
+    videoSessionId: session.id,
     sessionType: session.type as VideoSessionType,
     ipAddress: input.metadata?.ipAddress,
     userAgent: input.metadata?.userAgent

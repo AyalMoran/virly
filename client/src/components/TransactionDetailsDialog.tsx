@@ -1,10 +1,8 @@
 import { useEffect, useRef } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 
-import { useCurrency } from "../features/currency/CurrencyProvider";
-import { formatDate } from "../lib/format";
 import type { Transaction } from "../lib/types";
-import { OrderConfirmationCard } from "./ui/order-confirmation-card";
+import { TransactionReceipt } from "./TransactionReceipt";
 
 const FOCUSABLE_SELECTOR =
   'a[href], button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
@@ -16,7 +14,6 @@ export function TransactionDetailsDialog({
   transaction: Transaction | null;
   onClose: () => void;
 }) {
-  const { formatAmount } = useCurrency();
   const dialogRef = useRef<HTMLDivElement>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
 
@@ -99,22 +96,13 @@ export function TransactionDetailsDialog({
             aria-modal="true"
             aria-label="Transaction details"
             tabIndex={-1}
-            initial={{ opacity: 0, y: 18, scale: 0.96, filter: "blur(6px)" }}
-            animate={{ opacity: 1, y: 0, scale: 1, filter: "blur(0px)" }}
-            exit={{ opacity: 0, y: 12, scale: 0.96, filter: "blur(6px)" }}
-            transition={{ duration: 0.28, ease: [0.16, 1, 0.3, 1] }}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 10, scale: 0.985 }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
             onClick={(event) => event.stopPropagation()}
           >
-            <OrderConfirmationCard
-              orderId={transaction.id}
-              paymentMethod={transaction.counterpartyEmail}
-              reason={transaction.reason}
-              dateTime={formatDate(transaction.date)}
-              totalAmount={`${transaction.amount > 0 ? "+" : ""}${formatAmount(
-                transaction.amount,
-              )}`}
-              onGoToAccount={onClose}
-            />
+            <TransactionReceipt transaction={transaction} onClose={onClose} />
           </motion.div>
         </motion.div>
       ) : null}

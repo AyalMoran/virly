@@ -1,5 +1,4 @@
-import { PersonalDetails } from "../../models/PersonalDetails.js";
-import { User } from "../../models/User.js";
+import { getRepositories } from "../../repositories/index.js";
 import {
   buildCounterpartyUserLabel,
   maskEmail
@@ -34,24 +33,13 @@ export async function getCounterpartyDisplays(
   emails: string[]
 ): Promise<Map<string, CounterpartyDisplay>> {
   const uniqueEmails = [...new Set(emails.map(normalizeCounterpartyEmail))];
-  const users = await User.find({ email: { $in: uniqueEmails } })
-    .select("email")
-    .lean<Array<{ _id: unknown; email: string }>>();
+  const users = await getRepositories().users.findByEmails(uniqueEmails);
   const userIdByEmail = new Map(
-    users.map((user) => [normalizeCounterpartyEmail(user.email), String(user._id)])
+    users.map((user) => [normalizeCounterpartyEmail(user.email), user.id])
   );
-  const details = await PersonalDetails.find({
-    userId: { $in: users.map((user) => user._id) },
-    status: "provided"
-  })
-    .select("userId firstName lastName")
-    .lean<
-      Array<{
-        userId: unknown;
-        firstName?: string | null;
-        lastName?: string | null;
-      }>
-    >();
+  const details = await getRepositories().personalDetails.findProvidedByUserIds(
+    users.map((user) => user.id)
+  );
   const detailsByUserId = new Map(details.map((detail) => [String(detail.userId), detail]));
   const displays = new Map<string, CounterpartyDisplay>();
 

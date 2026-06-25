@@ -1,0 +1,6 @@
+
+
+// src/repositories/postgres/id.ts
+import mongoose from "mongoose";
+export function newObjectId(): string { return new mongoose.Types.ObjectId().toString(); }
+export function isObjectIdHex(id: string): boolean { return /^[0-9a-fA-F]{24}$/.test(id); }

@@ -2,14 +2,22 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
 import express from "express";
-import mongoose from "mongoose";
 import { parseCookies } from "./middleware/cookies.js";
+import { errorHandler } from "./middleware/error-handler.js";
 import { ExchangeRate } from "./models/ExchangeRate.js";
-import { Transaction } from "./models/Transaction.js";
-import { User } from "./models/User.js";
+import { createMongoRepositories } from "./repositories/mongo/index.js";
+import { getRepositories, setRepositories } from "./repositories/index.js";
+import type { Repositories } from "./repositories/types.js";
 import transactionRoutes from "./routes/transaction.routes.js";
 import { utcDateKey } from "./services/fx.service.js";
+import { executeTransfer } from "./services/transfer.service.js";
+import { AppError } from "./utils/app-error.js";
 import { setAuthCookies } from "./utils/session.js";
+
+// Ensure the mongo repository seam is wired so defaultDeps() can resolve
+// getRepositories(). Individual tests then patch ExchangeRate.findOne as before,
+// which flows through the mongoExchangeRateRepository into the service.
+setRepositories(createMongoRepositories());
 
 const senderId = "507f1f77bcf86cd799439011";
 const recipientId = "507f191e810c19729de860ea";
@@ -59,72 +67,67 @@ type MockUserDoc = {
   id: string;
   email: string;
   balance: number;
-  saved: boolean;
-  save: (options?: unknown) => Promise<void>;
 };
 
 function createMockUserDoc(id: string, email: string, balance: number): MockUserDoc {
   return {
     id,
     email,
-    balance,
-    saved: false,
-    async save() {
-      this.saved = true;
-    }
+    balance
   };
 }
 
+/**
+ * Swap the repository seam so the transfer settlement path
+ * (`executeTransfer` → `runInTransaction` → repos) runs against in-memory
+ * mocks. `runInTransaction` runs the body with a dummy tx; `setBalance` mutates
+ * the captured mock docs (so tests can assert final balances), and
+ * `createMany` records the ledger entries it was handed and returns them as
+ * `TransactionRecord`s. Restores the previous repositories on teardown.
+ */
 function patchTransferModels(
   t: test.TestContext,
   sender: MockUserDoc,
   recipient: MockUserDoc
 ) {
-  patchModel(
-    User,
-    "findById",
-    ((id: unknown) => ({
-      session: () => Promise.resolve(String(id) === sender.id ? sender : null)
-    })) as unknown as typeof User.findById,
-    t
-  );
-  patchModel(
-    User,
-    "findOne",
-    ((filter: { email?: string }) => ({
-      session: () =>
-        Promise.resolve(filter.email === recipient.email ? recipient : null)
-    })) as unknown as typeof User.findOne,
-    t
-  );
+  const previous = getRepositories();
+  t.after(() => setRepositories(previous));
 
+  const base = createMongoRepositories();
   const createdDocs: Array<Record<string, unknown>> = [];
-  patchModel(
-    Transaction,
-    "create",
-    (async (docs: Array<Record<string, unknown>>) => {
-      const created = docs.map((doc, index) => ({
-        ...doc,
-        _id: `tx-${index + 1}`,
-        createdAt: new Date("2026-06-11T10:00:00.000Z")
-      }));
-      createdDocs.push(...created);
-      return created;
-    }) as unknown as typeof Transaction.create,
-    t
-  );
 
-  patchModel(
-    mongoose,
-    "startSession",
-    (async () => ({
-      withTransaction: async (fn: () => Promise<void>) => {
-        await fn();
-      },
-      endSession: async () => {}
-    })) as unknown as typeof mongoose.startSession,
-    t
-  );
+  setRepositories({
+    ...base,
+    runInTransaction: async (fn) => fn({}),
+    users: {
+      ...base.users,
+      findById: async (id) =>
+        (String(id) === sender.id
+          ? ({ ...sender, role: "user" } as unknown)
+          : null) as never,
+      findByEmail: async (email) =>
+        (email.toLowerCase() === recipient.email.toLowerCase()
+          ? ({ ...recipient, role: "user" } as unknown)
+          : null) as never,
+      setBalance: async (id, balance) => {
+        if (id === sender.id) sender.balance = balance;
+        if (id === recipient.id) recipient.balance = balance;
+      }
+    },
+    transactions: {
+      ...base.transactions,
+      createMany: async (entries) => {
+        const created = entries.map((entry, index) => ({
+          ...entry,
+          id: `tx-${index + 1}`,
+          createdAt: new Date("2026-06-11T10:00:00.000Z"),
+          updatedAt: new Date("2026-06-11T10:00:00.000Z")
+        }));
+        createdDocs.push(...created);
+        return created as never;
+      }
+    }
+  } as Repositories);
 
   return createdDocs;
 }
@@ -138,6 +141,7 @@ async function withServer<T>(fn: (baseUrl: string) => Promise<T>) {
     return res.json({ csrfToken });
   });
   app.use("/api/transactions", transactionRoutes);
+  app.use(errorHandler);
 
   const server = await new Promise<http.Server>((resolve) => {
     const listeningServer = app.listen(0, () => resolve(listeningServer));
@@ -433,5 +437,46 @@ test("non-ILS transfer degrades with 503 when no rates are available", async (t)
     });
     assert.equal(response.status, 503);
   });
+});
+//#endregion
+
+//#region executeTransfer settlement on runInTransaction
+test("executeTransfer rejects on insufficient balance without writing", async (t) => {
+  const original = getRepositories();
+  t.after(() => setRepositories(original));
+
+  const base = createMongoRepositories();
+  let setBalanceCalls = 0;
+  setRepositories({
+    ...base,
+    runInTransaction: async (fn) => fn({}),
+    users: {
+      ...base.users,
+      findById: async () =>
+        ({ id: "s", email: "s@x.com", balance: 5, role: "user" } as never),
+      findByEmail: async () =>
+        ({ id: "r", email: "r@x.com", balance: 0, role: "user" } as never),
+      setBalance: async () => {
+        setBalanceCalls++;
+      }
+    },
+    transactions: {
+      ...base.transactions,
+      createMany: async () => {
+        throw new Error("should not insert");
+      }
+    }
+  } as Repositories);
+
+  await assert.rejects(
+    () => executeTransfer({ senderId: "s", recipientEmail: "r@x.com", amount: 100 }),
+    (err: unknown) => {
+      assert.ok(err instanceof AppError);
+      assert.equal(err.status, 400);
+      assert.match(err.message, /Insufficient balance/);
+      return true;
+    }
+  );
+  assert.equal(setBalanceCalls, 0);
 });
 //#endregion

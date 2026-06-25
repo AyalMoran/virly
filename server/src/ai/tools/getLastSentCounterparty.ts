@@ -1,4 +1,4 @@
-import { Transaction } from "../../models/Transaction.js";
+import { getRepositories } from "../../repositories/index.js";
 import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, ToolContext } from "../state.js";
 import {
@@ -9,12 +9,10 @@ import {
 export async function getLastSentCounterparty(
   context: ToolContext
 ): Promise<RuntimeToolResult> {
-  const transaction = await Transaction.findOne({
+  const transaction = await getRepositories().transactions.lastForOwner({
     ownerId: context.userId,
     type: "debit"
-  })
-    .sort({ createdAt: -1 })
-    .select("counterpartyEmail");
+  });
 
   if (!transaction) {
     return createToolResult({

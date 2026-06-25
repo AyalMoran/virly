@@ -9,7 +9,7 @@ import type {
 import type {
   VideoSessionStatus,
   VideoSessionType
-} from "../models/VideoSession.js";
+} from "../repositories/types.js";
 
 export const assistantResponseFormatVersion = 1 as const;
 

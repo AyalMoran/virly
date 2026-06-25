@@ -1,5 +1,5 @@
 import type { BaseMessage } from "@langchain/core/messages";
-import { AiConversation } from "../models/AiConversation.js";
+import { getRepositories } from "../repositories/index.js";
 import {
   createEmptyCounterpartyMemory,
   normalizeCounterpartyMemory,
@@ -43,10 +43,10 @@ function toPersistedMessages(messages: BaseMessage[]): StoredChatMessage[] {
 
 export const mongoConversationStore: ConversationStore = {
   async load(userId: string, conversationId: string) {
-    const conversation = await AiConversation.findOne({
+    const conversation = await getRepositories().aiConversations.findByConversationId(
       userId,
       conversationId
-    }).lean();
+    );
 
     if (!conversation) {
       return {
@@ -56,7 +56,7 @@ export const mongoConversationStore: ConversationStore = {
     }
 
     return {
-      messages: loadStoredMessages(conversation.messages),
+      messages: loadStoredMessages(conversation.messages as StoredChatMessage[]),
       memory: normalizeCounterpartyMemory(
         conversation.memory as unknown as Partial<ReturnType<typeof normalizeCounterpartyMemory>>
       )
@@ -64,24 +64,13 @@ export const mongoConversationStore: ConversationStore = {
   },
 
   async save(input: ConversationSaveInput) {
-    await AiConversation.findOneAndUpdate(
-      {
-        userId: input.userId,
-        conversationId: input.conversationId
-      },
-      {
-        $set: {
-          assistantId: input.assistantId,
-          messages: toPersistedMessages(input.messages),
-          memory: normalizeCounterpartyMemory(input.memory),
-          expiresAt: getExpiresAt()
-        }
-      },
-      {
-        upsert: true,
-        new: true,
-        setDefaultsOnInsert: true
-      }
-    );
+    await getRepositories().aiConversations.upsert({
+      userId: input.userId,
+      conversationId: input.conversationId,
+      assistantId: input.assistantId,
+      messages: toPersistedMessages(input.messages),
+      memory: normalizeCounterpartyMemory(input.memory),
+      expiresAt: getExpiresAt()
+    });
   }
 };

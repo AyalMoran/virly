@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
-import { Transaction } from "../models/Transaction.js";
+import { AppError } from "../utils/app-error.js";
 import {
   assertSupportedCurrency,
   buildTransferQuote,
@@ -13,6 +13,7 @@ import {
   executeTransfer,
   type TransferFxMetadata
 } from "../services/transfer.service.js";
+import { transactionQueryService } from "../services/transactionQuery.service.js";
 import { getPaginationMeta, parsePagination } from "../utils/pagination.js";
 import { toTransactionDto } from "../utils/transaction-dto.js";
 
@@ -57,15 +58,14 @@ export function resolveTransferAmount(
   }
 
   if (!currentQuote) {
-    throw Object.assign(new Error("Exchange rates are unavailable."), {
-      status: 503
-    });
+    throw new AppError(503, "Exchange rates are unavailable.");
   }
 
   if (!input.quote) {
-    throw Object.assign(
-      new Error("A current exchange-rate quote is required for non-ILS transfers."),
-      { status: 400, code: "QUOTE_REQUIRED" }
+    throw new AppError(
+      400,
+      "A current exchange-rate quote is required for non-ILS transfers.",
+      { code: "QUOTE_REQUIRED" }
     );
   }
 
@@ -73,11 +73,10 @@ export function resolveTransferAmount(
     input.quote.rate !== currentQuote.rate ||
     input.quote.fetchedAt !== currentQuote.rateFetchedAt
   ) {
-    throw Object.assign(
-      new Error(
-        "The exchange rate has changed since this transfer was quoted. Review the refreshed quote before confirming."
-      ),
-      { status: 409, code: "QUOTE_RATE_CHANGED" }
+    throw new AppError(
+      409,
+      "The exchange rate has changed since this transfer was quoted. Review the refreshed quote before confirming.",
+      { code: "QUOTE_RATE_CHANGED" }
     );
   }
 
@@ -97,17 +96,14 @@ export function resolveTransferAmount(
 router.get("/", requireAuth, async (req, res, next) => {
   try {
     const { page, limit } = parsePagination(req.query);
-    const skip = (page - 1) * limit;
     const counterparty = z.string().email().optional().parse(req.query.counterparty);
-    const filter = {
-      ownerId: req.userId,
-      ...(counterparty ? { counterpartyEmail: counterparty.toLowerCase() } : {})
-    };
 
-    const [transactions, total] = await Promise.all([
-      Transaction.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
-      Transaction.countDocuments(filter)
-    ]);
+    const { transactions, total } = await transactionQueryService.listForOwner({
+      ownerId: req.userId!,
+      counterpartyEmail: counterparty ? counterparty.toLowerCase() : undefined,
+      page,
+      limit
+    });
 
     return res.json({
       transactions: transactions.map(toTransactionDto),
@@ -141,13 +137,6 @@ router.post("/quote", requireAuth, async (req, res, next) => {
     const snapshot = await getCurrentRates();
     return res.json({ quote: buildTransferQuote(parsed.amount, currency, snapshot) });
   } catch (error) {
-    if (error instanceof Error && "status" in error) {
-      return res.status(Number(error.status)).json({
-        message: error.message,
-        ...("code" in error ? { code: error.code } : {})
-      });
-    }
-
     next(error);
   }
 });
@@ -181,13 +170,6 @@ router.post("/", requireAuth, async (req, res, next) => {
 
     return res.status(201).json(result);
   } catch (error) {
-    if (error instanceof Error && "status" in error) {
-      return res.status(Number(error.status)).json({
-        message: error.message,
-        ...("code" in error ? { code: error.code } : {})
-      });
-    }
-
     next(error);
   }
 });

@@ -10,7 +10,6 @@ import {
   resumeV2Confirmation,
   streamAssistantV2
 } from "../ai/v2/hitl.js";
-import { AiPendingTransfer } from "../models/AiPendingTransfer.js";
 import { createConfiguredAssistantLlmProvider } from "../ai/llm.js";
 import {
   buildVideoSessionCtaBlock,
@@ -19,8 +18,12 @@ import {
 import { requireAuth } from "../middleware/auth.js";
 import { writeAiAuditLog } from "../services/aiAuditLog.service.js";
 import { mongoConversationStore } from "../services/aiConversation.service.js";
-import { respondToAiPendingTransfer } from "../services/aiPendingTransfer.service.js";
+import {
+  getResumablePendingForUser,
+  respondToAiPendingTransfer
+} from "../services/aiPendingTransfer.service.js";
 import { createVideoSession } from "../services/videoSession.service.js";
+import { AppError } from "../utils/app-error.js";
 
 const router = Router();
 const assistantLlmProvider = createConfiguredAssistantLlmProvider();
@@ -229,9 +232,16 @@ router.post("/chat/stream", requireAuth, async (req, res, next) => {
       return;
     }
 
+    // Headers are already sent, so the central error handler can't run here.
+    // Surface only deliberate AppError messages; mask everything else and log
+    // it server-side so internals don't leak into the stream.
+    if (!(error instanceof AppError)) {
+      console.error("[ai.routes] /chat/stream error after headers sent:", error);
+    }
     writeSseEvent(res, "error", {
       type: "error",
-      message: error instanceof Error ? error.message : "Streaming request failed."
+      message:
+        error instanceof AppError ? error.message : "Streaming request failed."
     });
     res.end();
   }
@@ -252,12 +262,7 @@ router.post("/confirmations/:id", requireAuth, async (req, res, next) => {
     // path to money execution). Falls back to the direct service if no paused
     // graph exists for this card. Response shape is unchanged.
     if (config.ai.graphVersion === "v2") {
-      const pending = await AiPendingTransfer.findOne({
-        _id: pendingTransferId,
-        userId: req.userId
-      })
-        .select("conversationId")
-        .lean();
+      const pending = await getResumablePendingForUser(pendingTransferId, req.userId);
       if (pending?.conversationId) {
         try {
           const resumed = await resumeV2Confirmation({
@@ -272,8 +277,15 @@ router.post("/confirmations/:id", requireAuth, async (req, res, next) => {
           if (resumed) {
             return res.json(resumed);
           }
-        } catch {
-          // No resumable checkpoint for this card — fall through to the service.
+        } catch (error) {
+          // resumeV2Confirmation throws when there is no resumable checkpoint
+          // for this card (expected) — fall through to the direct service path,
+          // which enforces its own version/idempotency guards. Log so a genuine
+          // resume failure is not silently swallowed.
+          console.error(
+            "[ai.routes] resumeV2Confirmation failed; falling back to service:",
+            error
+          );
         }
       }
     }
@@ -288,16 +300,6 @@ router.post("/confirmations/:id", requireAuth, async (req, res, next) => {
 
     return res.json(result);
   } catch (error) {
-    if (error instanceof Error && "status" in error) {
-      return res.status(Number(error.status)).json({
-        message: error.message,
-        ...("error" in error ? { error: error.error } : {}),
-        ...("supersededById" in error
-          ? { supersededById: error.supersededById }
-          : {})
-      });
-    }
-
     next(error);
   }
 });

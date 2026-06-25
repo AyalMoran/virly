@@ -1,5 +1,4 @@
-import { Transaction } from "../../models/Transaction.js";
-import { User } from "../../models/User.js";
+import { getRepositories } from "../../repositories/index.js";
 import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, ToolContext } from "../state.js";
 import { getCounterpartyDisplays, getDisplayOrFallback } from "./counterpartyHelpers.js";
@@ -7,10 +6,10 @@ import { getCounterpartyDisplays, getDisplayOrFallback } from "./counterpartyHel
 export async function getVerifiedRecipients(
   context: ToolContext
 ): Promise<RuntimeToolResult> {
-  const transactions = await Transaction.find({ ownerId: context.userId })
-    .sort({ createdAt: -1 })
-    .limit(50)
-    .select("counterpartyEmail");
+  const transactions = await getRepositories().transactions.recentForOwner({
+    ownerId: context.userId,
+    limit: 50
+  });
   const emails = [...new Set(transactions.map((transaction) => transaction.counterpartyEmail))];
 
   if (emails.length === 0) {
@@ -25,10 +24,9 @@ export async function getVerifiedRecipients(
     });
   }
 
-  const verifiedUsers = await User.find({
-    email: { $in: emails },
-    isVerified: true
-  }).select("email");
+  const verifiedUsers = (await getRepositories().users.findByEmails(emails)).filter(
+    (user) => user.isVerified
+  );
   const displays = await getCounterpartyDisplays(verifiedUsers.map((user) => user.email));
   const recipients = verifiedUsers.map((user) => getDisplayOrFallback(displays, user.email));
 

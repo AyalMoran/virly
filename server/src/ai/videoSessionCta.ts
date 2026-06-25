@@ -1,5 +1,4 @@
-import type { VideoSessionDocument } from "../services/videoSession.service.js";
-import type { VideoSessionType } from "../models/VideoSession.js";
+import type { VideoSessionRecord, VideoSessionType } from "../repositories/types.js";
 import type { VideoSessionCtaBlock } from "./responseBlocks.js";
 
 export function detectVideoSessionRequest(
@@ -30,7 +29,7 @@ export function detectVideoSessionRequest(
 }
 
 export function buildVideoSessionCtaBlock(
-  session: VideoSessionDocument,
+  session: VideoSessionRecord,
   containsHebrew: boolean
 ): VideoSessionCtaBlock {
   const appPath = `/video?sessionId=${encodeURIComponent(session.id)}`;

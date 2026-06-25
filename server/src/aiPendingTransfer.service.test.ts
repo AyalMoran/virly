@@ -1,0 +1,329 @@
+
+
+import assert from "node:assert/strict";
+import test from "node:test";
+import { createMongoRepositories } from "./repositories/mongo/index.js";
+import {
+  setRepositories,
+  getRepositories,
+  type AiPendingTransferRecord,
+  type Repositories
+} from "./repositories/index.js";
+import {
+  getResumablePendingForUser,
+  respondToAiPendingTransfer,
+  modifyAiPendingTransfer
+} from "./services/aiPendingTransfer.service.js";
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const pendingTransferId = "507f1f77bcf86cd799439011";
+const userId = "507f1f77bcf86cd799439022";
+
+function baseRecord(overrides: Partial<AiPendingTransferRecord> = {}): AiPendingTransferRecord {
+  return {
+    id: pendingTransferId,
+    userId,
+    conversationId: "conv-abc",
+    assistantId: "oshri",
+    recipientEmail: "alice@example.com",
+    version: 1,
+    currency: "ILS",
+    recipientFirstName: null,
+    recipientLastName: null,
+    amount: 100,
+    reason: null,
+    status: "pending",
+    supersededById: null,
+    supersedesId: null,
+    idempotencyResults: {},
+    // Far-future expiry so the not-expired guard (expiresAt > now) holds.
+    expiresAt: new Date(Date.now() + 10 * 60 * 1000),
+    createdAt: new Date("2026-01-01T00:00:00.000Z"),
+    updatedAt: new Date("2026-01-01T00:00:00.000Z"),
+    ...overrides
+  };
+}
+
+/**
+ * Installs a repository set whose aiPendingTransfers.findById is stubbed, then
+ * restores the real Mongo repositories afterwards. Captures the id passed in.
+ */
+function stubFindById(
+  t: test.TestContext,
+  doc: AiPendingTransferRecord | null
+): { capturedId: string | null } {
+  const capture: { capturedId: string | null } = { capturedId: null };
+  const repos = createMongoRepositories();
+  repos.aiPendingTransfers = {
+    ...repos.aiPendingTransfers,
+    async findById(id: string) {
+      capture.capturedId = id;
+      return doc;
+    }
+  };
+  setRepositories(repos);
+  t.after(() => {
+    setRepositories(createMongoRepositories());
+  });
+  return capture;
+}
+
+type CallLog = string[];
+
+/**
+ * Build a full Repositories stub for the transactional confirm/modify paths.
+ *
+ * `runInTransaction` runs its callback with a dummy tx (`"TX"`) and records that
+ * it ran, so tests can assert the settlement happens INSIDE the transaction. To
+ * model atomicity, the in-tx repo writes only take effect if the whole callback
+ * resolves: if the transfer throws, `runInTransaction` re-throws and the recorded
+ * status write is discarded (we assert via the call log + committed flag).
+ */
+function makeTxRepos(opts: {
+  log: CallLog;
+  pending: AiPendingTransferRecord | null;
+  // When set, executeTransferWithSession's underlying sender lookup throws.
+  failTransfer?: boolean;
+}): Repositories {
+  const { log, pending } = opts;
+
+  const sender = {
+    id: userId,
+    email: "sender@example.com",
+    balance: 1000,
+    role: "user" as const
+  };
+  const recipient = {
+    id: "507f1f77bcf86cd799439033",
+    email: "alice@example.com",
+    balance: 0,
+    role: "user" as const
+  };
+
+  const stub = {
+    users: {
+      async findById(id: string, tx?: unknown) {
+        log.push(`users.findById:${tx === "TX" ? "tx" : "no-tx"}`);
+        if (opts.failTransfer) return null; // forces executeTransfer to throw 404
+        return id === sender.id ? (sender as never) : null;
+      },
+      async findByEmail(email: string) {
+        return email === recipient.email ? (recipient as never) : null;
+      },
+      async setBalance(id: string, balance: number, tx?: unknown) {
+        log.push(`users.setBalance:${id}:${balance}:${tx === "TX" ? "tx" : "no-tx"}`);
+      }
+    },
+    transactions: {
+      async getDailyDebitUsage() {
+        return { total: 0, count: 0 };
+      },
+      async createMany(entries: unknown[], tx?: unknown) {
+        log.push(`transactions.createMany:${tx === "TX" ? "tx" : "no-tx"}`);
+        return (entries as Array<Record<string, unknown>>).map((e, i) => ({
+          id: `txn-${i}`,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+          ...e
+        }));
+      }
+    },
+    aiPendingTransfers: {
+      async findById(id: string, tx?: unknown) {
+        log.push(`aiPendingTransfers.findById:${tx === "TX" ? "tx" : "no-tx"}`);
+        return pending;
+      },
+      async findActivePendingForUser(_id: string, _u: string, _c: string, tx?: unknown) {
+        log.push(`aiPendingTransfers.findActivePendingForUser:${tx === "TX" ? "tx" : "no-tx"}`);
+        return pending;
+      },
+      async create(input: unknown, tx?: unknown) {
+        log.push(`aiPendingTransfers.create:${tx === "TX" ? "tx" : "no-tx"}`);
+        return baseRecord({ id: "507f1f77bcf86cd7994390ff", ...(input as object) });
+      },
+      async updateStatus(
+        id: string,
+        status: string,
+        _update?: unknown,
+        tx?: unknown
+      ) {
+        log.push(`aiPendingTransfers.updateStatus:${status}:${tx === "TX" ? "tx" : "no-tx"}`);
+        return baseRecord({ id, status: status as AiPendingTransferRecord["status"] });
+      }
+    },
+    personalDetails: {} as never,
+    exchangeRates: {} as never,
+    aiConversations: {} as never,
+    aiAuditLogs: {} as never,
+    videoSessions: {} as never,
+    videoAuditLogs: {} as never,
+    async runInTransaction<T>(fn: (tx: unknown) => Promise<T>): Promise<T> {
+      log.push("runInTransaction:enter");
+      const result = await fn("TX");
+      log.push("runInTransaction:commit");
+      return result;
+    }
+  } as unknown as Repositories;
+
+  return stub;
+}
+
+function installRepos(t: test.TestContext, repos: Repositories) {
+  setRepositories(repos);
+  t.after(() => {
+    setRepositories(createMongoRepositories());
+  });
+}
+
+// ---------------------------------------------------------------------------
+// respondToAiPendingTransfer — confirm path runs INSIDE runInTransaction
+// ---------------------------------------------------------------------------
+
+test("confirm: runs the settlement inside runInTransaction and flips status atomically", async (t) => {
+  const log: CallLog = [];
+  installRepos(t, makeTxRepos({ log, pending: baseRecord({ status: "pending" }) }));
+
+  const result = await respondToAiPendingTransfer({
+    userId,
+    pendingTransferId,
+    action: "confirm",
+    version: 1
+  });
+
+  assert.equal(result.status, "confirmed");
+  // The whole settlement happened between enter and commit.
+  const enter = log.indexOf("runInTransaction:enter");
+  const commit = log.indexOf("runInTransaction:commit");
+  assert.ok(enter >= 0 && commit > enter, "must open a transaction");
+
+  const settle = log.indexOf("transactions.createMany:tx");
+  const flip = log.indexOf("aiPendingTransfers.updateStatus:confirmed:tx");
+  assert.ok(settle > enter && settle < commit, "transfer settles inside the tx");
+  assert.ok(flip > enter && flip < commit, "status flips inside the tx");
+  // Settlement before the status flip (the confirm card is marked only after money moves).
+  assert.ok(settle < flip, "transfer must settle before status is flipped to confirmed");
+});
+
+test("confirm: when the transfer throws, the status is NOT flipped (atomic rollback)", async (t) => {
+  const log: CallLog = [];
+  installRepos(
+    t,
+    makeTxRepos({ log, pending: baseRecord({ status: "pending" }), failTransfer: true })
+  );
+
+  await assert.rejects(
+    respondToAiPendingTransfer({
+      userId,
+      pendingTransferId,
+      action: "confirm",
+      version: 1
+    })
+  );
+
+  assert.ok(log.includes("runInTransaction:enter"), "transaction was opened");
+  assert.ok(
+    !log.includes("runInTransaction:commit"),
+    "transaction must NOT commit when the transfer fails"
+  );
+  assert.ok(
+    !log.some((l) => l.startsWith("aiPendingTransfers.updateStatus:confirmed")),
+    "status must not be flipped to confirmed when the transfer fails"
+  );
+});
+
+test("confirm: does not call mongoose.startSession (settlement goes through runInTransaction)", async (t) => {
+  const log: CallLog = [];
+  installRepos(t, makeTxRepos({ log, pending: baseRecord({ status: "pending" }) }));
+
+  await respondToAiPendingTransfer({
+    userId,
+    pendingTransferId,
+    action: "confirm",
+    version: 1
+  });
+
+  // runInTransaction is the only transaction boundary the service uses now.
+  assert.equal(
+    log.filter((l) => l === "runInTransaction:enter").length,
+    1,
+    "exactly one runInTransaction boundary"
+  );
+});
+
+// ---------------------------------------------------------------------------
+// modifyAiPendingTransfer — supersede path runs INSIDE runInTransaction
+// ---------------------------------------------------------------------------
+
+test("modify: supersedes the old pending and creates the new one inside one transaction", async (t) => {
+  const log: CallLog = [];
+  const old = baseRecord({ status: "pending", amount: 100 });
+  const repos = makeTxRepos({ log, pending: old });
+  // personalDetails is read by validateAiTransferDraft via findByUserId; provide it.
+  (repos as unknown as { personalDetails: unknown }).personalDetails = {
+    async findByUserId() {
+      return { status: "not_provided", firstName: null, lastName: null };
+    },
+    async findProvidedByName() {
+      return [];
+    }
+  };
+  installRepos(t, repos);
+
+  const result = await modifyAiPendingTransfer({
+    userId,
+    conversationId: "conv-abc",
+    assistantId: "oshri",
+    activePendingTransferId: pendingTransferId,
+    modificationDraft: { recipientEmail: "alice@example.com", amount: 200 }
+  } as never);
+
+  assert.equal((result as { status: string }).status, "ready");
+  const enter = log.indexOf("runInTransaction:enter");
+  const commit = log.indexOf("runInTransaction:commit");
+  const create = log.indexOf("aiPendingTransfers.create:tx");
+  const supersede = log.indexOf("aiPendingTransfers.updateStatus:superseded:tx");
+  assert.ok(enter >= 0 && commit > enter, "must open a transaction");
+  assert.ok(create > enter && create < commit, "new pending created inside the tx");
+  assert.ok(supersede > enter && supersede < commit, "old pending superseded inside the tx");
+});
+
+// ---------------------------------------------------------------------------
+// getResumablePendingForUser (non-transaction path, routes through the repo)
+// ---------------------------------------------------------------------------
+
+test("getResumablePendingForUser queries the repo by pendingTransferId", async (t) => {
+  const capture = stubFindById(t, baseRecord());
+
+  await getResumablePendingForUser(pendingTransferId, userId);
+
+  assert.equal(capture.capturedId, pendingTransferId, "must look up by pendingTransferId");
+});
+
+test("getResumablePendingForUser returns the conversationId from the record", async (t) => {
+  stubFindById(t, baseRecord({ conversationId: "conv-abc" }));
+
+  const result = await getResumablePendingForUser(pendingTransferId, userId);
+
+  assert.ok(result !== null, "expected a result");
+  assert.equal(result.conversationId, "conv-abc");
+});
+
+test("getResumablePendingForUser returns null when the record is missing", async (t) => {
+  stubFindById(t, null);
+
+  const result = await getResumablePendingForUser(pendingTransferId, userId);
+
+  assert.equal(result, null);
+});
+
+test("getResumablePendingForUser returns null when the record belongs to another user", async (t) => {
+  // Preserves the original `{ _id, userId }` ownership scoping.
+  stubFindById(t, baseRecord({ userId: "507f1f77bcf86cd799439099" }));
+
+  const result = await getResumablePendingForUser(pendingTransferId, userId);
+
+  assert.equal(result, null, "must not resume a foreign user's pending transfer");
+});

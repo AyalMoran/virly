@@ -1,5 +1,4 @@
-import { Types } from "mongoose";
-import { Transaction } from "../../models/Transaction.js";
+import { getRepositories } from "../../repositories/index.js";
 import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, ToolContext } from "../state.js";
 import { normalizeCounterpartyEmail } from "./counterpartyHelpers.js";
@@ -22,27 +21,12 @@ export async function getTotalReceivedFromCounterparty(
   }
 
   const counterpartyEmail = normalizeCounterpartyEmail(counterparty.email);
-  const totals = await Transaction.aggregate<{
-    total: number;
-    count: number;
-  }>([
-    {
-      $match: {
-        ownerId: new Types.ObjectId(context.userId),
-        counterpartyEmail,
-        type: "credit"
-      }
-    },
-    {
-      $group: {
-        _id: null,
-        total: { $sum: "$amount" },
-        count: { $sum: 1 }
-      }
-    }
-  ]);
-  const total = totals[0]?.total ?? 0;
-  const count = totals[0]?.count ?? 0;
+  const totals = await getRepositories().transactions.getDirectionalTotals({
+    ownerId: context.userId,
+    counterpartyEmail
+  });
+  const total = totals.creditTotal;
+  const count = totals.creditCount;
   const userLabel = counterparty.userLabel ?? counterparty.email;
 
   return createToolResult({
