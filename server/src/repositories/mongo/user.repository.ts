@@ -32,6 +32,7 @@ function isDup(e: unknown): boolean {
 
 export const mongoUserRepository: UserRepository = {
   async findById(id, tx) {
+    if (!/^[0-9a-fA-F]{24}$/.test(id)) return null;
     const q = User.findById(id);
     const s = asSession(tx);
     if (s) q.session(s);
