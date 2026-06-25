@@ -35,7 +35,7 @@ export type LangSmithRunAssistantInput = {
   userId?: string;
   conversationId: string;
   requestId?: string;
-  assistantId?: "oshri" | "chaya" | "yehuda" | "yohai_daniel";
+  assistantId?: "oshri" | "chaya" | "yehuda" | "yohai";
   message: string;
 };
 

@@ -1,12 +1,10 @@
 import { Router } from "express";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
-import { Transaction } from "../models/Transaction.js";
-import { User } from "../models/User.js";
-import {
-  ensurePersonalDetails,
-  toPersonalDetailsDto
-} from "../utils/personal-details.js";
+import { accountService } from "../services/account.service.js";
+import { personalDetailsService } from "../services/personalDetails.service.js";
+import { transactionQueryService } from "../services/transactionQuery.service.js";
+import { toPersonalDetailsDto } from "../utils/personal-details.js";
 import { getPaginationMeta, parsePagination } from "../utils/pagination.js";
 import { toTransactionDto } from "../utils/transaction-dto.js";
 
@@ -45,23 +43,16 @@ const personalDetailsSchema = z.object({
 router.get("/me", requireAuth, async (req, res, next) => {
   try {
     const { page, limit } = parsePagination(req.query);
-    const skip = (page - 1) * limit;
 
-    const user = await User.findById(req.userId).select(
-      "-passwordHash -verificationTokenHash"
-    );
+    const user = await accountService.getById(req.userId!);
 
-    if (!user) {
-      return res.status(404).json({ message: "User not found." });
-    }
+    const personalDetails = await personalDetailsService.ensureForUser(user);
 
-    const personalDetails = await ensurePersonalDetails(user);
-
-    const filter = { ownerId: user.id };
-    const [transactions, total] = await Promise.all([
-      Transaction.find(filter).sort({ createdAt: -1 }).skip(skip).limit(limit),
-      Transaction.countDocuments(filter)
-    ]);
+    const { transactions, total } = await transactionQueryService.listForOwner({
+      ownerId: user.id,
+      page,
+      limit
+    });
 
     return res.json({
       balance: user.balance,
@@ -81,13 +72,8 @@ router.get("/me", requireAuth, async (req, res, next) => {
 
 router.get("/personal-details", requireAuth, async (req, res, next) => {
   try {
-    const user = await User.findById(req.userId);
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found." });
-    }
-
-    const personalDetails = await ensurePersonalDetails(user);
+    const user = await accountService.getById(req.userId!);
+    const personalDetails = await personalDetailsService.ensureForUser(user);
     return res.json({ personalDetails: toPersonalDetailsDto(personalDetails) });
   } catch (error) {
     next(error);
@@ -97,21 +83,11 @@ router.get("/personal-details", requireAuth, async (req, res, next) => {
 router.put("/personal-details", requireAuth, async (req, res, next) => {
   try {
     const payload = personalDetailsSchema.parse(req.body);
-    const user = await User.findById(req.userId);
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found." });
-    }
-
-    const personalDetails = await ensurePersonalDetails(user);
-    personalDetails.status = "provided";
-    personalDetails.firstName = payload.firstName;
-    personalDetails.lastName = payload.lastName;
-    personalDetails.dateOfBirth = new Date(payload.dateOfBirth);
-    personalDetails.address = payload.address;
-
-    await personalDetails.save();
-
+    // Ensure the doc exists first so a PUT before any GET still creates-then-
+    // updates (the pre-service behavior) rather than 404-ing.
+    const user = await accountService.getById(req.userId!);
+    await personalDetailsService.ensureForUser(user);
+    const personalDetails = await personalDetailsService.update(req.userId!, payload);
     return res.json({ personalDetails: toPersonalDetailsDto(personalDetails) });
   } catch (error) {
     next(error);
@@ -120,16 +96,11 @@ router.put("/personal-details", requireAuth, async (req, res, next) => {
 
 router.post("/personal-details/skip", requireAuth, async (req, res, next) => {
   try {
-    const user = await User.findById(req.userId);
-
-    if (!user) {
-      return res.status(404).json({ message: "User not found." });
-    }
-
-    const personalDetails = await ensurePersonalDetails(user);
-    personalDetails.lastSkippedAt = new Date();
-    await personalDetails.save();
-
+    // Ensure the doc exists first so skip works before any GET (pre-service
+    // behavior) rather than 404-ing.
+    const user = await accountService.getById(req.userId!);
+    await personalDetailsService.ensureForUser(user);
+    const personalDetails = await personalDetailsService.markSkipped(req.userId!);
     return res.json({
       message: "Personal details skipped.",
       personalDetails: toPersonalDetailsDto(personalDetails)

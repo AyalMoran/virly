@@ -1,49 +1,12 @@
 import { Schema, model } from "mongoose";
 
-const chatMessageSchema = new Schema(
-  {
-    role: {
-      type: String,
-      enum: ["user", "assistant"],
-      required: true
-    },
-    content: {
-      type: String,
-      required: true
-    },
-    createdAt: {
-      type: Date,
-      required: true,
-      default: Date.now
-    }
-  },
-  { _id: false }
-);
-
-const counterpartyRefSchema = new Schema(
-  {
-    email: {
-      type: String,
-      required: true,
-      lowercase: true,
-      trim: true
-    },
-    maskedLabel: {
-      type: String,
-      required: true
-    },
-    firstMentionedAtTurn: {
-      type: Number,
-      required: true
-    },
-    lastReferencedAtTurn: {
-      type: Number,
-      required: true
-    }
-  },
-  { _id: false }
-);
-
+// `messages` and `memory` are persisted as opaque blobs so the Mongo driver
+// round-trips them byte-for-byte, exactly like the Postgres `jsonb` columns.
+// The AI layer (src/ai/v2/turn.ts, src/ai/state.ts) owns their shape — it
+// supplies each message's `createdAt` and builds the full `memory` object — so
+// the previous structured sub-schemas (message timestamping, memory enum/ref
+// coercion, unknown-key stripping) were redundant and made the two drivers
+// non-interchangeable. See the repository seam (Postgres migration, Plan 2).
 const aiConversationSchema = new Schema(
   {
     userId: {
@@ -63,55 +26,12 @@ const aiConversationSchema = new Schema(
       default: "oshri"
     },
     messages: {
-      type: [chatMessageSchema],
+      type: [Schema.Types.Mixed],
       default: []
     },
     memory: {
-      turn: {
-        type: Number,
-        default: 0
-      },
-      lastCounterparty: {
-        type: counterpartyRefSchema,
-        default: null
-      },
-      mentionedCounterparties: {
-        type: [counterpartyRefSchema],
-        default: []
-      },
-      entities: {
-        type: [Schema.Types.Mixed],
-        default: []
-      },
-      answerFrames: {
-        type: [Schema.Types.Mixed],
-        default: []
-      },
-      pendingConfirmation: {
-        type: Schema.Types.Mixed,
-        default: null
-      },
-      clarification: {
-        type: Schema.Types.Mixed,
-        default: null
-      },
-      transferIntentFrame: {
-        type: Schema.Types.Mixed,
-        default: null
-      },
-      mode: {
-        type: String,
-        enum: [
-          "idle",
-          "answering_read_only",
-          "awaiting_clarification",
-          "transfer_draft_in_progress",
-          "transfer_confirmation_pending",
-          "transfer_confirmed",
-          "transfer_denied"
-        ],
-        default: "idle"
-      }
+      type: Schema.Types.Mixed,
+      default: {}
     },
     expiresAt: {
       type: Date,
@@ -122,7 +42,10 @@ const aiConversationSchema = new Schema(
     }
   },
   {
-    timestamps: true
+    timestamps: true,
+    // Keep empty objects (e.g. `memory: {}`) instead of stripping them, so the
+    // opaque blobs round-trip identically to the Postgres `jsonb` columns.
+    minimize: false
   }
 );
 

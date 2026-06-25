@@ -270,7 +270,7 @@ export type JitsiJoinConfig = {
   expiresAt: string;
 };
 
-export type AssistantId = "oshri" | "chaya" | "yehuda" | "yohai_daniel";
+export type AssistantId = "oshri" | "chaya" | "yehuda" | "yohai";
 
 export type AssistantIntent =
   | "balance_inquiry"

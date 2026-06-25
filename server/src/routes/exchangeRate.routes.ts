@@ -30,10 +30,6 @@ router.get("/current", requireAuth, async (_req, res, next) => {
       isStale: snapshot.isStale
     });
   } catch (error) {
-    if (error instanceof Error && "status" in error) {
-      return res.status(Number(error.status)).json({ message: error.message });
-    }
-
     next(error);
   }
 });

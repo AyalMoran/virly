@@ -1,111 +1,228 @@
 # Virly
 
-Full-stack banking MVP built with:
+**A full-stack banking MVP with an AI assistant that can actually move your money.**
 
-- React + TypeScript + Vite
-- Node.js + Express + TypeScript
-- MongoDB + Mongoose
-- HttpOnly cookie authentication with signed JWT sessions
-- Email-button verification with a short-lived signed token
+Virly is a React + Express monorepo that looks and behaves like a modern fintech app — complete with a LangGraph-powered AI agent, FX-aware transfers, Jitsi video sessions, and a human-in-the-loop confirmation flow before any transfer executes.
+
+---
 
 ## Features
 
-- User registration with email, password, and phone number
-- Email verification link flow
-- Secure login with hashed passwords, HttpOnly auth cookies, and CSRF protection
-- Protected dashboard
-- Random starting balance for new accounts
-- Money transfer between registered users
-- Recent transaction history
+### Banking Core
+- User registration with email, password, and phone
+- Email verification via [Resend](https://resend.com) (falls back to console log for local dev)
+- Secure login — HttpOnly JWT cookies, CSRF protection, "Remember me" persistence
+- Account balance, recent transactions, and transfer history
+- Money transfers between registered users with per-transfer and daily limits
+- FX support: ILS, USD, EUR with live exchange rates
 
-## Project Structure
+### AI Assistant
+- Conversational banking powered by a [LangGraph](https://github.com/langchain-ai/langgraphjs) agent
+- **20+ tools** — balance checks, transfer quotes, transaction search, counterparty memory, receipt lookup, daily usage stats, and more
+- **Human-in-the-loop**: the agent prepares a transfer draft and stores it server-side; the user explicitly confirms or denies before anything executes
+- Slot-aware clarification: the agent resolves ambiguous amounts (e.g. "half my balance"), currencies, and counterparty references from conversation context
+- Persona layer and response-style guardrails keep the assistant on-brand
 
-- `client/` React frontend
-- `server/` Express backend
+### Video Sessions
+- In-app Jitsi meetings between users
+- Agent-surfaced video session CTAs based on conversation context
+- Audit log for session history
 
-## Run Locally
+### UI
+- Dashboard styled as a printed account statement with a rough paper texture
+- Framer Motion transitions and a GLSL shader background
+- Responsive, accessible component library built on Tailwind + Radix primitives
 
-1. Install dependencies:
+---
+
+## Stack
+
+| Layer | Tech |
+|---|---|
+| Frontend | React 19, TypeScript, Vite, Framer Motion, Tailwind CSS |
+| Backend | Node.js, Express, TypeScript |
+| Database | MongoDB + Mongoose (default); PostgreSQL + Drizzle (opt-in, Phase 1) |
+| AI | LangGraph (JS), LangChain OpenAI, Zod |
+| Auth | HttpOnly JWT cookies, CSRF tokens |
+| Email | Resend |
+| Video | Jitsi Meet SDK |
+| Monorepo | npm workspaces |
+
+---
+
+## Getting Started
+
+### 1. Install dependencies
 
 ```bash
 npm install
 ```
 
-2. Copy the server environment file:
+npm workspaces hoists everything to the root `node_modules/` — no separate installs needed.
+
+### 2. Configure environment
 
 ```bash
 cp server/.env.example server/.env
+cp client/.env.example client/.env   # if present
 ```
 
-3. Start MongoDB locally or point `VIRLY_MONGODB_URI` to your database.
+Edit `server/.env` and set at minimum:
 
-4. Run the backend:
+```env
+VIRLY_MONGODB_URI=mongodb://localhost:27017/virly
+VIRLY_JWT_SECRET=<a long random secret>
+```
+
+### 3. Start MongoDB
+
+Use a local instance or point `VIRLY_MONGODB_URI` at MongoDB Atlas.
+
+### 4. Run
 
 ```bash
+# Backend (http://localhost:3000)
 npm run dev:server
-```
 
-5. In another terminal, run the frontend:
-
-```bash
+# Frontend (http://localhost:5173) — in a second terminal
 npm run dev:client
 ```
 
+### 5. Seed (optional)
+
+```bash
+npm run seed:personal-details   # fills display names
+npm run seed:transactions       # generates sample ledger entries
+```
+
+---
+
+## Database driver: MongoDB → PostgreSQL (Phase 1)
+
+All data access goes through a repository seam, so the backing store is selected
+at boot by `VIRLY_DB_DRIVER` (`mongo`, the default, or `postgres`). The two
+drivers are behaviourally equivalent — proven by a contract test suite that runs
+every repository case against **both** real databases.
+
+**Phase-1 hybrid:** even in postgres mode the app still connects to Mongo, because
+the LangGraph checkpointer/store remain on Mongo. Only the application
+repositories move to Postgres. Postgres has no native TTL, so a sweeper deletes
+expired `ai_conversations`/`ai_pending_transfers` (replacing the Mongo `expires`
+indexes); active-row queries already filter `expires_at > now()`.
+
+### Run the tests against real databases
+
+```bash
+docker compose -f docker-compose.test.yml up -d   # postgres:5433, mongo:27018
+CONTRACT_PG_URL=postgres://virly:virly@localhost:5433/virly \
+CONTRACT_MONGO_URL="mongodb://localhost:27018/virly_contract?directConnection=true" \
+  npm run test:contract --workspace server
+```
+
+The contract suite self-skips a driver when its `CONTRACT_*` URL is unset, so the
+default `npm test` stays green with no database. Note: the dockerised single-node
+replica set advertises its container host, so connect from the host with
+`?directConnection=true` (not `?replicaSet=rs0`).
+
+### Cutover runbook (Mongo → Postgres)
+
+1. Provision Postgres and set `VIRLY_POSTGRES_URL`.
+2. `npm run db:migrate --workspace server` — apply the Drizzle schema.
+3. During a brief write-freeze window:
+   `tsx scripts/sync-mongo-to-postgres.ts` (run from `server/`) — copies every
+   collection (idempotent upsert by `id`).
+4. `tsx scripts/verify-parity.ts` — must report **all entities match** (it exits
+   non-zero on any count/checksum mismatch).
+5. Set `VIRLY_DB_DRIVER=postgres` and restart. Migrations run automatically at
+   boot and the TTL sweeper starts.
+
+### Rollback (Postgres → Mongo)
+
+1. During a write-freeze window: `tsx scripts/sync-postgres-to-mongo.ts` — copies
+   every table back to Mongo (idempotent upsert by `_id`, preserves timestamps).
+2. `tsx scripts/verify-parity.ts` — confirm all entities match.
+3. Set `VIRLY_DB_DRIVER=mongo` (or unset it) and restart.
+
+LangGraph is unaffected by either direction — it always uses Mongo.
+
+---
+
 ## Email Verification
 
-If Resend credentials are configured, the backend sends a real email containing a verification button.
+When `RESEND_API_KEY` is not set the backend logs the verification link to the console so the full auth flow works without an email provider.
 
-If Resend is not configured or email delivery fails, the backend logs the verification link to the server console so the flow is still easy to test locally.
-
-Registration uses:
-
-```http
+```
 POST /api/auth/register
+{ "email": "user@example.com", "password": "hunter2", "phone": "+972501234567" }
+
+GET /api/auth/verify?token=<token>
 ```
 
-```json
-{
-  "email": "user@example.com",
-  "password": "password123",
-  "phone": "+972501234567"
-}
-```
+---
 
-The email link points to:
-
-```http
-GET /api/auth/verify?token=<verificationToken>
-```
+## Auth Cookies
 
 Successful login and email verification set two cookies:
 
-- `virly_auth`: HttpOnly, Secure JWT session cookie
-- `virly_csrf`: Secure CSRF cookie, plus the same CSRF token in auth JSON responses for cross-origin deployments
+| Cookie | Flags | Purpose |
+|---|---|---|
+| `virly_auth` | HttpOnly, Secure | JWT session |
+| `virly_csrf` | Secure, readable | CSRF double-submit |
 
-Cookies use `SameSite=Lax` locally by default. For cross-site deployments such as Vercel frontend + Render API, set `VIRLY_COOKIE_SAME_SITE=none` on the backend so browser `fetch` requests can include the auth cookies.
+Unsafe requests (`POST`, `PUT`, `PATCH`, `DELETE`) must include `X-CSRF-Token`. The frontend reads it from the login response or the `virly_csrf` cookie as a fallback.
 
-On login, the Remember me checkbox controls cookie persistence. When checked, both cookies are persistent for 30 days and the expiration is refreshed on each successful login. When unchecked, the backend sets browser-session cookies without `Max-Age`; browsers generally clear those when the browser session ends, although "restore previous session" settings may preserve them.
+Cookies use `SameSite=Lax` by default. For cross-origin deployments (e.g. Vercel frontend + Render API) set `VIRLY_COOKIE_SAME_SITE=none` on the server.
 
-Email verification auto-login uses browser-session cookies by default. The frontend sends API requests with credentials included. Authenticated unsafe requests (`POST`, `PUT`, `PATCH`, `DELETE`) also send `X-CSRF-Token` with the `csrfToken` response value, falling back to the readable `virly_csrf` cookie when available.
+---
 
-## Deploy
+## Deploy (Vercel + Render + Atlas)
 
-For Vercel + Render + Atlas:
+**Vercel (client)**
 
-- Vercel client env: `VITE_API_BASE_URL=https://<your-render-api>.onrender.com`
-- Render server env: `VIRLY_CLIENT_URL=https://<your-vercel-app>.vercel.app`
-- Render server env: `VIRLY_SERVER_URL=https://<your-render-api>.onrender.com`
-- Render server env: `VIRLY_COOKIE_SAME_SITE=none`
-- Render server env: `VIRLY_MONGODB_URI=<your-atlas-uri>`
-- Render server env: `VIRLY_JWT_SECRET=<long-random-secret>`
-- Render server env: `RESEND_API_KEY=<your-resend-api-key>`
-- Render server env: `VIRLY_EMAIL_FROM=Virly <verify@your-verified-domain.com>`
+```env
+VITE_API_BASE_URL=https://<your-render-api>.onrender.com
+```
 
-`VIRLY_CLIENT_URL` may contain comma-separated origins if you need both production and preview frontend URLs. Do not use a wildcard when `credentials: "include"` is enabled.
+**Render (server)**
 
-Resend must have the sender domain verified before public production delivery works.
+```env
+VIRLY_MONGODB_URI=<your-atlas-connection-string>
+VIRLY_JWT_SECRET=<long random secret>
+VIRLY_CLIENT_URL=https://<your-vercel-app>.vercel.app
+VIRLY_SERVER_URL=https://<your-render-api>.onrender.com
+VIRLY_COOKIE_SAME_SITE=none
+RESEND_API_KEY=<your-resend-api-key>
+VIRLY_EMAIL_FROM=Virly <verify@your-verified-domain.com>
+```
 
-## Default API
+`VIRLY_CLIENT_URL` accepts a comma-separated list of origins for staging + production previews. Do not use a wildcard when `credentials: "include"` is active.
 
-- Backend: `http://localhost:3000`
-- Frontend: `http://localhost:5173`
+The Resend sender domain must be verified before emails reach external inboxes.
+
+---
+
+## Project Structure
+
+```
+virly/
+├── client/          # React frontend (Vite)
+│   └── src/
+│       ├── app/                # Router, shell, guards
+│       ├── components/         # Shared UI primitives
+│       └── features/           # auth · dashboard · transfer · transactions
+│                                 currency · users · video · settings
+├── server/          # Express backend
+│   └── src/
+│       ├── ai/                 # LangGraph agent, tools, state, evals
+│       ├── models/             # Mongoose schemas
+│       ├── routes/             # Express route handlers
+│       ├── services/           # Business logic layer
+│       └── middleware/         # Auth, CSRF, error handling
+└── scripts/         # Seed scripts and dev utilities
+```
+
+---
+
+## License
+
+MIT

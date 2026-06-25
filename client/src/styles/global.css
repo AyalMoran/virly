@@ -1000,17 +1000,7 @@ h2 {
 }
 
 .transaction-confirmation-overlay [role="dialog"] {
-  width: min(100%, 420px);
-}
-
-.transaction-confirmation-overlay [role="dialog"] > div {
-  max-width: none;
-  border-color: rgba(255, 255, 255, 0.42);
-  background:
-    linear-gradient(145deg, rgba(255, 255, 255, 0.72), rgba(230, 238, 201, 0.34)),
-    rgba(230, 238, 201, 0.76);
-  box-shadow: 0 34px 90px rgba(18, 58, 64, 0.3);
-  backdrop-filter: blur(24px) saturate(1.18);
+  width: min(100%, 396px);
 }
 
 .quick-contact-list {
@@ -2502,41 +2492,245 @@ dd {
   color: var(--color-muted);
 }
 
+/* ------------------------------------------------------------------ */
+/* Empty state — an embossed bank seal over a "void ledger".           */
+/* ------------------------------------------------------------------ */
+
 .empty-state {
+  position: relative;
   display: grid;
   justify-items: center;
-  gap: 10px;
-  padding: 42px 18px;
+  gap: 14px;
+  padding: clamp(30px, 5vw, 46px) 20px;
+  overflow: hidden;
   text-align: center;
+}
+
+/* Faint engine-turned guilloche bleeding in from the corner. */
+.empty-state-flourish {
+  position: absolute;
+  top: -96px;
+  right: -96px;
+  width: 250px;
+  height: 250px;
+  pointer-events: none;
+  background: repeating-radial-gradient(
+    circle at center,
+    transparent 0 12px,
+    rgba(53, 133, 142, 0.05) 12px 13.5px
+  );
+  -webkit-mask-image: radial-gradient(circle at center, black 28%, transparent 70%);
+  mask-image: radial-gradient(circle at center, black 28%, transparent 70%);
+}
+
+/* An embossed wax-seal medallion holding the icon. */
+.empty-seal {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 78px;
+  height: 78px;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 32% 26%, rgba(255, 255, 255, 0.85), transparent 58%),
+    linear-gradient(145deg, rgba(53, 133, 142, 0.18), rgba(194, 208, 153, 0.26));
+  color: var(--color-primary-deep);
+  box-shadow:
+    inset 0 2px 4px rgba(255, 255, 255, 0.75),
+    inset 0 -4px 9px rgba(53, 133, 142, 0.2),
+    0 14px 30px rgba(53, 133, 142, 0.18);
+}
+
+/* A slowly turning guilloche ring engraved into the seal. */
+.empty-seal-ring {
+  position: absolute;
+  inset: 7px;
+  border-radius: 999px;
+  background: repeating-radial-gradient(
+    circle at center,
+    transparent 0 3.5px,
+    rgba(31, 95, 103, 0.22) 3.5px 4.6px
+  );
+  -webkit-mask: radial-gradient(circle, transparent 52%, #000 54%, #000 96%, transparent 99%);
+  mask: radial-gradient(circle, transparent 52%, #000 54%, #000 96%, transparent 99%);
+  opacity: 0.7;
+  animation: seal-spin 44s linear infinite;
+}
+
+.empty-seal-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+.empty-seal-icon svg {
+  width: 30px;
+  height: 30px;
+  stroke-width: 1.7;
+}
+
+.empty-state h2 {
+  font-size: clamp(1.4rem, 3.4vw, 1.85rem);
 }
 
 .empty-state p {
   max-width: 420px;
   color: var(--color-muted);
+  line-height: 1.6;
 }
 
-.empty-icon {
+/* The "void ledger": empty rows with leader dots and no values. */
+.empty-ledger {
   display: grid;
-  place-items: center;
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  background: rgba(53, 133, 142, 0.12);
-  color: var(--color-primary);
-  font-weight: 900;
+  gap: 11px;
+  width: min(280px, 86%);
+  margin-top: 4px;
 }
 
-.skeleton-stack {
+.empty-ledger-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.empty-ledger-key {
+  flex: 0 0 auto;
+  width: 34%;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(53, 133, 142, 0.18);
+}
+
+.empty-ledger-dots {
+  flex: 1 1 auto;
+  height: 0;
+  border-bottom: 1.5px dotted rgba(53, 133, 142, 0.3);
+}
+
+.empty-ledger-val {
+  flex: 0 0 auto;
+  width: 15%;
+  height: 7px;
+  border-radius: 999px;
+  background: rgba(53, 133, 142, 0.11);
+}
+
+.empty-state-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  justify-content: center;
+  margin-top: 6px;
+}
+
+/* Staggered reveal, lifting each element in turn. */
+.empty-seal,
+.empty-state h2,
+.empty-state p,
+.empty-ledger,
+.empty-state-actions {
+  animation: rise-in 0.6s var(--ease-spring) backwards;
+}
+
+.empty-state h2 {
+  animation-delay: 70ms;
+}
+
+.empty-state p {
+  animation-delay: 120ms;
+}
+
+.empty-ledger {
+  animation-delay: 170ms;
+}
+
+.empty-state-actions {
+  animation-delay: 220ms;
+}
+
+@keyframes seal-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Loading — a receipt feeding out of the printer slot.                */
+/* ------------------------------------------------------------------ */
+
+.printing {
+  position: relative;
   display: grid;
-  gap: 14px;
 }
 
-.skeleton-row {
-  height: 76px;
-  border-radius: 16px;
-  background: linear-gradient(90deg, rgba(255, 255, 255, 0.22), rgba(53, 133, 142, 0.14), rgba(255, 255, 255, 0.22));
+/* The dark printer slot the paper emerges from. */
+.printing-slot {
+  height: 8px;
+  margin-bottom: 16px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, #2f4446, #1c2b2d);
+  box-shadow:
+    inset 0 -2px 3px rgba(0, 0, 0, 0.32),
+    0 3px 7px rgba(23, 61, 66, 0.22);
+}
+
+.printing-lines {
+  display: grid;
+  gap: 12px;
+}
+
+.printing-line {
+  height: 64px;
+  border-radius: 14px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.24),
+    rgba(53, 133, 142, 0.16),
+    rgba(255, 255, 255, 0.24)
+  );
   background-size: 220% 100%;
-  animation: shimmer 1.4s infinite;
+  animation:
+    shimmer 1.5s linear infinite,
+    rise-in 0.5s var(--ease-spring) backwards;
+}
+
+/* Lines feed out top-to-bottom, with slightly ragged "receipt" widths. */
+.printing-line:nth-child(1) { animation-delay: 0s, 0ms; }
+.printing-line:nth-child(2) { width: 94%; animation-delay: 0s, 70ms; }
+.printing-line:nth-child(3) { width: 98%; animation-delay: 0s, 140ms; }
+.printing-line:nth-child(4) { width: 90%; animation-delay: 0s, 210ms; }
+.printing-line:nth-child(5) { width: 96%; animation-delay: 0s, 280ms; }
+.printing-line:nth-child(n + 6) { width: 88%; animation-delay: 0s, 350ms; }
+
+.printing-caption {
+  display: block;
+  margin-top: 16px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--color-subtle);
+  animation: caption-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes caption-pulse {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 0.85; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .empty-seal,
+  .empty-state h2,
+  .empty-state p,
+  .empty-ledger,
+  .empty-state-actions,
+  .empty-seal-ring,
+  .printing-line,
+  .printing-caption {
+    animation: none !important;
+  }
 }
 
 .mobile-nav {
@@ -3640,3 +3834,1640 @@ select {
     transform: none;
   }
 }
+
+/* ------------------------------------------------------------------ */
+/* 404 — "Declined receipt"                                            */
+/* A missing page, reframed as a declined transaction printed on a     */
+/* torn bank slip. Monospace ledger meets the Fraunces wordmark.       */
+/* ------------------------------------------------------------------ */
+
+.nf-screen {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: clamp(28px, 6vw, 72px);
+  overflow: hidden;
+}
+
+/* A soft focal glow lifts the slip off the ambient shader background. */
+.nf-screen::before {
+  content: "";
+  position: absolute;
+  top: 44%;
+  left: 50%;
+  width: min(120vw, 760px);
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  background: radial-gradient(
+    circle at center,
+    rgba(245, 250, 225, 0.62),
+    rgba(194, 208, 153, 0.16) 38%,
+    transparent 66%
+  );
+}
+
+.nf-stage {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: clamp(26px, 4vw, 38px);
+  width: min(384px, 100%);
+}
+
+/* Mask clips box-shadow, so the paper's drop shadow lives on this wrapper. */
+.nf-receipt-shadow {
+  width: 100%;
+  filter:
+    drop-shadow(0 2px 4px rgba(23, 61, 66, 0.1))
+    drop-shadow(0 28px 56px rgba(53, 133, 142, 0.26));
+}
+
+.nf-receipt {
+  --zig: 11px;
+  position: relative;
+  width: 100%;
+  padding: calc(var(--zig) + 26px) clamp(22px, 6vw, 32px) calc(var(--zig) + 24px);
+  color: var(--color-text);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5), transparent 26%),
+    repeating-linear-gradient(
+      0deg,
+      rgba(23, 61, 66, 0.022) 0 27px,
+      transparent 27px 28px
+    ),
+    linear-gradient(165deg, #fffdf6, #fbfaef 64%, #f4f3e4);
+  font-family: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, monospace;
+  cursor: default;
+  /* Twin zigzag tear lines, top and bottom, with a solid body between. */
+  -webkit-mask:
+    conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / var(--zig) var(--zig) repeat-x,
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / var(--zig) var(--zig) repeat-x,
+    linear-gradient(#000 0 0) center / 100% calc(100% - 2 * var(--zig)) no-repeat;
+  mask:
+    conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / var(--zig) var(--zig) repeat-x,
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / var(--zig) var(--zig) repeat-x,
+    linear-gradient(#000 0 0) center / 100% calc(100% - 2 * var(--zig)) no-repeat;
+}
+
+.nf-merchant {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  text-align: center;
+}
+
+.nf-logo {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  margin-bottom: 5px;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #35858e, #7da78c 72%, #c2d099);
+  box-shadow: 0 10px 22px rgba(53, 133, 142, 0.32);
+  color: #f8ffe7;
+  font-family: var(--font-display);
+  font-size: 1.2rem;
+  font-weight: 800;
+}
+
+.nf-brand {
+  font-family: var(--font-display);
+  font-size: 1.5rem;
+  font-weight: 640;
+  font-variation-settings: "SOFT" 40, "WONK" 0;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.nf-merchant-sub {
+  font-size: 0.74rem;
+  font-weight: 700;
+  letter-spacing: 0.32em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.nf-merchant-meta {
+  font-size: 0.62rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-subtle);
+}
+
+.nf-divider {
+  height: 0;
+  margin: 18px 0;
+  border-top: 1.5px dashed rgba(23, 61, 66, 0.28);
+}
+
+.nf-hero {
+  position: relative;
+  text-align: center;
+}
+
+.nf-headline {
+  position: relative;
+  display: inline-block;
+  margin: 2px 0 6px;
+  font-family: var(--font-display);
+  font-size: clamp(4.6rem, 19vw, 6.8rem);
+  font-style: italic;
+  font-weight: 660;
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 80, "WONK" 1;
+  line-height: 0.86;
+  letter-spacing: -0.02em;
+  color: #123a40;
+}
+
+/* Rubber stamp: faded terracotta ink, double-ruled, slammed off-axis. */
+.nf-stamp {
+  position: absolute;
+  top: 46%;
+  left: 50%;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: 7px 16px 6px;
+  transform: translate(-50%, -50%) rotate(-13deg);
+  transform-origin: center;
+  border: 2.5px solid rgba(166, 56, 43, 0.78);
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 1.5px rgba(166, 56, 43, 0.5);
+  color: rgba(166, 56, 43, 0.82);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  white-space: nowrap;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.nf-stamp-main {
+  font-size: 1.42rem;
+  font-weight: 800;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.nf-stamp-sub {
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  padding-left: 0.42em;
+  opacity: 0.85;
+}
+
+.nf-sub {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.32rem;
+  font-weight: 560;
+  font-variation-settings: "SOFT" 30, "WONK" 0;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+}
+
+.nf-note {
+  margin: 6px 0 0;
+  font-size: 0.74rem;
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+}
+
+.nf-rows,
+.nf-totals {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 9px;
+}
+
+.nf-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.nf-row-key {
+  flex: 0 0 auto;
+  color: var(--color-muted);
+}
+
+/* Classic receipt leader dots between key and value. */
+.nf-row-dots {
+  flex: 1 1 auto;
+  align-self: center;
+  height: 0;
+  margin: 0 3px;
+  border-bottom: 1.5px dotted rgba(23, 61, 66, 0.32);
+}
+
+.nf-row-val {
+  flex: 0 1 auto;
+  max-width: 58%;
+  overflow: hidden;
+  color: var(--color-text);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.nf-total {
+  font-size: 0.92rem;
+  font-weight: 800;
+}
+
+.nf-total .nf-row-key {
+  color: var(--color-text);
+}
+
+.nf-total .nf-row-val {
+  color: var(--color-primary-deep);
+}
+
+/* Bars size by proportional flex-grow so the barcode always spans the slip
+   width exactly — no fixed pixels to overflow a narrow viewport. */
+.nf-barcode {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  height: 56px;
+  margin-top: 2px;
+}
+
+.nf-bar,
+.nf-space {
+  flex-basis: 0;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.nf-bar {
+  background: #1c2b2d;
+}
+
+.nf-space {
+  background: transparent;
+}
+
+.nf-barcode-caption {
+  margin: 9px 0 0;
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-align: center;
+  color: var(--color-muted);
+}
+
+.nf-receipt-footer {
+  margin-top: 16px;
+  font-size: 0.62rem;
+  line-height: 1.7;
+  letter-spacing: 0.1em;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--color-subtle);
+}
+
+.nf-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 12px;
+}
+
+.nf-cta {
+  gap: 9px;
+}
+
+.nf-cta svg {
+  width: 17px;
+  height: 17px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Transaction receipt — the details modal as a printed bank slip.     */
+/* Shares the 404's paper language (torn edges, mono ledger, Fraunces  */
+/* hero) but inverts the sentiment: a PAID / RECEIVED clearing stamp.   */
+/* ------------------------------------------------------------------ */
+
+.tr-stage {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 20px;
+  width: 100%;
+}
+
+/* Mask clips box-shadow, so the paper's drop shadow lives on this wrapper. */
+.tr-shadow {
+  position: relative;
+  width: 100%;
+  filter:
+    drop-shadow(0 2px 4px rgba(23, 61, 66, 0.12))
+    drop-shadow(0 26px 54px rgba(18, 58, 64, 0.34));
+}
+
+.tr-receipt {
+  --zig: 11px;
+  position: relative;
+  width: 100%;
+  padding: calc(var(--zig) + 26px) clamp(20px, 6vw, 30px) calc(var(--zig) + 22px);
+  color: var(--color-text);
+  background:
+    linear-gradient(180deg, rgba(255, 255, 255, 0.5), transparent 24%),
+    repeating-linear-gradient(0deg, rgba(23, 61, 66, 0.022) 0 27px, transparent 27px 28px),
+    linear-gradient(165deg, #fffdf6, #fbfaef 64%, #f4f3e4);
+  font-family: ui-monospace, "SFMono-Regular", "SF Mono", Menlo, Consolas, monospace;
+  -webkit-mask:
+    conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / var(--zig) var(--zig) repeat-x,
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / var(--zig) var(--zig) repeat-x,
+    linear-gradient(#000 0 0) center / 100% calc(100% - 2 * var(--zig)) no-repeat;
+  mask:
+    conic-gradient(from 135deg at top, #0000, #000 1deg 89deg, #0000 90deg) top / var(--zig) var(--zig) repeat-x,
+    conic-gradient(from -45deg at bottom, #0000, #000 1deg 89deg, #0000 90deg) bottom / var(--zig) var(--zig) repeat-x,
+    linear-gradient(#000 0 0) center / 100% calc(100% - 2 * var(--zig)) no-repeat;
+}
+
+/* Sits on the unmasked wrapper so it isn't clipped by the torn top edge. */
+.tr-close {
+  position: absolute;
+  top: 16px;
+  right: 14px;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border: 1px solid rgba(23, 61, 66, 0.16);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.6);
+  color: var(--color-muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  transition: color 160ms ease, border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.tr-close:hover {
+  color: var(--color-text);
+  border-color: rgba(23, 61, 66, 0.32);
+  background: #fff;
+  transform: rotate(90deg);
+}
+
+.tr-merchant {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  text-align: center;
+}
+
+.tr-logo {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  margin-bottom: 4px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #35858e, #7da78c 72%, #c2d099);
+  box-shadow: 0 10px 22px rgba(53, 133, 142, 0.32);
+  color: #f8ffe7;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.tr-brand {
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 640;
+  font-variation-settings: "SOFT" 40, "WONK" 0;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.tr-merchant-sub {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.tr-merchant-meta {
+  font-size: 0.6rem;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-subtle);
+}
+
+.tr-divider {
+  height: 0;
+  margin: 16px 0;
+  border-top: 1.5px dashed rgba(23, 61, 66, 0.28);
+}
+
+.tr-hero {
+  position: relative;
+  text-align: center;
+}
+
+/* Direction chip mirrors the transaction-list in/out marks. */
+.tr-direction {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 8px;
+  padding: 4px 12px 4px 8px;
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.tr-direction.is-credit {
+  background: rgba(9, 145, 32, 0.1);
+  color: var(--color-credit);
+}
+
+.tr-direction.is-debit {
+  background: rgba(53, 133, 142, 0.12);
+  color: var(--color-primary-deep);
+}
+
+.tr-direction-mark {
+  display: grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.tr-direction-mark svg {
+  width: 13px;
+  height: 13px;
+  stroke-width: 2.4;
+}
+
+.tr-amount {
+  position: relative;
+  display: inline-block;
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: clamp(3rem, 12vw, 4.1rem);
+  font-weight: 580;
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 40, "WONK" 0;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+.tr-amount.is-credit {
+  color: var(--color-credit);
+}
+
+/* Outgoing money reads as a calm, in-palette debit — not an alarming red. */
+.tr-amount.is-debit {
+  color: #123a40;
+}
+
+/* The clearing stamp: teal ink, double-ruled, slammed off-axis — the
+   optimistic counterpart to the 404's DECLINED. */
+.tr-stamp {
+  position: absolute;
+  top: 30px;
+  left: 14px;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: 5px 10px 4px;
+  transform: rotate(-11deg);
+  transform-origin: center;
+  border: 2.5px solid rgba(31, 95, 103, 0.74);
+  border-radius: 8px;
+  box-shadow: inset 0 0 0 1.5px rgba(31, 95, 103, 0.46);
+  color: rgba(31, 95, 103, 0.82);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  white-space: nowrap;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.tr-stamp-main {
+  font-size: 1.02rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.tr-stamp-sub {
+  font-size: 0.46rem;
+  font-weight: 700;
+  letter-spacing: 0.34em;
+  text-transform: uppercase;
+  padding-left: 0.34em;
+  opacity: 0.85;
+}
+
+.tr-status-note {
+  margin: 10px 0 0;
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+}
+
+.tr-rows,
+.tr-totals {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 9px;
+}
+
+.tr-row {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  min-width: 0;
+  font-size: 0.76rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.tr-row-key {
+  flex: 0 0 auto;
+  color: var(--color-muted);
+}
+
+.tr-row-dots {
+  flex: 1 1 auto;
+  align-self: center;
+  height: 0;
+  margin: 0 3px;
+  border-bottom: 1.5px dotted rgba(23, 61, 66, 0.32);
+}
+
+.tr-row-val {
+  flex: 0 1 auto;
+  max-width: 62%;
+  overflow: hidden;
+  color: var(--color-text);
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The auth code is a raw id — keep it lowercase and let it truncate. */
+.tr-row-val-id {
+  text-transform: none;
+  letter-spacing: 0;
+}
+
+.tr-grand {
+  margin-top: 2px;
+  font-size: 0.95rem;
+  font-weight: 800;
+}
+
+.tr-grand .tr-row-key {
+  color: var(--color-text);
+}
+
+.tr-row-val.is-credit {
+  color: var(--color-credit);
+}
+
+.tr-row-val.is-debit {
+  color: #123a40;
+}
+
+.tr-barcode {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  height: 52px;
+  margin-top: 2px;
+}
+
+.tr-bar,
+.tr-space {
+  flex-basis: 0;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.tr-bar {
+  background: #1c2b2d;
+}
+
+.tr-space {
+  background: transparent;
+}
+
+.tr-barcode-caption {
+  margin: 9px 0 0;
+  font-size: 0.64rem;
+  font-weight: 700;
+  letter-spacing: 0.26em;
+  text-align: center;
+  color: var(--color-muted);
+}
+
+.tr-receipt-footer {
+  margin-top: 14px;
+  font-size: 0.6rem;
+  line-height: 1.7;
+  letter-spacing: 0.1em;
+  text-align: center;
+  text-transform: uppercase;
+  color: var(--color-subtle);
+}
+
+.tr-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+}
+
+.tr-cta {
+  flex: 1 1 auto;
+  min-width: 140px;
+  max-width: 200px;
+}
+
+/* ------------------------------------------------------------------ */
+/* Transfer cheque — the send-money flow as a personal cheque.         */
+/* Write it (form) → sign it (review) → clear it (success), extending  */
+/* the receipt's paper world with guilloche, an amount-in-words line,  */
+/* a signature, and a MICR band.                                       */
+/* ------------------------------------------------------------------ */
+
+.cheque-layout {
+  align-items: start;
+}
+
+.cheque-panel {
+  min-width: 0;
+}
+
+.cheque-shell {
+  display: grid;
+  gap: 18px;
+}
+
+.cheque {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(53, 133, 142, 0.3);
+  border-radius: 16px;
+  padding: clamp(20px, 4vw, 30px);
+  background:
+    linear-gradient(135deg, #f6faf1, #eef4ea 58%, #e7f0ea);
+  box-shadow:
+    0 1px 2px rgba(23, 61, 66, 0.06),
+    0 22px 50px rgba(53, 133, 142, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+/* Engine-turned guilloche security tint in the corner. */
+.cheque-guilloche {
+  position: absolute;
+  top: -120px;
+  right: -120px;
+  width: 320px;
+  height: 320px;
+  pointer-events: none;
+  background: repeating-radial-gradient(
+    circle at center,
+    transparent 0 13px,
+    rgba(53, 133, 142, 0.07) 13px 14.5px
+  );
+  -webkit-mask-image: radial-gradient(circle at center, black 30%, transparent 72%);
+  mask-image: radial-gradient(circle at center, black 30%, transparent 72%);
+}
+
+.cheque-watermark {
+  position: absolute;
+  right: 14px;
+  bottom: -22px;
+  font-family: var(--font-display);
+  font-size: 11rem;
+  font-weight: 700;
+  font-style: italic;
+  line-height: 1;
+  color: rgba(53, 133, 142, 0.06);
+  pointer-events: none;
+  user-select: none;
+}
+
+.cheque > * {
+  position: relative;
+  z-index: 1;
+}
+
+.cheque-microlabel {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-subtle);
+}
+
+.cheque-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.cheque-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+
+.cheque-logo {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #35858e, #7da78c 72%, #c2d099);
+  box-shadow: 0 10px 22px rgba(53, 133, 142, 0.32);
+  color: #f8ffe7;
+  font-family: var(--font-display);
+  font-size: 1.15rem;
+  font-weight: 800;
+}
+
+.cheque-brandname {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+  font-family: var(--font-display);
+  font-size: 1.32rem;
+  font-weight: 640;
+  font-variation-settings: "SOFT" 40, "WONK" 0;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.cheque-brandname small {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.cheque-meta {
+  display: grid;
+  gap: 4px;
+  justify-items: end;
+  text-align: right;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+.cheque-no {
+  font-size: 0.92rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--color-primary-deep);
+  font-variant-numeric: tabular-nums;
+}
+
+.cheque-dateline {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  padding-bottom: 2px;
+  border-bottom: 1.5px solid rgba(53, 133, 142, 0.3);
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.cheque-payline {
+  display: grid;
+  gap: 8px;
+  margin-top: 24px;
+}
+
+.cheque-payfields {
+  display: flex;
+  align-items: flex-end;
+  gap: 16px;
+}
+
+/* Shared transparent "written on the line" input. */
+.cheque-input {
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  border-bottom: 1.5px solid rgba(53, 133, 142, 0.34);
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  padding: 4px 2px;
+  color: var(--color-text);
+  transition: border-color 160ms ease;
+}
+
+.cheque-input::placeholder {
+  color: var(--color-subtle);
+}
+
+.cheque-input:focus-visible {
+  outline: none;
+  border-bottom-color: var(--color-primary);
+  background: transparent;
+  box-shadow: 0 1px 0 0 var(--color-primary);
+}
+
+.cheque-payee,
+.cheque-payee-static {
+  flex: 1 1 auto;
+  min-width: 0;
+  font-size: 1.04rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.cheque-payee-static {
+  overflow: hidden;
+  padding: 4px 2px;
+  border-bottom: 1.5px solid rgba(53, 133, 142, 0.34);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cheque-amountbox {
+  display: inline-flex;
+  align-items: center;
+  flex: 0 0 auto;
+  gap: 6px;
+  min-width: 120px;
+  padding: 7px 12px;
+  border: 1.6px solid rgba(53, 133, 142, 0.5);
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.6);
+}
+
+.cheque-amountbox.has-error {
+  border-color: rgba(127, 75, 68, 0.6);
+}
+
+.cheque-amountbox-cur {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: var(--color-primary-deep);
+}
+
+.cheque-amount-input,
+.cheque-amount-static {
+  flex: 1 1 auto;
+  width: 100%;
+  min-width: 0;
+  border: 0;
+  padding: 0;
+  text-align: right;
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 580;
+  letter-spacing: -0.01em;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.cheque-amount-static {
+  display: block;
+}
+
+/* Strip the number spinner — the box is the frame. */
+.cheque-amount-input::-webkit-outer-spin-button,
+.cheque-amount-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.cheque-amount-input {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.cheque-amount-input:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
+.cheque-error {
+  display: block;
+  color: #7f4b44;
+  font-size: 0.82rem;
+}
+
+.cheque-error-amount {
+  text-align: right;
+}
+
+.cheque-words {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-top: 22px;
+}
+
+.cheque-words-text {
+  flex: 0 1 auto;
+  overflow: hidden;
+  font-family: var(--font-display);
+  font-size: 1.16rem;
+  font-style: italic;
+  font-weight: 500;
+  font-variation-settings: "SOFT" 60, "WONK" 1;
+  color: var(--color-text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cheque-words-text.is-empty {
+  color: var(--color-subtle);
+}
+
+.cheque-words-rule {
+  flex: 1 1 auto;
+  height: 0;
+  border-bottom: 1.5px dotted rgba(53, 133, 142, 0.34);
+}
+
+.cheque-words-cur {
+  flex: 0 0 auto;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.66rem;
+  font-weight: 800;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-primary-deep);
+}
+
+.cheque-currency {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 18px;
+}
+
+.cheque-currency select {
+  min-height: 38px;
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.55);
+  color: var(--color-text);
+  padding: 0 12px;
+  font-weight: 700;
+}
+
+.cheque-foot {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-top: 26px;
+}
+
+.cheque-memo {
+  display: grid;
+  gap: 5px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.cheque-memo-static {
+  padding: 4px 2px;
+  border-bottom: 1.5px solid rgba(53, 133, 142, 0.34);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-text);
+}
+
+.cheque-sign {
+  display: grid;
+  gap: 5px;
+  flex: 0 0 auto;
+  width: min(48%, 220px);
+  justify-items: stretch;
+  text-align: center;
+}
+
+.cheque-sign-script {
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-style: italic;
+  font-weight: 460;
+  font-variation-settings: "SOFT" 90, "WONK" 1;
+  line-height: 1.1;
+  color: var(--color-primary-deep);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cheque-sign-script.is-ghost {
+  color: var(--color-subtle);
+  font-size: 1.05rem;
+}
+
+.cheque-sign-rule {
+  height: 0;
+  border-bottom: 1.5px solid rgba(53, 133, 142, 0.4);
+}
+
+.cheque-micr {
+  margin-top: 24px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  color: #1c2b2d;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The clearing stamp — teal ink, slammed across the cheque on success. */
+.cheque-stamp {
+  position: absolute;
+  top: 44%;
+  right: 11%;
+  z-index: 2;
+  display: grid;
+  justify-items: center;
+  gap: 1px;
+  padding: 7px 15px 6px;
+  transform: rotate(-12deg);
+  transform-origin: center;
+  border: 2.5px solid rgba(31, 95, 103, 0.74);
+  border-radius: 9px;
+  box-shadow: inset 0 0 0 1.5px rgba(31, 95, 103, 0.46);
+  color: rgba(31, 95, 103, 0.82);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  white-space: nowrap;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+
+.cheque-stamp-main {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  line-height: 1;
+}
+
+.cheque-stamp-sub {
+  font-size: 0.5rem;
+  font-weight: 700;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  padding-left: 0.3em;
+  opacity: 0.85;
+}
+
+.cheque-hint {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.82rem;
+  line-height: 1.5;
+}
+
+.cheque-payeebook {
+  display: grid;
+  gap: 8px;
+}
+
+.cheque-payeebook-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 8px;
+}
+
+.cheque-payee-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.4);
+  color: var(--color-text);
+  padding: 9px 11px;
+  text-align: left;
+  transition: border 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.cheque-payee-chip:hover,
+.cheque-payee-chip.selected {
+  border-color: rgba(53, 133, 142, 0.42);
+  background: rgba(255, 255, 255, 0.62);
+  transform: translateY(-1px);
+}
+
+.cheque-payee-chip span {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  background: linear-gradient(135deg, rgba(53, 133, 142, 0.18), rgba(194, 208, 153, 0.34));
+  color: var(--color-primary-deep);
+  font-size: 0.78rem;
+  font-weight: 900;
+}
+
+.cheque-payee-chip strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: 0.84rem;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cheque-reviewnote,
+.cheque-successnote {
+  display: grid;
+  gap: 10px;
+}
+
+.cheque-projection-line {
+  margin: 0;
+  color: var(--color-muted);
+  font-size: 0.9rem;
+}
+
+.cheque-projection-line strong {
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.cheque-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.cheque-actions .button {
+  flex: 1 1 auto;
+  min-width: 150px;
+}
+
+@media (max-width: 560px) {
+  .cheque-payfields,
+  .cheque-foot {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 14px;
+  }
+
+  .cheque-amountbox {
+    width: 100%;
+  }
+
+  .cheque-sign {
+    width: 100%;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Account statement — the dashboard balance + ledger as a printed      */
+/* bank statement, in the paper-document family.                        */
+/* ------------------------------------------------------------------ */
+ 
+.statement {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid rgba(53, 133, 142, 0.28);
+  border-radius: 20px;
+  padding: clamp(22px, 4vw, 36px);
+  /* On-brand pale paper, roughened with a woven crosshatch + fibrous grain. */
+  background-color: #e9efdc;
+  background-image:
+    radial-gradient(ellipse at 20% 12%, rgba(125, 167, 140, 0.1), transparent 55%),
+    radial-gradient(ellipse at 85% 90%, rgba(53, 133, 142, 0.07), transparent 55%),
+    repeating-linear-gradient(0deg, rgba(53, 133, 142, 0.04) 0 1px, transparent 1px 5px),
+    repeating-linear-gradient(90deg, rgba(53, 133, 142, 0.035) 0 1px, transparent 1px 5px),
+    linear-gradient(135deg, #f1f5ea, #e8efda 55%, #dfe7ce);
+  box-shadow:
+    0 1px 2px rgba(23, 61, 66, 0.06),
+    0 26px 60px rgba(53, 133, 142, 0.16),
+    inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+/* Rough fibrous paper grain — colour-neutral, multiplied into the paper. */
+.statement::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.5;
+  mix-blend-mode: multiply;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='220' height='220'%3E%3Cfilter id='pf'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.05 0.55' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23pf)' opacity='0.62'/%3E%3C/svg%3E");
+  background-size: 220px 220px;
+}
+
+.statement-flourish {
+  position: absolute;
+  top: -130px;
+  right: -130px;
+  width: 320px;
+  height: 320px;
+  pointer-events: none;
+  background: repeating-radial-gradient(
+    circle at center,
+    transparent 0 13px,
+    rgba(53, 133, 142, 0.06) 13px 14.5px
+  );
+  -webkit-mask-image: radial-gradient(circle at center, black 30%, transparent 72%);
+  mask-image: radial-gradient(circle at center, black 30%, transparent 72%);
+}
+
+.statement > * {
+  position: relative;
+  z-index: 1;
+}
+
+.statement-masthead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.statement-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.statement-logo {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #35858e, #7da78c 72%, #c2d099);
+  box-shadow: 0 12px 24px rgba(53, 133, 142, 0.3);
+  color: #f8ffe7;
+  font-family: var(--font-display);
+  font-size: 1.3rem;
+  font-weight: 800;
+}
+
+.statement-brandname {
+  display: grid;
+  gap: 2px;
+  font-family: var(--font-display);
+  font-size: 1.45rem;
+  font-weight: 640;
+  font-variation-settings: "SOFT" 40, "WONK" 0;
+  letter-spacing: -0.01em;
+  line-height: 1;
+}
+
+.statement-brandname small {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.statement-meta {
+  display: grid;
+  gap: 3px;
+  justify-items: end;
+  min-width: 0;
+  text-align: right;
+}
+
+.statement-doc {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.74rem;
+  font-weight: 800;
+  letter-spacing: 0.24em;
+  text-transform: uppercase;
+  color: var(--color-primary-deep);
+}
+
+.statement-metaline {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+}
+
+.statement-rule {
+  height: 0;
+  margin: 20px 0;
+  border-top: 1.5px solid rgba(53, 133, 142, 0.26);
+}
+
+.statement-rule-end {
+  border-top-style: double;
+  border-top-width: 3px;
+}
+
+.statement-summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+}
+
+.statement-microlabel {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.62rem;
+  font-weight: 700;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-subtle);
+}
+
+.statement-closing {
+  display: grid;
+  gap: 4px;
+}
+
+.statement-closing strong {
+  font-family: var(--font-display);
+  font-size: clamp(2.4rem, 6vw, 3.4rem);
+  font-weight: 560;
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 30, "WONK" 0;
+  line-height: 0.95;
+  letter-spacing: -0.02em;
+  color: #123a40;
+  font-variant-numeric: tabular-nums;
+}
+
+.statement-asof {
+  font-size: 0.74rem;
+  color: var(--color-muted);
+}
+
+.statement-figures {
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  gap: 10px 26px;
+  align-items: baseline;
+}
+
+.statement-figures > div {
+  display: grid;
+  gap: 3px;
+  justify-items: end;
+  text-align: right;
+}
+
+.statement-figures span {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-muted);
+}
+
+.statement-figures strong {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.statement-figures .is-in strong {
+  color: var(--color-credit);
+}
+
+.statement-figures .is-out strong {
+  color: var(--color-debit);
+}
+
+.statement-ledger {
+  display: grid;
+  gap: 2px;
+}
+
+.statement-ledger-head,
+.statement-line {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) 92px 92px 104px;
+  align-items: center;
+  gap: 12px;
+}
+
+.statement-ledger-head {
+  padding: 0 12px 8px;
+  border-bottom: 1.5px dashed rgba(53, 133, 142, 0.28);
+}
+
+.statement-ledger-head > span {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.6rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--color-subtle);
+}
+
+.statement-col-out {
+  grid-column: 3;
+  text-align: right;
+}
+
+.statement-col-in {
+  grid-column: 4;
+  text-align: right;
+}
+
+.statement-ledger-head .statement-cell-bal {
+  text-align: right;
+}
+
+.statement-line {
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  padding: 12px;
+  text-align: left;
+  cursor: pointer;
+  transition: background 160ms ease, transform 160ms ease, box-shadow 160ms ease;
+  animation: rise-in 0.5s var(--ease-spring) backwards;
+}
+
+.statement-line:nth-child(2) { animation-delay: 30ms; }
+.statement-line:nth-child(3) { animation-delay: 70ms; }
+.statement-line:nth-child(4) { animation-delay: 110ms; }
+.statement-line:nth-child(5) { animation-delay: 150ms; }
+.statement-line:nth-child(6) { animation-delay: 190ms; }
+.statement-line:nth-child(n + 7) { animation-delay: 230ms; }
+
+.statement-line:hover {
+  background:
+    linear-gradient(145deg, rgba(255, 255, 255, 0.5), rgba(194, 208, 153, 0.18)),
+    rgba(255, 255, 255, 0.3);
+  transform: translateY(-1px);
+  box-shadow: 0 8px 20px rgba(53, 133, 142, 0.12);
+}
+
+.statement-line:focus-visible {
+  outline: 3px solid rgba(53, 133, 142, 0.7);
+  outline-offset: 2px;
+}
+
+.statement-cell-date {
+  grid-column: 1;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.74rem;
+  color: var(--color-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.statement-cell-desc {
+  grid-column: 2;
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.statement-cell-desc strong {
+  overflow: hidden;
+  font-size: 0.92rem;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statement-cell-desc small {
+  overflow: hidden;
+  font-size: 0.76rem;
+  color: var(--color-muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.statement-cell-amount {
+  text-align: right;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+}
+
+.statement-cell-amount.is-out {
+  grid-column: 3;
+  color: var(--color-debit);
+}
+
+.statement-cell-amount.is-in {
+  grid-column: 4;
+  color: var(--color-credit);
+}
+
+.statement-cell-bal {
+  grid-column: 5;
+  text-align: right;
+  font-weight: 700;
+  color: var(--color-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.statement-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: 0.66rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--color-subtle);
+}
+
+.statement-viewall {
+  color: var(--color-primary);
+  font-weight: 800;
+}
+
+.statement-viewall:hover {
+  color: var(--color-primary-deep);
+}
+
+@media (max-width: 640px) {
+  .statement-ledger-head {
+    display: none;
+  }
+
+  .statement-line {
+    grid-template-columns: 1fr auto;
+    grid-template-areas:
+      "desc amount"
+      "date balance";
+    gap: 2px 12px;
+  }
+
+  .statement-cell-date {
+    grid-area: date;
+    align-self: start;
+  }
+
+  .statement-cell-desc {
+    grid-area: desc;
+  }
+
+  .statement-cell-bal {
+    grid-area: balance;
+    align-self: start;
+    font-size: 0.78rem;
+    color: var(--color-muted);
+  }
+
+  .statement-cell-amount.is-in,
+  .statement-cell-amount.is-out {
+    grid-area: amount;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .statement-line {
+    animation: none !important;
+  }
+}
+

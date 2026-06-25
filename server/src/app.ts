@@ -1,7 +1,9 @@
 import cors from "cors";
 import express from "express";
+import rateLimit from "express-rate-limit";
+import helmet from "helmet";
 import morgan from "morgan";
-import { config } from "./config.js";
+import { config, isProduction } from "./config.js";
 import { parseCookies } from "./middleware/cookies.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import aiRoutes from "./routes/ai.routes.js";
@@ -16,6 +18,33 @@ import videoSessionRoutes, {
 
 export const app = express();
 
+// Rate limiters guard the brute-forceable (auth) and costly (AI/LLM) surfaces.
+// Enforced in production only, so local dev and the test suite are unaffected.
+const authLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 50,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => !isProduction
+});
+
+const aiLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  limit: 30,
+  standardHeaders: true,
+  legacyHeaders: false,
+  skip: () => !isProduction
+});
+
+app.use(
+  helmet({
+    // This API serves JSON to a separate SPA origin: a page-level CSP is not
+    // meaningful, and responses must stay readable cross-origin.
+    contentSecurityPolicy: false,
+    crossOriginResourcePolicy: { policy: "cross-origin" }
+  })
+);
+
 app.use(
   cors({
     origin: config.clientUrls,
@@ -26,7 +55,7 @@ app.use(
 app.set("trust proxy", 1);
 
 app.use(parseCookies);
-app.use(express.json());
+app.use(express.json({ limit: "100kb" }));
 app.use(morgan("dev"));
 
 app.get("/", (_req, res) => {
@@ -36,12 +65,16 @@ app.get("/api/health", (_req, res) => {
   return res.json({ status: "ok" });
 });
 
-app.use("/api/auth", authRoutes);
+app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/accounts", userRoutes);
 app.use("/api/users", userProfileRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/exchange-rates", exchangeRateRoutes);
-app.use("/api/ai", aiRoutes);
+app.use("/api/ai", aiLimiter, aiRoutes);
 app.use("/api/video-sessions", videoSessionRoutes);
 app.use("/api/admin/video-sessions", adminVideoSessionRoutes);
+
+app.use((_req, res) => {
+  res.status(404).json({ message: "Not found." });
+});
 app.use(errorHandler);
