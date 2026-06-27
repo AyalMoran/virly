@@ -34,7 +34,8 @@ const PHRASES = [
   "CASHING IN"
 ];
 const COLS = PHRASES.reduce((max, phrase) => Math.max(max, phrase.length), 0);
-const SCRAMBLE = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+// Cells shuffle through digits (money!) while flapping, then settle on letters.
+const SCRAMBLE = "0123456789";
 
 type Phase = "hidden" | "visible" | "exiting";
 
