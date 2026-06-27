@@ -1,0 +1,107 @@
+{
+  "id": "a1b2c3d4-0000-4000-8000-000000000001",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "version": "7",
+  "dialect": "postgresql",
+  "tables": {
+    "public.knowledge_documents": {
+      "name": "knowledge_documents",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "char(24)", "primaryKey": true, "notNull": true },
+        "source": { "name": "source", "type": "text", "primaryKey": false, "notNull": true },
+        "source_ref": { "name": "source_ref", "type": "text", "primaryKey": false, "notNull": true },
+        "revision": { "name": "revision", "type": "text", "primaryKey": false, "notNull": true },
+        "title": { "name": "title", "type": "text", "primaryKey": false, "notNull": true },
+        "mime_type": { "name": "mime_type", "type": "text", "primaryKey": false, "notNull": false },
+        "category": { "name": "category", "type": "text", "primaryKey": false, "notNull": false },
+        "uri": { "name": "uri", "type": "text", "primaryKey": false, "notNull": false },
+        "created_at": { "name": "created_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true },
+        "updated_at": { "name": "updated_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true }
+      },
+      "indexes": {
+        "knowledge_documents_source_ref_uq": {
+          "name": "knowledge_documents_source_ref_uq",
+          "columns": [
+            { "expression": "source", "isExpression": false, "asc": true, "nulls": "last" },
+            { "expression": "source_ref", "isExpression": false, "asc": true, "nulls": "last" }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    },
+    "public.knowledge_chunks": {
+      "name": "knowledge_chunks",
+      "schema": "",
+      "columns": {
+        "id": { "name": "id", "type": "char(24)", "primaryKey": true, "notNull": true },
+        "document_id": { "name": "document_id", "type": "char(24)", "primaryKey": false, "notNull": true },
+        "chunk_index": { "name": "chunk_index", "type": "integer", "primaryKey": false, "notNull": true },
+        "content": { "name": "content", "type": "text", "primaryKey": false, "notNull": true },
+        "token_count": { "name": "token_count", "type": "integer", "primaryKey": false, "notNull": true, "default": 0 },
+        "embedding": { "name": "embedding", "type": "vector(1536)", "primaryKey": false, "notNull": true },
+        "metadata": { "name": "metadata", "type": "jsonb", "primaryKey": false, "notNull": true, "default": "'{}'::jsonb" },
+        "created_at": { "name": "created_at", "type": "timestamp with time zone", "primaryKey": false, "notNull": true }
+      },
+      "indexes": {
+        "knowledge_chunks_doc_idx_uq": {
+          "name": "knowledge_chunks_doc_idx_uq",
+          "columns": [
+            { "expression": "document_id", "isExpression": false, "asc": true, "nulls": "last" },
+            { "expression": "chunk_index", "isExpression": false, "asc": true, "nulls": "last" }
+          ],
+          "isUnique": true,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "knowledge_chunks_doc_idx": {
+          "name": "knowledge_chunks_doc_idx",
+          "columns": [
+            { "expression": "document_id", "isExpression": false, "asc": true, "nulls": "last" }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "knowledge_chunks_embedding_hnsw": {
+          "name": "knowledge_chunks_embedding_hnsw",
+          "columns": [
+            { "expression": "embedding", "isExpression": false, "asc": true, "nulls": "last", "opclass": "vector_cosine_ops" }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "hnsw",
+          "with": {}
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {},
+      "policies": {},
+      "checkConstraints": {},
+      "isRLSEnabled": false
+    }
+  },
+  "enums": {},
+  "schemas": {},
+  "sequences": {},
+  "roles": {},
+  "policies": {},
+  "views": {},
+  "_meta": {
+    "columns": {},
+    "schemas": {},
+    "tables": {}
+  }
+}

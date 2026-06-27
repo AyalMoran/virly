@@ -125,6 +125,33 @@ if (dbDriver === "postgres" && !postgresUrl) {
   throw new Error("VIRLY_POSTGRES_URL is required when VIRLY_DB_DRIVER=postgres.");
 }
 
+// The RAG knowledge base lives in a DEDICATED Postgres (pgvector), independent of
+// VIRLY_DB_DRIVER — so it is reachable even in mongo mode. It falls back to the
+// app's Postgres URL when a separate one isn't supplied. See RAG_PLAN.md §1.
+function resolveAiPgUrl(): string | undefined {
+  const raw = getOptionalStringEnv("VIRLY_AI_PG_URL", {
+    aliases: ["VIRLY_VECTOR_DB_URL"]
+  });
+  const cleaned = raw === "undefined" ? undefined : raw;
+  return cleaned ?? postgresUrl;
+}
+
+const aiPgUrl = resolveAiPgUrl();
+
+const ragEnabled = getBooleanEnv("VIRLY_RAG_ENABLED", { defaultValue: false });
+
+if (ragEnabled && !aiPgUrl) {
+  throw new Error(
+    "VIRLY_AI_PG_URL (or VIRLY_VECTOR_DB_URL / VIRLY_POSTGRES_URL) is required when VIRLY_RAG_ENABLED is on."
+  );
+}
+
+const ragMinScoreRaw = getOptionalStringEnv("VIRLY_RAG_MIN_SCORE");
+const ragMinScore = ragMinScoreRaw === undefined ? 0 : Number(ragMinScoreRaw);
+if (!Number.isFinite(ragMinScore) || ragMinScore < 0 || ragMinScore > 1) {
+  throw new Error("VIRLY_RAG_MIN_SCORE must be a number between 0 and 1.");
+}
+
 export const config = {
   port: getIntEnv("VIRLY_PORT", {
     defaultValue: 3000,
@@ -212,5 +239,18 @@ export const config = {
     sameSite: getCookieSameSite()
   },
   dbDriver,
-  postgresUrl
+  postgresUrl,
+  rag: {
+    // Feature flag — when off, the searchPolicyDocs tool stays inert (returns a
+    // graceful "unavailable" message) so the app/evals run without an AI Postgres.
+    enabled: ragEnabled,
+    /** Dedicated pgvector Postgres for AI/ML data (vectors now; checkpointer in M1.5). */
+    aiPgUrl,
+    embeddingModel: getStringEnv("VIRLY_RAG_EMBEDDING_MODEL", "text-embedding-3-small"),
+    /** Fixed vector width — must match the schema's vector(N) column. */
+    embeddingDimensions: 1536,
+    topK: getIntEnv("VIRLY_RAG_TOP_K", { defaultValue: 5, min: 1, max: 50 }),
+    /** Drop retrieved chunks whose cosine similarity is below this (0..1). */
+    minScore: ragMinScore
+  }
 };

@@ -12,11 +12,16 @@ services:
       NODE_ENV: development
       VIRLY_PORT: ${VIRLY_PORT:-3000}
       VIRLY_MONGODB_URI: ${VIRLY_MONGODB_URI:-mongodb://mongo:27017/virly?replicaSet=rs0}
+      # Dedicated AI-data Postgres (pgvector) for the RAG knowledge base — reachable
+      # even in mongo mode. See RAG_PLAN.md §5.
+      VIRLY_AI_PG_URL: ${VIRLY_AI_PG_URL:-postgres://virly:virly@postgres:5432/virly}
     depends_on:
       mongo:
         condition: service_healthy
       mongo-init:
         condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
     develop:
       watch:
         - action: sync
@@ -90,7 +95,26 @@ services:
     volumes:
       - ./docker/mongo-init.sh:/docker/mongo-init.sh:ro
 
+  # Dedicated AI-data Postgres (pgvector) for the RAG knowledge base.
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_DB: virly
+      POSTGRES_USER: virly
+      POSTGRES_PASSWORD: virly
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U virly"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
 volumes:
   mongo-data:
     external: true
     name: virly_mongo-data
+  postgres-data:

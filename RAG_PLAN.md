@@ -1,9 +1,11 @@
 # RAG Knowledge Base — Design Plan
 
-> Status: **approved, not yet built** (plan-first; no code yet)
-> Open M1 questions are now **resolved**: (1) migrations run via a **separate
-> `rag:migrate`** against the AI Postgres; (2) ingestion starts from a **local
-> folder** (Drive adapter deferred to M2).
+> Status: **M1 implemented** ✅ — vector store, retriever, `searchPolicyDocs`
+> tool, local-folder ingestion, and evals are built and tested (520 unit tests +
+> a pgvector contract suite green; end-to-end ingest+search verified). M1.5
+> (checkpointer → Postgres), M2 (Drive), M3 (MCP), M4 (fraud) remain.
+> Resolved M1 questions: (1) migrations run via a **separate `rag:migrate`**
+> against the AI Postgres; (2) ingestion starts from a **local folder**.
 > Scope of milestone 1: ingest plain policy / loan-package documents into a
 > vector store and let a LangGraph **sales-agent** node retrieve them with
 > citations. Fraud-transaction vectors are a deliberately separate, later phase.
