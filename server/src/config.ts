@@ -251,6 +251,18 @@ export const config = {
     embeddingDimensions: 1536,
     topK: getIntEnv("VIRLY_RAG_TOP_K", { defaultValue: 5, min: 1, max: 50 }),
     /** Drop retrieved chunks whose cosine similarity is below this (0..1). */
-    minScore: ragMinScore
+    minScore: ragMinScore,
+    /** Local-folder ingestion source (M1) — path lives outside the repo. */
+    localDir: getOptionalStringEnv("VIRLY_RAG_LOCAL_DIR"),
+    /** Google Drive ingestion source (M2). Auth via a service account. */
+    drive: {
+      folderId: getOptionalStringEnv("VIRLY_RAG_DRIVE_FOLDER_ID"),
+      /** Service-account key as a raw JSON string... */
+      serviceAccountJson: getOptionalStringEnv("VIRLY_GOOGLE_SERVICE_ACCOUNT_JSON"),
+      /** ...or a path to the key file (one of the two is required for Drive). */
+      serviceAccountFile: getOptionalStringEnv("VIRLY_GOOGLE_APPLICATION_CREDENTIALS", {
+        aliases: ["GOOGLE_APPLICATION_CREDENTIALS"]
+      })
+    }
   }
 };

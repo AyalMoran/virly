@@ -1,13 +1,15 @@
 /**
  * Sync the RAG knowledge base from a source into pgvector (RAG_PLAN.md §4).
  *
- * M1: local-folder source only. Run from server/:
- *   npm run rag:sync                       # sync server/knowledge-base → AI Postgres
- *   npm run rag:sync -- --dir=./docs       # custom folder
- *   npm run rag:sync -- --dry-run          # show the plan, write nothing
- *   npm run rag:sync -- --force            # re-embed even unchanged files
+ * Run from server/:
+ *   npm run rag:sync -- --source=drive                 # sync the Drive folder (M2)
+ *   npm run rag:sync -- --source=local --dir=/abs/path # sync a local folder (M1)
+ *   npm run rag:sync -- ... --dry-run                  # show the plan, write nothing
+ *   npm run rag:sync -- ... --force                    # re-embed even unchanged files
  *
- * Requires VIRLY_AI_PG_URL (or VIRLY_VECTOR_DB_URL / VIRLY_POSTGRES_URL) and,
+ * Drive uses VIRLY_RAG_DRIVE_FOLDER_ID + a service account
+ * (VIRLY_GOOGLE_SERVICE_ACCOUNT_JSON or VIRLY_GOOGLE_APPLICATION_CREDENTIALS).
+ * Local uses --dir or VIRLY_RAG_LOCAL_DIR. Both require VIRLY_AI_PG_URL and,
  * unless --dry-run, OPENAI_API_KEY.
  */
 import path from "node:path";
@@ -17,6 +19,8 @@ import { runAiMigrations, closeAiPool } from "../src/db/vector.js";
 import { isEmbeddingsConfigured } from "../src/ai/rag/embeddings.js";
 import { syncKnowledgeBase } from "../src/ai/rag/ingest.js";
 import { createLocalSource } from "../src/ai/rag/sources/local.js";
+import { createDriveSource } from "../src/ai/rag/sources/drive.js";
+import type { KnowledgeSource } from "../src/ai/rag/sources/types.js";
 
 function getFlag(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -27,18 +31,39 @@ function hasFlag(name: string): boolean {
   return process.argv.includes(`--${name}`);
 }
 
+async function buildSource(category?: string): Promise<{ source: KnowledgeSource; label: string }> {
+  const kind = getFlag("source") ?? "drive";
+
+  if (kind === "local") {
+    const dirArg = getFlag("dir") ?? config.rag.localDir;
+    if (!dirArg) {
+      throw new Error("Local source needs --dir=<path> or VIRLY_RAG_LOCAL_DIR.");
+    }
+    const dir = path.resolve(dirArg);
+    return { source: createLocalSource(dir, category), label: `local dir=${dir}` };
+  }
+
+  if (kind === "drive") {
+    const folderId = getFlag("folder") ?? config.rag.drive.folderId;
+    if (!folderId) {
+      throw new Error("Drive source needs --folder=<id> or VIRLY_RAG_DRIVE_FOLDER_ID.");
+    }
+    // Import the googleapis-backed client lazily so the SDK loads only for Drive.
+    const { createGoogleDriveClient } = await import("../src/ai/rag/sources/driveClient.js");
+    const client = createGoogleDriveClient();
+    const source = createDriveSource(folderId, client, {
+      categoryOverride: category,
+      onSkip: (file, reason) => console.log(`  ~ skip   ${file.name} (${reason})`)
+    });
+    return { source, label: `drive folder=${folderId}` };
+  }
+
+  throw new Error(`Unknown --source=${kind}. Use 'drive' or 'local'.`);
+}
+
 async function main(): Promise<void> {
   const dryRun = hasFlag("dry-run");
   const force = hasFlag("force");
-  // The knowledge base lives outside this repo — pass --dir=<abs path> or set
-  // VIRLY_RAG_LOCAL_DIR. No in-repo default (we do not ship sample content).
-  const dirArg = getFlag("dir") ?? process.env.VIRLY_RAG_LOCAL_DIR;
-  if (!dirArg) {
-    throw new Error(
-      "No knowledge-base directory. Pass --dir=<path> or set VIRLY_RAG_LOCAL_DIR."
-    );
-  }
-  const dir = path.resolve(dirArg);
   const category = getFlag("category");
 
   if (!config.rag.aiPgUrl) {
@@ -50,13 +75,13 @@ async function main(): Promise<void> {
     throw new Error("OPENAI_API_KEY is required to embed documents (or pass --dry-run).");
   }
 
-  console.log(`Knowledge sync — source=local dir=${dir}${dryRun ? " [dry-run]" : ""}`);
+  const { source, label } = await buildSource(category);
+  console.log(`Knowledge sync — source=${label}${dryRun ? " [dry-run]" : ""}`);
 
   if (!dryRun) {
     await runAiMigrations();
   }
 
-  const source = createLocalSource(dir, category);
   const summary = await syncKnowledgeBase(source, {
     dryRun,
     force,

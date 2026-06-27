@@ -240,13 +240,19 @@ an env flip, mirroring the app-DB driver pattern.
 
 1. **M1 — Vector store + retriever + tool (this plan).** Local-folder ingestion,
    pgvector, `searchPolicyDocs` in the sales node, citations, evals.
-2. **M1.5 — Consolidate LangGraph memory onto Postgres** (§7). Checkpointer +
+2. **M2 — Google Drive source adapter** — DONE. `createDriveSource` (service-account
+   auth, recursive folder walk, Google Docs exported to markdown, idempotent by
+   md5/version) behind the same `KnowledgeSource` interface; `rag:sync` defaults
+   to `--source=drive`. Scheduled sync is just this on a timer (not yet wired).
+3. **M1.5 — Consolidate LangGraph memory onto Postgres** (§7). Checkpointer +
    long-term store move to the AI Postgres; gated on the `PostgresStore` check.
-3. **M2 — Drive source adapter** + scheduled sync.
 4. **M3 — MCP server** wrapping `retrievePolicyDocs` for external clients (only
    if a real external consumer appears).
 5. **M4 — Fraud-transaction vectors** — separate tables, separate embedding
    strategy, role-gated tools. Designed later, not now.
+
+> Note: PDF files in Drive are skipped for now (logged) — text extraction needs
+> a parser (pdf-parse) and is a small follow-up if the KB contains PDFs.
 
 ---
 
