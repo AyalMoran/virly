@@ -257,8 +257,18 @@ an env flip, mirroring the app-DB driver pattern.
    `search_policy_docs` to internal staff (e.g. Claude Desktop). Read-only,
    customer-scoped by email; no money movement. Verified end-to-end over the MCP
    in-memory transport (tools/list + tool calls) plus unit tests.
-5. **M4 — Fraud-transaction vectors** — separate tables, separate embedding
-   strategy, role-gated tools. Designed later, not now.
+5. **M4 — Fraud-transaction vectors** — IN PROGRESS. Free / embedding-free,
+   trained on the Kaggle Credit Card Fraud (ULB) dataset as a demo pipeline.
+   - **Phase 1 (kNN baseline) — DONE.** `src/fraud/` (scaler, CSV parser, pgvector
+     repository, kNN scorer) + `npm run fraud:ingest`. Features (V1..V28 + scaled
+     Amount = 29 dims) are the vector — no embedding model. Stored in the AI
+     Postgres with an L2 HNSW index; scored by nearest-neighbor fraud fraction.
+     Verified: 11 unit tests + a pgvector contract suite (separable clusters) +
+     end-to-end ingest of a committed synthetic sample.
+   - **Phase 2 (trained model) — NEXT.** Offline LogReg/LightGBM → free JS scorer
+     (exported weights / m2cgen), PR-AUC/recall eval, baseline-vs-model compare.
+   - **Phase 3 — surface** behind role-gated tools / a fraud-analyst MCP server.
+   Not wired to real Virly transactions (different schema) — that's a follow-up.
 
 > PDF support: DONE. A shared extractor (`ai/rag/pdf.ts`, pdf-parse) turns PDFs
 > into text for BOTH the Drive source (`getPdfText`) and the local source (`.pdf`
