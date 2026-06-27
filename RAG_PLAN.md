@@ -244,8 +244,13 @@ an env flip, mirroring the app-DB driver pattern.
    auth, recursive folder walk, Google Docs exported to markdown, idempotent by
    md5/version) behind the same `KnowledgeSource` interface; `rag:sync` defaults
    to `--source=drive`. Scheduled sync is just this on a timer (not yet wired).
-3. **M1.5 — Consolidate LangGraph memory onto Postgres** (§7). Checkpointer +
-   long-term store move to the AI Postgres; gated on the `PostgresStore` check.
+3. **M1.5 — Consolidate LangGraph memory onto Postgres** (§7) — DONE (opt-in via
+   `VIRLY_AI_MEMORY_BACKEND=postgres`). Decision-gate result: the package ships
+   `PostgresSaver` but NO `PostgresStore`, so the long-term store is a hand-rolled
+   `BaseStore` over the AI Postgres (`postgresStore.ts`). Default stays `mongo`
+   (reversible by env flip). Verified: 8/8 store contract tests incl. parity via
+   the real memory helpers; boot creates checkpointer + store tables. Full graph
+   turn/resume not run here (needs OpenAI).
 4. **M3 — MCP server** wrapping `retrievePolicyDocs` for external clients (only
    if a real external consumer appears).
 5. **M4 — Fraud-transaction vectors** — separate tables, separate embedding

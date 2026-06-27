@@ -14,7 +14,10 @@
 import { MemorySaver } from "@langchain/langgraph";
 import type { BaseCheckpointSaver } from "@langchain/langgraph";
 import { MongoDBSaver } from "@langchain/langgraph-checkpoint-mongodb";
+import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import type { MongoClient } from "mongodb";
+
+import { config } from "../../../config.js";
 
 export const V2_CHECKPOINT_COLLECTION = "ai_v2_checkpoints";
 export const V2_CHECKPOINT_WRITES_COLLECTION = "ai_v2_checkpoint_writes";
@@ -35,6 +38,38 @@ export function createMongoCheckpointer(
     checkpointCollectionName: V2_CHECKPOINT_COLLECTION,
     checkpointWritesCollectionName: V2_CHECKPOINT_WRITES_COLLECTION
   });
+}
+
+/**
+ * Postgres-backed thread checkpointer over the dedicated AI Postgres (M1.5).
+ *
+ * `PostgresSaver` manages its own pool from the connection string. A process-wide
+ * singleton is reused so the resumable graph and `setup()` share one instance.
+ * `setupPostgresCheckpointer()` (called at boot) creates its tables idempotently.
+ */
+let pgCheckpointer: PostgresSaver | undefined;
+
+function aiPgUrl(): string {
+  const url =
+    process.env.VIRLY_AI_PG_URL ??
+    process.env.VIRLY_VECTOR_DB_URL ??
+    config.rag.aiPgUrl;
+  if (!url) {
+    throw new Error("VIRLY_AI_PG_URL is required for the postgres AI-memory backend.");
+  }
+  return url;
+}
+
+export function getPostgresCheckpointer(): BaseCheckpointSaver {
+  if (!pgCheckpointer) {
+    pgCheckpointer = PostgresSaver.fromConnString(aiPgUrl());
+  }
+  return pgCheckpointer as unknown as BaseCheckpointSaver;
+}
+
+/** Create the checkpoint tables (idempotent). Call once at boot. */
+export async function setupPostgresCheckpointer(): Promise<void> {
+  await (getPostgresCheckpointer() as unknown as PostgresSaver).setup();
 }
 
 export type CheckpointerOptions = {

@@ -152,6 +152,28 @@ if (!Number.isFinite(ragMinScore) || ragMinScore < 0 || ragMinScore > 1) {
   throw new Error("VIRLY_RAG_MIN_SCORE must be a number between 0 and 1.");
 }
 
+// Where the LangGraph checkpointer + long-term store live (RAG_PLAN.md §7 / M1.5).
+// Orthogonal to VIRLY_DB_DRIVER: "postgres" puts AI memory on the dedicated AI
+// Postgres (single-store end-state); "mongo" (default) keeps the prior behavior.
+// Reversible by an env flip, mirroring the app-DB driver.
+function resolveAiMemoryBackend(): "mongo" | "postgres" {
+  const raw = (getOptionalStringEnv("VIRLY_AI_MEMORY_BACKEND") ?? "mongo")
+    .trim()
+    .toLowerCase();
+  if (raw !== "mongo" && raw !== "postgres") {
+    throw new Error("VIRLY_AI_MEMORY_BACKEND must be one of: mongo, postgres.");
+  }
+  return raw;
+}
+
+const aiMemoryBackend = resolveAiMemoryBackend();
+
+if (aiMemoryBackend === "postgres" && !aiPgUrl) {
+  throw new Error(
+    "VIRLY_AI_PG_URL (or VIRLY_VECTOR_DB_URL / VIRLY_POSTGRES_URL) is required when VIRLY_AI_MEMORY_BACKEND=postgres."
+  );
+}
+
 export const config = {
   port: getIntEnv("VIRLY_PORT", {
     defaultValue: 3000,
@@ -240,6 +262,8 @@ export const config = {
   },
   dbDriver,
   postgresUrl,
+  /** Backend for the LangGraph checkpointer + long-term store ("mongo" | "postgres"). */
+  aiMemoryBackend,
   rag: {
     // Feature flag — when off, the searchPolicyDocs tool stays inert (returns a
     // graceful "unavailable" message) so the app/evals run without an AI Postgres.
