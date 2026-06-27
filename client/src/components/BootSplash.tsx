@@ -19,21 +19,30 @@ const EXIT_MS = 450; // crossfade out
 // Add new lines freely — the board auto-sizes to the longest phrase. Keep them
 // to ~14 characters or fewer so the board still fits comfortably on mobile.
 const PHRASES = [
-  "COUNTING COINS",
-  "CHASING CENTS",
-  "MINTING PIXELS",
-  "BALANCING ACT",
-  "MAKING CHANGE",
-  "STACKING PAPER",
-  "ROUNDING UP",
-  "FETCHING FUNDS",
-  "HERDING ZEROS",
-  "COUNTING BEANS",
-  "WARMING VAULTS",
-  "TIDYING BOOKS",
-  "CASHING IN"
+  "COUNTING COINS...",
+  "CHASING CENTS...",
+  "MINTING PIXELS...",
+  "BALANCING ACT...",
+  "MAKING CHANGE...",
+  "STACKING PAPER...",
+  "ROUNDING UP...",
+  "FETCHING FUNDS...",
+  "HERDING ZEROS...",
+  "COUNTING BEANS...",
+  "WARMING VAULTS...",
+  "TIDYING BOOKS...",
+  "FETCHING FUNDS...",
+"BOOTING BILLS...",
+"CACHING COINS...",
+"HOW ARE YOU?",
+  "FIX YOUR POSTURE"
 ];
-const COLS = PHRASES.reduce((max, phrase) => Math.max(max, phrase.length), 0);
+// "LOADING..." anchors the sequence: shown first, then again every 3rd phrase.
+const LOADING = "LOADING...";
+const COLS = [LOADING, ...PHRASES].reduce(
+  (max, phrase) => Math.max(max, phrase.length),
+  0
+);
 // Cells shuffle through digits (money!) while flapping, then settle on letters.
 const SCRAMBLE = "0123456789";
 
@@ -46,16 +55,27 @@ function layout(phrase: string): string[] {
   return (" ".repeat(left) + phrase + " ".repeat(total - left)).split("");
 }
 
-// Pick a random phrase index, never the one currently shown.
-function pickIndex(exclude: number): number {
-  if (PHRASES.length <= 1) {
-    return 0;
-  }
-  let next = exclude;
-  while (next === exclude) {
-    next = Math.floor(Math.random() * PHRASES.length);
-  }
-  return next;
+// Build the phrase sequence: "LOADING..." in every 3rd slot (so it leads and
+// recurs), and the other slots drawn from a shuffled bag so no phrase repeats
+// until all have been shown — then the bag refills and reshuffles.
+function createSequencer(): () => string {
+  let step = 0;
+  let bag: number[] = [];
+  return () => {
+    const showLoading = step % 3 === 0;
+    step += 1;
+    if (showLoading) {
+      return LOADING;
+    }
+    if (bag.length === 0) {
+      bag = PHRASES.map((_, i) => i);
+      for (let i = bag.length - 1; i > 0; i -= 1) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [bag[i], bag[j]] = [bag[j], bag[i]];
+      }
+    }
+    return PHRASES[bag.pop() as number];
+  };
 }
 
 export function BootSplashView({ phase }: { phase: "visible" | "exiting" }) {
@@ -84,16 +104,13 @@ export function BootSplashView({ phase }: { phase: "visible" | "exiting" }) {
     };
 
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
-    let phraseIndex = Math.floor(Math.random() * PHRASES.length);
+    const nextPhrase = createSequencer();
 
     if (reduce) {
-      const apply = () =>
-        layout(PHRASES[phraseIndex]).forEach((ch, i) => setCell(reels[i], ch));
-      apply();
-      const swap = window.setInterval(() => {
-        phraseIndex = pickIndex(phraseIndex);
-        apply();
-      }, 2600);
+      const apply = (phrase: string) =>
+        layout(phrase).forEach((ch, i) => setCell(reels[i], ch));
+      apply(nextPhrase());
+      const swap = window.setInterval(() => apply(nextPhrase()), 2600);
       return () => window.clearInterval(swap);
     }
 
@@ -110,12 +127,12 @@ export function BootSplashView({ phase }: { phase: "visible" | "exiting" }) {
       );
     };
 
-    const showPhrase = () => {
+    const showPhrase = (phrase: string) => {
       if (!running) {
         return;
       }
 
-      const target = layout(PHRASES[phraseIndex]);
+      const target = layout(phrase);
       let settled = 0;
 
       reels.forEach((el, index) => {
@@ -132,15 +149,14 @@ export function BootSplashView({ phase }: { phase: "visible" | "exiting" }) {
           flip(el);
           settled += 1;
           if (settled === reels.length) {
-            phraseIndex = pickIndex(phraseIndex);
-            timers.push(window.setTimeout(showPhrase, 1700));
+            timers.push(window.setTimeout(() => showPhrase(nextPhrase()), 1700));
           }
         }, 480 + index * 85);
         timers.push(settle);
       });
     };
 
-    showPhrase();
+    showPhrase(nextPhrase());
 
     return () => {
       running = false;
@@ -160,7 +176,7 @@ export function BootSplashView({ phase }: { phase: "visible" | "exiting" }) {
       <div className="boot-splash-panel">
         <span className="boot-splash-slot" aria-hidden="true" />
         <div className="boot-flap-board" ref={boardRef} aria-hidden="true">
-          {layout(PHRASES[0]).map((ch, index) => {
+          {layout(LOADING).map((ch, index) => {
             const blank = ch === " ";
             return (
               <div
