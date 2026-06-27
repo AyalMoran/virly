@@ -98,6 +98,15 @@ export const MODIFY_PENDING_TRANSFER_DESC =
   "Only include the fields that change; the rest carry over from the current card. " +
   "Supersedes the old card. Compute the new amount yourself (e.g. 'double' of 200 is 400).";
 
+export const SEARCH_POLICY_DOCS_DESC =
+  "Search Virly's internal knowledge base of policy documents and loan-package " +
+  "information (semantic / meaning-based search, not the user's transactions). Use " +
+  "for questions about products, eligibility, terms, fees, rates, or company policy — " +
+  "e.g. 'what loan packages do you offer', 'what's the early-repayment policy', " +
+  "'איזה מסלולי הלוואה יש'. Returns the most relevant document excerpts with numbered " +
+  "citations; ground your answer in them and cite by [number]. If nothing relevant " +
+  "comes back, say you don't have that in the knowledge base — do NOT invent terms.";
+
 export const CANCEL_PENDING_TRANSFER_DESC =
   "Discard the active pending confirmation card (the user changed their mind before " +
   "confirming). Use for 'cancel that', 'never mind', 'תבטל'. This only drops the draft " +

@@ -1,4 +1,8 @@
 import { getRepositories } from "../repositories/index.js";
+import { config } from "../config.js";
+import { recordTransferRiskFlag, scoreTransfer } from "../fraud/service.js";
+import { cancelHold, createHold, shouldHold } from "../fraud/holds.js";
+import { sendTransferHoldEmail } from "./email.service.js";
 import type {
   ModifyPendingTransferConfirmationInput,
   ModifyPendingTransferConfirmationResult,
@@ -28,6 +32,14 @@ export type AiConfirmationResult =
   | {
       status: "denied";
       message: string;
+    }
+  | {
+      status: "held";
+      message: string;
+      heldId: string;
+      level: string;
+      reasons: string[];
+      expiresAt: string;
     };
 
 type ValidatedAiTransferDraft = {
@@ -519,7 +531,76 @@ export async function respondToAiPendingTransfer(
     };
   }
 
-  return getRepositories().runInTransaction(async (tx) => {
+  // Fraud hold gate: when enabled, a risky AI transfer is held for email
+  // confirmation instead of executing on card-confirm. Planned BEFORE the tx
+  // (scoring reads are not part of the money transaction); any failure leaves
+  // holdPlan null so the confirm proceeds normally (never blocks a transfer).
+  let holdPlan:
+    | {
+        heldId: string;
+        token: string;
+        expiresAt: Date;
+        recipientEmail: string;
+        amount: number;
+        level: string;
+        reasons: string[];
+        senderEmail: string;
+      }
+    | null = null;
+  if (config.fraud.holdLevel !== "off") {
+    try {
+      const pre = await repos.aiPendingTransfers.findById(input.pendingTransferId);
+      const owned = pre && pre.userId === input.userId && pre.status === "pending" ? pre : null;
+      if (owned) {
+        const risk = await scoreTransfer({
+          userId: input.userId,
+          recipientEmail: owned.recipientEmail,
+          amount: owned.amount,
+          alreadyExecuted: false
+        });
+        const sender = await repos.users.findById(input.userId);
+        if (shouldHold(risk.level) && sender) {
+          const hold = await createHold({
+            userId: input.userId,
+            recipientEmail: owned.recipientEmail,
+            amount: owned.amount,
+            currency: "ILS",
+            reason: owned.reason,
+            score: risk.score,
+            level: risk.level,
+            reasons: risk.reasons
+          });
+          holdPlan = {
+            heldId: hold.id,
+            token: hold.token,
+            expiresAt: hold.expiresAt,
+            recipientEmail: owned.recipientEmail,
+            amount: owned.amount,
+            level: risk.level,
+            reasons: risk.reasons,
+            senderEmail: sender.email
+          };
+        }
+      }
+    } catch (error) {
+      // Fail-open: a scoring/hold-store failure degrades to a normal confirm so a
+      // legitimate transfer is never blocked — but it MUST be observable, since the
+      // fraud control is disabling itself. (Posture: fail-open + logged.)
+      console.error(
+        "[fraud] AI confirm hold gate degraded to normal execution:",
+        error instanceof Error ? error.message : error
+      );
+      holdPlan = null;
+    }
+  }
+  const heldClaim = { done: false };
+
+  const flag: {
+    value: { recipientEmail: string; amount: number; transactionId?: string } | null;
+  } = { value: null };
+  let confirmResult: AiConfirmationResult;
+  try {
+    confirmResult = await getRepositories().runInTransaction(async (tx) => {
     // One read under the transaction serves the superseded check, the
     // idempotency replay, and the optimistic lock — snapshot isolation makes
     // the original three identical `_id`/`userId`-scoped reads equivalent.
@@ -556,10 +637,48 @@ export async function respondToAiPendingTransfer(
       throw getStatusError();
     }
 
+    // Enforce AI per-transfer/daily limits BEFORE the hold decision too, so a
+    // held transfer (the deferred execution skips this check) can't bypass them.
     await assertAiTransferWithinLimits(
       { senderId: input.userId, amount: owned.amount },
       tx
     );
+
+    // HOLD path: don't move money. Claim the card (pending -> confirmed) atomically
+    // with the held result as the idempotency payload, then the email link drives
+    // the actual execution. The hold row was created pre-tx; the post-tx handler
+    // emails it (on a winning claim) or cancels it (on a replay/loss).
+    if (holdPlan) {
+      const heldResult: AiConfirmationResult = {
+        status: "held",
+        heldId: holdPlan.heldId,
+        level: holdPlan.level,
+        reasons: holdPlan.reasons,
+        expiresAt: holdPlan.expiresAt.toISOString(),
+        message: "This transfer was held for review. Confirm it from the email we sent you."
+      };
+      // Distinct 'held' status (not 'confirmed'): the card is consumed but the
+      // money has NOT moved — the held_transfers row tracks the real execution.
+      const claimed = await repos.aiPendingTransfers.updateStatus(
+        input.pendingTransferId,
+        "held",
+        {
+          userId: input.userId,
+          version: input.version,
+          expectedStatus: "pending",
+          notExpired: true,
+          ...(input.idempotencyKey
+            ? { idempotencyKey: input.idempotencyKey, idempotencyResult: heldResult }
+            : {})
+        },
+        tx
+      );
+      if (!claimed) {
+        throw getStatusError();
+      }
+      heldClaim.done = true;
+      return heldResult;
+    }
 
     const transferResult = await executeTransferWithSession(
       {
@@ -570,6 +689,13 @@ export async function respondToAiPendingTransfer(
       },
       tx
     );
+
+    // Captured for a post-commit fraud flag (recorded after the tx settles).
+    flag.value = {
+      recipientEmail: owned.recipientEmail,
+      amount: owned.amount,
+      transactionId: transferResult.transaction?.id ?? undefined
+    };
 
     const result: AiConfirmationResult = {
       status: "confirmed",
@@ -603,6 +729,45 @@ export async function respondToAiPendingTransfer(
       throw getStatusError();
     }
 
-    return result;
-  });
+      return result;
+    });
+  } catch (error) {
+    // The tx failed/rolled back; cancel an unclaimed hold row we created pre-tx.
+    if (holdPlan && !heldClaim.done) {
+      await cancelHold(holdPlan.heldId, holdPlan.token).catch(() => {});
+    }
+    throw error;
+  }
+
+  // Held path: email the sender on a winning claim; cancel an orphan on a replay.
+  if (holdPlan) {
+    if (heldClaim.done) {
+      const reviewUrl = `${config.serverUrl}/api/transactions/held/confirm?id=${holdPlan.heldId}&token=${holdPlan.token}`;
+      try {
+        await sendTransferHoldEmail(holdPlan.senderEmail, {
+          amount: holdPlan.amount,
+          currency: "ILS",
+          recipientEmail: holdPlan.recipientEmail,
+          reasons: holdPlan.reasons,
+          reviewUrl
+        });
+      } catch {
+        // The email service logs the links on failure; never fail the request.
+      }
+    } else {
+      await cancelHold(holdPlan.heldId, holdPlan.token).catch(() => {});
+    }
+  }
+
+  // Post-commit, best-effort fraud flag — only when a transfer actually executed.
+  if (flag.value) {
+    await recordTransferRiskFlag({
+      userId: input.userId,
+      recipientEmail: flag.value.recipientEmail,
+      amount: flag.value.amount,
+      transactionId: flag.value.transactionId,
+      alreadyExecuted: true
+    });
+  }
+  return confirmResult;
 }

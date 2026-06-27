@@ -37,9 +37,10 @@ import type {
   RunAssistantResult
 } from "../state.js";
 
+import { config } from "../../config.js";
 import { buildAgentNode } from "./agent.js";
 import { aiToolCalls } from "./messages.js";
-import { createMongoCheckpointer } from "./memory/checkpointer.js";
+import { createMongoCheckpointer, getPostgresCheckpointer } from "./memory/checkpointer.js";
 import { resolveLongTermStore, withLongTermCounterparties } from "./memory/loop.js";
 import { mapStreamChunk } from "./streamEvents.js";
 import { createV2ChatModel, isV2ModelConfigured } from "./model.js";
@@ -104,11 +105,23 @@ let cachedResumableGraph: ResumableGraph | undefined;
 function getResumableGraph(): ResumableGraph {
   if (!cachedResumableGraph) {
     let checkpointer: BaseCheckpointSaver;
-    try {
-      checkpointer = createMongoCheckpointer(mongoose.connection.getClient());
-    } catch {
-      // No live Mongo connection (dev/degraded): fall back to in-memory.
-      checkpointer = new MemorySaver();
+    if (config.aiMemoryBackend === "postgres") {
+      try {
+        // Tables are created at boot by setupAiMemoryBackend().
+        checkpointer = getPostgresCheckpointer();
+      } catch {
+        // Mirror the Mongo branch: degrade to in-memory if the saver can't be
+        // built. Money state is not lost — pending transfers persist in their own
+        // repository, independent of the graph checkpointer.
+        checkpointer = new MemorySaver();
+      }
+    } else {
+      try {
+        checkpointer = createMongoCheckpointer(mongoose.connection.getClient());
+      } catch {
+        // No live Mongo connection (dev/degraded): fall back to in-memory.
+        checkpointer = new MemorySaver();
+      }
     }
     cachedResumableGraph = buildResumableGraph(checkpointer);
   }

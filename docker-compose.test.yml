@@ -2,7 +2,9 @@
 
 services:
   postgres:
-    image: postgres:16
+    # pgvector image (superset of postgres:16) so the knowledge-base contract
+    # test can CREATE EXTENSION vector. The app contract suites are unaffected.
+    image: pgvector/pgvector:pg16
     environment:
       POSTGRES_DB: virly
       POSTGRES_PASSWORD: virly

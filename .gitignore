@@ -4,6 +4,9 @@ dist
 .DS_Store
 coverage
 
+# Generated ML artifacts (scaler/model weights are fit from the user's dataset)
+server/artifacts/
+
 *.sh
 
 docs
