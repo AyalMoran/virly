@@ -151,19 +151,25 @@ export class PostgresLongTermStore extends BaseStore {
   private async runSearch(op: SearchOperation): Promise<SearchItem[]> {
     const db = getAiDb();
     const prefix = toPrefix(op.namespacePrefix);
+    // Order most-recently-updated first, with `key` as a deterministic tiebreaker.
+    // This differs from MongoDBStore, which returns natural (insertion) order; the
+    // difference is only observable once a single namespace holds more items than
+    // the caller's `limit` (e.g. readLongTermSnapshot's 200) — below that the
+    // result sets are identical. Keeping the most-recent items on truncation is the
+    // more useful behavior for long-term memory.
     const rowsRes =
       op.namespacePrefix.length === 0
         ? await db.execute(sql`
             SELECT prefix, key, value, created_at, updated_at
             FROM ai_memory_store
-            ORDER BY updated_at DESC
+            ORDER BY updated_at DESC, key ASC
           `)
         : await db.execute(sql`
             SELECT prefix, key, value, created_at, updated_at
             FROM ai_memory_store
             WHERE prefix = ${prefix}
                OR prefix LIKE ${`${escapeLike(prefix)}${SEP}%`} ESCAPE '\\'
-            ORDER BY updated_at DESC
+            ORDER BY updated_at DESC, key ASC
           `);
     const rows = (rowsRes as unknown as { rows: Row[] }).rows;
     const matched = rows.map(rowToItem).filter((item) => matchesFilter(item.value, op.filter));

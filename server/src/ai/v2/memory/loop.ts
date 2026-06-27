@@ -26,10 +26,12 @@ let storeResolved = false;
  * undefined otherwise (eval/dev → in-memory behavior).
  */
 export function resolveLongTermStore(): BaseStore | undefined {
-  if (storeResolved) {
+  if (storeResolved && cachedStore) {
     return cachedStore;
   }
-  storeResolved = true;
+  // Only latch on SUCCESS: if the store can't be resolved yet (e.g. a transient
+  // Mongo reconnect window at first use), leave it unresolved so a later turn can
+  // retry — otherwise long-term memory would stay disabled for the process life.
   try {
     if (config.aiMemoryBackend === "postgres") {
       cachedStore = getPostgresLongTermStore();
@@ -39,6 +41,7 @@ export function resolveLongTermStore(): BaseStore | undefined {
   } catch {
     cachedStore = undefined;
   }
+  storeResolved = cachedStore !== undefined;
   return cachedStore;
 }
 
