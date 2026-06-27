@@ -30,7 +30,15 @@ function hasFlag(name: string): boolean {
 async function main(): Promise<void> {
   const dryRun = hasFlag("dry-run");
   const force = hasFlag("force");
-  const dir = getFlag("dir") ?? path.resolve(import.meta.dirname, "../knowledge-base");
+  // The knowledge base lives outside this repo — pass --dir=<abs path> or set
+  // VIRLY_RAG_LOCAL_DIR. No in-repo default (we do not ship sample content).
+  const dirArg = getFlag("dir") ?? process.env.VIRLY_RAG_LOCAL_DIR;
+  if (!dirArg) {
+    throw new Error(
+      "No knowledge-base directory. Pass --dir=<path> or set VIRLY_RAG_LOCAL_DIR."
+    );
+  }
+  const dir = path.resolve(dirArg);
   const category = getFlag("category");
 
   if (!config.rag.aiPgUrl) {
