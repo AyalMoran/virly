@@ -176,6 +176,24 @@ if (aiMemoryBackend === "postgres" && !aiPgUrl) {
   );
 }
 
+// Hold high-risk transfers until the sender confirms by email (M4 follow-up).
+// "off" (default) = flag only; "high"/"medium" = hold at that risk level and above.
+function resolveFraudHoldLevel(): "off" | "medium" | "high" {
+  const raw = (getOptionalStringEnv("VIRLY_FRAUD_HOLD_LEVEL") ?? "off").trim().toLowerCase();
+  if (raw !== "off" && raw !== "medium" && raw !== "high") {
+    throw new Error("VIRLY_FRAUD_HOLD_LEVEL must be one of: off, medium, high.");
+  }
+  return raw;
+}
+
+const fraudHoldLevel = resolveFraudHoldLevel();
+
+if (fraudHoldLevel !== "off" && !aiPgUrl) {
+  throw new Error(
+    "VIRLY_AI_PG_URL (or VIRLY_VECTOR_DB_URL / VIRLY_POSTGRES_URL) is required when VIRLY_FRAUD_HOLD_LEVEL is enabled."
+  );
+}
+
 export const config = {
   port: getIntEnv("VIRLY_PORT", {
     defaultValue: 3000,
@@ -290,5 +308,15 @@ export const config = {
         aliases: ["GOOGLE_APPLICATION_CREDENTIALS"]
       })
     }
+  },
+  fraud: {
+    /** Hold transfers at this risk level and above until email confirmation. */
+    holdLevel: fraudHoldLevel,
+    /** How long a held transfer's email-confirmation link stays valid. */
+    holdExpiryHours: getIntEnv("VIRLY_FRAUD_HOLD_EXPIRY_HOURS", {
+      defaultValue: 24,
+      min: 1,
+      max: 24 * 7
+    })
   }
 };

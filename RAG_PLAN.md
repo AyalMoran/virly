@@ -286,6 +286,17 @@ an env flip, mirroring the app-DB driver pattern.
      never affects a transfer. Verified: pure-module unit tests + flags-table SQL.
    Note: the Kaggle-trained model (phases 1-2) stays a separate benchmark; the
    real-transfer path is rules + per-user anomaly on Virly-derived features.
+   - **Hold-until-email-confirmation — DONE (regular route).** When
+     `VIRLY_FRAUD_HOLD_LEVEL` (off|medium|high, default off) is enabled, a transfer
+     at/above that risk level is NOT executed: it is held (`held_transfers` in the
+     AI Postgres, one-time token), the sender is emailed confirm/cancel links
+     (`GET /api/transactions/held/confirm|cancel`), and the money moves only on
+     confirm. Confirm is CAS-guarded so concurrent clicks can't double-spend,
+     idempotent, and expiry/cancel safe; any holding failure degrades to a normal
+     flagged transfer (never blocks). Verified: a 6-case pgvector contract suite
+     (exactly-once, idempotent, wrong-token, cancel, expiry) + a shouldHold unit
+     test. Follow-up: wire the same hold into the AI confirm path (needs an
+     AiConfirmationResult "held" variant).
 
 > PDF support: DONE. A shared extractor (`ai/rag/pdf.ts`, pdf-parse) turns PDFs
 > into text for BOTH the Drive source (`getPdfText`) and the local source (`.pdf`

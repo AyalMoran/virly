@@ -72,3 +72,49 @@ export async function sendVerificationEmail(email: string, verificationUrl: stri
 
   return sendVerificationEmailWithSender(email, verificationUrl, sender);
 }
+
+export type TransferHoldEmail = {
+  amount: number;
+  currency: string;
+  recipientEmail: string;
+  reasons: string[];
+  confirmUrl: string;
+  cancelUrl: string;
+};
+
+function createTransferHoldPayload(email: string, details: TransferHoldEmail) {
+  const amountText = `${details.amount} ${details.currency}`;
+  const why = details.reasons.length ? ` Reason flagged: ${details.reasons.join(" ")}` : "";
+  return {
+    from: config.email.from,
+    to: email,
+    subject: "Confirm your held Virly transfer",
+    text:
+      `We held a transfer of ${amountText} to ${details.recipientEmail} for review.${why} ` +
+      `Confirm to send it: ${details.confirmUrl}  •  Cancel it: ${details.cancelUrl}`,
+    html: `
+      <p>We held a transfer of <strong>${amountText}</strong> to ${details.recipientEmail} for review.</p>
+      ${details.reasons.length ? `<p>Why: ${details.reasons.join(" ")}</p>` : ""}
+      <p><a href="${details.confirmUrl}" style="display:inline-block;padding:12px 18px;background:#111827;color:#ffffff;text-decoration:none;border-radius:6px;">Confirm transfer</a></p>
+      <p><a href="${details.cancelUrl}">Cancel this transfer</a></p>
+    `
+  };
+}
+
+/** Send the hold-confirmation email; falls back to logging the links (no Resend key). */
+export async function sendTransferHoldEmail(email: string, details: TransferHoldEmail) {
+  const sender = config.email.resendApiKey
+    ? createResendSender(config.email.resendApiKey)
+    : null;
+  if (!sender) {
+    console.log(`Transfer hold for ${email}: confirm ${details.confirmUrl} | cancel ${details.cancelUrl}`);
+    return { delivered: false };
+  }
+  const result = await sender.send(createTransferHoldPayload(email, details));
+  if (result.error) {
+    console.error("Transfer hold email failed; logging links instead.", result.error);
+    console.log(`Transfer hold for ${email}: confirm ${details.confirmUrl} | cancel ${details.cancelUrl}`);
+    return { delivered: false };
+  }
+  return { delivered: true };
+}
