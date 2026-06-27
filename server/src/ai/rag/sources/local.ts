@@ -10,9 +10,12 @@ import { createHash } from "node:crypto";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 
+import { extractPdfText } from "../pdf.js";
 import type { KnowledgeSource, SourceFile } from "./types.js";
 
 const TEXT_EXTENSIONS = new Set([".md", ".markdown", ".txt"]);
+const PDF_EXTENSION = ".pdf";
+const SUPPORTED_EXTENSIONS = new Set([...TEXT_EXTENSIONS, PDF_EXTENSION]);
 
 function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
@@ -39,7 +42,7 @@ async function walk(dir: string): Promise<string[]> {
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       files.push(...(await walk(full)));
-    } else if (TEXT_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
+    } else if (SUPPORTED_EXTENSIONS.has(path.extname(entry.name).toLowerCase())) {
       files.push(full);
     }
   }
@@ -63,14 +66,24 @@ export function createLocalSource(rootDir: string, categoryOverride?: string): K
       }
       const files: SourceFile[] = [];
       for (const full of paths.sort()) {
-        const content = await fs.readFile(full, "utf8");
+        const ext = path.extname(full).toLowerCase();
+        const isPdf = ext === PDF_EXTENSION;
+        // Hash the raw bytes (stable change detection); PDFs are extracted to text.
+        const bytes = await fs.readFile(full);
+        const content = isPdf
+          ? await extractPdfText(new Uint8Array(bytes))
+          : bytes.toString("utf8");
         if (!content.trim()) continue;
         const relPath = path.relative(root, full);
         files.push({
           sourceRef: relPath,
-          revision: sha256(content),
+          revision: sha256(bytes.toString("latin1")),
           title: deriveTitle(content, relPath),
-          mimeType: full.endsWith(".txt") ? "text/plain" : "text/markdown",
+          mimeType: isPdf
+            ? "application/pdf"
+            : ext === ".txt"
+              ? "text/plain"
+              : "text/markdown",
           category: inferCategory(relPath, categoryOverride),
           uri: relPath,
           content

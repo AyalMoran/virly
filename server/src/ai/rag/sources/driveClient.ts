@@ -8,6 +8,7 @@
 import { google, type drive_v3 } from "googleapis";
 
 import { config } from "../../../config.js";
+import { extractPdfText } from "../pdf.js";
 import type { DriveClient, DriveFileMeta } from "./drive.js";
 
 const DRIVE_READONLY = "https://www.googleapis.com/auth/drive.readonly";
@@ -74,6 +75,14 @@ export function createGoogleDriveClient(): DriveClient {
         { responseType: "text" }
       );
       return typeof res.data === "string" ? res.data : String(res.data);
+    },
+
+    async getPdfText(fileId: string): Promise<string> {
+      const res = await drive.files.get(
+        { fileId, alt: "media", supportsAllDrives: true },
+        { responseType: "arraybuffer" }
+      );
+      return extractPdfText(new Uint8Array(res.data as ArrayBuffer));
     }
   } satisfies DriveClient;
 }

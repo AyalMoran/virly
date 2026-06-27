@@ -15,6 +15,7 @@ import type { KnowledgeSource, SourceFile } from "./types.js";
 
 export const FOLDER_MIME = "application/vnd.google-apps.folder";
 export const GOOGLE_DOC_MIME = "application/vnd.google-apps.document";
+export const PDF_MIME = "application/pdf";
 
 /** Drive file metadata the adapter relies on (a subset of the API resource). */
 export type DriveFileMeta = {
@@ -34,12 +35,15 @@ export type DriveClient = {
   exportDoc(fileId: string, mimeType: string): Promise<string>;
   /** Download a binary/text file's content as a UTF-8 string. */
   getFileMedia(fileId: string): Promise<string>;
+  /** Download a PDF and return its extracted plain text. */
+  getPdfText(fileId: string): Promise<string>;
 };
 
-/** Mime types we can turn into text today. PDFs etc. are skipped (logged) for now. */
+/** Mime types we can turn into text today (other binaries are skipped + logged). */
 function isIngestibleText(mimeType: string): boolean {
   return (
     mimeType === GOOGLE_DOC_MIME ||
+    mimeType === PDF_MIME ||
     mimeType === "text/markdown" ||
     mimeType === "text/plain" ||
     mimeType === "text/x-markdown"
@@ -86,7 +90,9 @@ export function createDriveSource(
       const content =
         entry.mimeType === GOOGLE_DOC_MIME
           ? await client.exportDoc(entry.id, "text/markdown")
-          : await client.getFileMedia(entry.id);
+          : entry.mimeType === PDF_MIME
+            ? await client.getPdfText(entry.id)
+            : await client.getFileMedia(entry.id);
       if (!content.trim()) {
         options.onSkip?.(entry, "empty content");
         continue;
@@ -94,7 +100,7 @@ export function createDriveSource(
       out.push({
         sourceRef: entry.id,
         revision: revisionOf(entry),
-        title: entry.name.replace(/\.(md|markdown|txt)$/i, ""),
+        title: entry.name.replace(/\.(md|markdown|txt|pdf)$/i, ""),
         mimeType: entry.mimeType,
         // Infer from folder names AND the file name (mirrors the local adapter).
         category: inferCategory([...folderPath, entry.name], options.categoryOverride),
