@@ -1,0 +1,1 @@
+import{n as e}from"./iframe-DZ5yRNij.js";function i(o,r=5){const n=new Set,a=[];for(const t of o)if(!n.has(t.counterpartyEmail)&&(n.add(t.counterpartyEmail),a.push({email:t.counterpartyEmail,avatar:e(t.counterpartyEmail)}),a.length>=r))break;return a}export{i as g};
