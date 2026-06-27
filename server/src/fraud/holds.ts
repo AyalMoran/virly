@@ -18,7 +18,13 @@ import { newObjectId } from "../repositories/postgres/id.js";
 import { executeTransfer } from "../services/transfer.service.js";
 import type { RiskLevel } from "./risk.js";
 
-export type HeldTransferStatus = "pending" | "confirming" | "confirmed" | "cancelled" | "expired";
+export type HeldTransferStatus =
+  | "pending"
+  | "confirming"
+  | "confirmed"
+  | "cancelled"
+  | "expired"
+  | "needs_reconciliation";
 
 /** Executes the money move on confirmation; injectable for tests. */
 export type TransferExecutor = (input: {
@@ -210,6 +216,12 @@ export async function confirmHold(
     return { status: "expired" };
   }
 
+  // CRITICAL: only revert to 'pending' (retryable) when money did NOT move. If
+  // execute() succeeded and only the bookkeeping UPDATE failed, reverting would
+  // let the next click re-execute (double-spend). Track that with `executed`.
+  let executed = false;
+  let txId: string | null = null;
+  let newBalance = 0;
   try {
     const result = await execute({
       senderId: claimed.user_id,
@@ -218,19 +230,41 @@ export async function confirmHold(
       reason: claimed.reason,
       fx: coerceFx(claimed.fx)
     });
-    const txId = result.transaction?.id ?? null;
+    executed = true;
+    txId = result.transaction?.id ?? null;
+    newBalance = result.newBalance;
     await db.execute(sql`
       UPDATE held_transfers SET status = 'confirmed', transaction_id = ${txId}, updated_at = now()
       WHERE id = ${id}
     `);
-    return { status: "executed", transactionId: txId ?? undefined, newBalance: result.newBalance };
+    return { status: "executed", transactionId: txId ?? undefined, newBalance };
   } catch (error) {
-    // Revert so the user can retry; money did not move.
-    await db.execute(sql`
-      UPDATE held_transfers SET status = 'pending', updated_at = now()
-      WHERE id = ${id} AND status = 'confirming'
-    `);
-    return { status: "failed", message: error instanceof Error ? error.message : "transfer failed" };
+    if (!executed) {
+      // Money did not move — safe to revert for a retry.
+      await db
+        .execute(sql`
+          UPDATE held_transfers SET status = 'pending', updated_at = now()
+          WHERE id = ${id} AND status = 'confirming'
+        `)
+        .catch(() => {});
+      return { status: "failed", message: error instanceof Error ? error.message : "transfer failed" };
+    }
+    // Money MOVED but bookkeeping failed — NEVER revert to pending. Try to record
+    // 'confirmed'; if that also fails, mark terminal 'needs_reconciliation'.
+    try {
+      await db.execute(sql`
+        UPDATE held_transfers SET status = 'confirmed', transaction_id = ${txId}, updated_at = now()
+        WHERE id = ${id}
+      `);
+    } catch {
+      await db
+        .execute(sql`
+          UPDATE held_transfers SET status = 'needs_reconciliation', transaction_id = ${txId}, updated_at = now()
+          WHERE id = ${id}
+        `)
+        .catch(() => {});
+    }
+    return { status: "executed", transactionId: txId ?? undefined, newBalance };
   }
 }
 

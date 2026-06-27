@@ -45,6 +45,11 @@ export function resolveAiPgUrl(): string {
 export function getAiDb(): AiDatabase {
   if (db) return db;
   pool = new pg.Pool({ connectionString: resolveAiPgUrl() });
+  // An idle-client error otherwise crashes the process; log and let the pool
+  // recycle the connection.
+  pool.on("error", (err) => {
+    console.error("[ai-postgres] idle client error:", err.message);
+  });
   db = drizzle(pool, { schema });
   return db;
 }

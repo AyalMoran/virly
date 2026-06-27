@@ -582,8 +582,15 @@ export async function respondToAiPendingTransfer(
           };
         }
       }
-    } catch {
-      holdPlan = null; // degrade to a normal confirm
+    } catch (error) {
+      // Fail-open: a scoring/hold-store failure degrades to a normal confirm so a
+      // legitimate transfer is never blocked — but it MUST be observable, since the
+      // fraud control is disabling itself. (Posture: fail-open + logged.)
+      console.error(
+        "[fraud] AI confirm hold gate degraded to normal execution:",
+        error instanceof Error ? error.message : error
+      );
+      holdPlan = null;
     }
   }
   const heldClaim = { done: false };
@@ -630,6 +637,13 @@ export async function respondToAiPendingTransfer(
       throw getStatusError();
     }
 
+    // Enforce AI per-transfer/daily limits BEFORE the hold decision too, so a
+    // held transfer (the deferred execution skips this check) can't bypass them.
+    await assertAiTransferWithinLimits(
+      { senderId: input.userId, amount: owned.amount },
+      tx
+    );
+
     // HOLD path: don't move money. Claim the card (pending -> confirmed) atomically
     // with the held result as the idempotency payload, then the email link drives
     // the actual execution. The hold row was created pre-tx; the post-tx handler
@@ -663,11 +677,6 @@ export async function respondToAiPendingTransfer(
       heldClaim.done = true;
       return heldResult;
     }
-
-    await assertAiTransferWithinLimits(
-      { senderId: input.userId, amount: owned.amount },
-      tx
-    );
 
     const transferResult = await executeTransferWithSession(
       {
@@ -731,17 +740,14 @@ export async function respondToAiPendingTransfer(
   // Held path: email the sender on a winning claim; cancel an orphan on a replay.
   if (holdPlan) {
     if (heldClaim.done) {
-      const base = config.serverUrl;
-      const confirmUrl = `${base}/api/transactions/held/confirm?id=${holdPlan.heldId}&token=${holdPlan.token}`;
-      const cancelUrl = `${base}/api/transactions/held/cancel?id=${holdPlan.heldId}&token=${holdPlan.token}`;
+      const reviewUrl = `${config.serverUrl}/api/transactions/held/confirm?id=${holdPlan.heldId}&token=${holdPlan.token}`;
       try {
         await sendTransferHoldEmail(holdPlan.senderEmail, {
           amount: holdPlan.amount,
           currency: "ILS",
           recipientEmail: holdPlan.recipientEmail,
           reasons: holdPlan.reasons,
-          confirmUrl,
-          cancelUrl
+          reviewUrl
         });
       } catch {
         // The email service logs the links on failure; never fail the request.

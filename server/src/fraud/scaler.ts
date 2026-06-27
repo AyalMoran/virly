@@ -33,8 +33,9 @@ export function fitScaler(rows: number[][]): Scaler {
   }
   for (let i = 0; i < dim; i++) {
     std[i] = Math.sqrt(std[i] / rows.length);
-    // Guard against zero-variance columns (constant feature) to avoid /0.
-    if (std[i] === 0) std[i] = 1;
+    // Floor near-zero variance (not just exact 0): a tiny std would otherwise
+    // explode standardized distances and inflate the anomaly score (over-holding).
+    if (std[i] < 1e-8) std[i] = 1;
   }
 
   return { mean, std };

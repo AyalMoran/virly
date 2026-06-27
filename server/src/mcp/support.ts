@@ -273,8 +273,22 @@ export function buildSupportMcpServer(): McpServer {
     config: { description: string; inputSchema: ZodRawShape },
     cb: (args: Record<string, unknown>) => Promise<McpToolResult>
   ) => unknown;
+  // Per-call audit log (to stderr — stdout is the MCP protocol channel) so every
+  // read of customer data is attributable to an operator. This server has no
+  // per-operator auth (the trust boundary is OS-level access to launch it), so it
+  // MUST run locally with read-scoped DB credentials — see README.
+  const operator = process.env.VIRLY_MCP_OPERATOR ?? process.env.USER ?? "unknown";
   for (const tool of tools) {
-    register(tool.name, { description: tool.description, inputSchema: tool.inputSchema }, tool.handler);
+    register(
+      tool.name,
+      { description: tool.description, inputSchema: tool.inputSchema },
+      async (args) => {
+        console.error(
+          `[mcp-support][operator=${operator}] ${tool.name} ${JSON.stringify(args ?? {})}`
+        );
+        return tool.handler(args);
+      }
+    );
   }
   return server;
 }

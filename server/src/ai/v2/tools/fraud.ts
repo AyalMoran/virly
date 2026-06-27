@@ -30,7 +30,8 @@ export const assessTransactionRiskTool = tool(
       }
       return `Risk: ${result.level} (score ${result.score}). ${result.reasons.join(" ")} Mention this to the user before they confirm.`;
     } catch (error) {
-      return `Risk check unavailable: ${error instanceof Error ? error.message : "unknown error"}.`;
+      console.error("[assessTransactionRisk] failed:", error instanceof Error ? error.message : error);
+      return "The risk check is temporarily unavailable.";
     }
   },
   {

@@ -1,4 +1,5 @@
 import { Router } from "express";
+import rateLimit from "express-rate-limit";
 import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { AppError } from "../utils/app-error.js";
@@ -23,6 +24,9 @@ import { getPaginationMeta, parsePagination } from "../utils/pagination.js";
 import { toTransactionDto } from "../utils/transaction-dto.js";
 
 const router = Router();
+
+// Public hold endpoints are token-guarded; cap attempts to blunt token guessing.
+const heldLimiter = rateLimit({ windowMs: 60_000, max: 20, standardHeaders: true, legacyHeaders: false });
 
 //#region Schemas
 const transferSchema = z.object({
@@ -216,7 +220,12 @@ async function tryHoldTransfer(
       amount: amountIls,
       alreadyExecuted: false
     });
-  } catch {
+  } catch (error) {
+    // Fail-open + logged: scoring failure degrades to a normal send (never block).
+    console.error(
+      "[fraud] transfer risk scoring failed; sending without a hold check:",
+      error instanceof Error ? error.message : error
+    );
     return null;
   }
   if (!shouldHold(risk.level)) return null;
@@ -235,16 +244,13 @@ async function tryHoldTransfer(
       level: risk.level,
       reasons: risk.reasons
     });
-    const base = config.serverUrl;
-    const confirmUrl = `${base}/api/transactions/held/confirm?id=${id}&token=${token}`;
-    const cancelUrl = `${base}/api/transactions/held/cancel?id=${id}&token=${token}`;
+    const reviewUrl = `${config.serverUrl}/api/transactions/held/confirm?id=${id}&token=${token}`;
     await sendTransferHoldEmail(sender.email, {
       amount: parsed.amount,
       currency,
       recipientEmail: parsed.recipientEmail,
       reasons: risk.reasons,
-      confirmUrl,
-      cancelUrl
+      reviewUrl
     });
     return {
       status: "held",
@@ -254,60 +260,103 @@ async function tryHoldTransfer(
       expiresAt: expiresAt.toISOString(),
       message: "This transfer was held for review. Check your email to confirm it."
     };
-  } catch {
-    // Holding failed (e.g. AI Postgres unavailable) — let the transfer proceed.
+  } catch (error) {
+    // Fail-open + logged: a high-risk transfer could not be held (e.g. AI Postgres
+    // unavailable), so it proceeds as a normal send. This is the fraud control
+    // disabling itself — surface it loudly for alerting.
+    console.error(
+      "[fraud] FAIL-OPEN: a high-risk transfer was NOT held due to an error; it will execute normally:",
+      error instanceof Error ? error.message : error
+    );
     return null;
   }
 }
 
-// Public, token-guarded: the sender clicks these from the hold email.
-router.get("/held/confirm", async (req, res, next) => {
+// Public hold confirm/cancel: the GET link from the email only RENDERS a page
+// (so an email prefetch/link-scanner can't move money); the actual state change
+// is a POST carrying the token in the form body (kept out of the URL/logs).
+function esc(s: string): string {
+  return s.replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] as string
+  );
+}
+function htmlPage(title: string, body: string): string {
+  return `<!doctype html><meta charset="utf-8"><title>${esc(title)}</title><body style="font-family:system-ui,sans-serif;max-width:480px;margin:48px auto;padding:0 16px"><h1 style="font-size:20px">${esc(title)}</h1>${body}</body>`;
+}
+function actionForm(path: string, id: string, token: string, label: string): string {
+  return `<form method="post" action="${path}" style="display:inline-block;margin-right:12px"><input type="hidden" name="id" value="${esc(id)}"><input type="hidden" name="token" value="${esc(token)}"><button type="submit">${esc(label)}</button></form>`;
+}
+
+router.get("/held/confirm", heldLimiter, (req, res) => {
+  const id = String(req.query.id ?? "");
+  const token = String(req.query.token ?? "");
+  if (!id || !token) {
+    return res.status(400).type("html").send(htmlPage("Invalid link", "<p>Missing id or token.</p>"));
+  }
+  return res
+    .type("html")
+    .send(
+      htmlPage(
+        "Review your held transfer",
+        `<p>This transfer was held for review. Choose an action:</p>${actionForm(
+          "/api/transactions/held/confirm",
+          id,
+          token,
+          "Confirm and send"
+        )}${actionForm("/api/transactions/held/cancel", id, token, "Cancel transfer")}`
+      )
+    );
+});
+
+router.post("/held/confirm", heldLimiter, async (req, res, next) => {
   try {
-    const id = String(req.query.id ?? "");
-    const token = String(req.query.token ?? "");
-    if (!id || !token) throw new AppError(400, "Missing confirmation id or token.");
+    const id = String((req.body?.id ?? req.query.id) ?? "");
+    const token = String((req.body?.token ?? req.query.token) ?? "");
+    if (!id || !token) {
+      return res.status(400).type("html").send(htmlPage("Invalid", "<p>Missing id or token.</p>"));
+    }
     const result = await confirmHold(id, token);
+    const page = (code: number, title: string, msg: string) =>
+      res.status(code).type("html").send(htmlPage(title, `<p>${esc(msg)}</p>`));
     switch (result.status) {
       case "executed":
-        return res.json({
-          status: "confirmed",
-          transactionId: result.transactionId,
-          newBalance: result.newBalance,
-          message: "Transfer confirmed and sent."
-        });
+        return page(200, "Transfer sent", "Your transfer has been confirmed and sent.");
       case "already_confirmed":
-        return res.json({
-          status: "confirmed",
-          transactionId: result.transactionId,
-          message: "This transfer was already confirmed."
-        });
+        return page(200, "Already confirmed", "This transfer was already confirmed.");
       case "in_progress":
-        return res.status(409).json({ status: "in_progress", message: "This transfer is being processed." });
+        return page(409, "In progress", "This transfer is already being processed.");
       case "expired":
-        return res.status(410).json({ status: "expired", message: "This confirmation link has expired." });
+        return page(410, "Link expired", "This confirmation link has expired.");
       case "cancelled":
-        return res.status(409).json({ status: "cancelled", message: "This transfer was cancelled." });
+        return page(409, "Cancelled", "This transfer was cancelled.");
       case "failed":
-        return res.status(400).json({ status: "failed", message: result.message });
+        return page(400, "Could not send", result.message);
       default:
-        return res.status(404).json({ status: "invalid", message: "Invalid confirmation link." });
+        return page(404, "Invalid link", "This confirmation link is not valid.");
     }
   } catch (error) {
     next(error);
   }
 });
 
-router.get("/held/cancel", async (req, res, next) => {
+router.post("/held/cancel", heldLimiter, async (req, res, next) => {
   try {
-    const id = String(req.query.id ?? "");
-    const token = String(req.query.token ?? "");
-    if (!id || !token) throw new AppError(400, "Missing confirmation id or token.");
+    const id = String((req.body?.id ?? req.query.id) ?? "");
+    const token = String((req.body?.token ?? req.query.token) ?? "");
+    if (!id || !token) {
+      return res.status(400).type("html").send(htmlPage("Invalid", "<p>Missing id or token.</p>"));
+    }
     const cancelled = await cancelHold(id, token);
-    return res.json(
-      cancelled
-        ? { status: "cancelled", message: "Transfer cancelled." }
-        : { status: "noop", message: "This transfer could not be cancelled (already actioned or invalid)." }
-    );
+    return res
+      .type("html")
+      .send(
+        htmlPage(
+          cancelled ? "Transfer cancelled" : "No change",
+          cancelled
+            ? "<p>This transfer has been cancelled.</p>"
+            : "<p>This transfer could not be cancelled (already actioned or invalid).</p>"
+        )
+      );
   } catch (error) {
     next(error);
   }
