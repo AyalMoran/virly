@@ -106,8 +106,15 @@ function getResumableGraph(): ResumableGraph {
   if (!cachedResumableGraph) {
     let checkpointer: BaseCheckpointSaver;
     if (config.aiMemoryBackend === "postgres") {
-      // Tables are created at boot by setupAiMemoryBackend().
-      checkpointer = getPostgresCheckpointer();
+      try {
+        // Tables are created at boot by setupAiMemoryBackend().
+        checkpointer = getPostgresCheckpointer();
+      } catch {
+        // Mirror the Mongo branch: degrade to in-memory if the saver can't be
+        // built. Money state is not lost — pending transfers persist in their own
+        // repository, independent of the graph checkpointer.
+        checkpointer = new MemorySaver();
+      }
     } else {
       try {
         checkpointer = createMongoCheckpointer(mongoose.connection.getClient());

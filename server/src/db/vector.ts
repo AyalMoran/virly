@@ -23,8 +23,13 @@ export type AiDatabase = NodePgDatabase<typeof schema>;
 let pool: pg.Pool | null = null;
 let db: AiDatabase | null = null;
 
-/** Resolve the AI Postgres URL, preferring the live env var (contract harness sets it late). */
-function resolveUrl(): string {
+/**
+ * Resolve the AI Postgres URL, preferring the live env var (the contract harness
+ * sets it after config.ts froze its snapshot). Shared by every AI-Postgres
+ * consumer (drizzle pool here, the checkpointer in checkpointer.ts) so the
+ * precedence stays in one place.
+ */
+export function resolveAiPgUrl(): string {
   const url =
     process.env.VIRLY_AI_PG_URL ??
     process.env.VIRLY_VECTOR_DB_URL ??
@@ -39,7 +44,7 @@ function resolveUrl(): string {
 
 export function getAiDb(): AiDatabase {
   if (db) return db;
-  pool = new pg.Pool({ connectionString: resolveUrl() });
+  pool = new pg.Pool({ connectionString: resolveAiPgUrl() });
   db = drizzle(pool, { schema });
   return db;
 }

@@ -157,9 +157,11 @@ if (!Number.isFinite(ragMinScore) || ragMinScore < 0 || ragMinScore > 1) {
 // Postgres (single-store end-state); "mongo" (default) keeps the prior behavior.
 // Reversible by an env flip, mirroring the app-DB driver.
 function resolveAiMemoryBackend(): "mongo" | "postgres" {
-  const raw = (getOptionalStringEnv("VIRLY_AI_MEMORY_BACKEND") ?? "mongo")
-    .trim()
-    .toLowerCase();
+  // Guard against the string "undefined" that process.env can coerce from an
+  // undefined value (same hazard resolveDbDriver guards) — default to mongo.
+  const envVal = process.env.VIRLY_AI_MEMORY_BACKEND;
+  const effective = !envVal || envVal === "undefined" ? undefined : envVal;
+  const raw = (effective ?? "mongo").trim().toLowerCase();
   if (raw !== "mongo" && raw !== "postgres") {
     throw new Error("VIRLY_AI_MEMORY_BACKEND must be one of: mongo, postgres.");
   }

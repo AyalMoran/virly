@@ -59,9 +59,18 @@ function rowToItem(row: Row): Item {
   };
 }
 
-/** Apply a single condition (mirrors the common Mongo/Store comparison operators). */
+/**
+ * Apply a single filter condition. An object whose keys are ALL `$`-operators is
+ * an operator map (e.g. { $gt: 4 }); any other object is matched by deep equality
+ * (mirroring BaseStore's value-equality semantics, not treated as operators).
+ */
 function matchesCondition(actual: unknown, condition: unknown): boolean {
   if (condition !== null && typeof condition === "object" && !Array.isArray(condition)) {
+    const keys = Object.keys(condition as Record<string, unknown>);
+    const isOperatorMap = keys.length > 0 && keys.every((k) => k.startsWith("$"));
+    if (!isOperatorMap) {
+      return JSON.stringify(actual) === JSON.stringify(condition);
+    }
     return Object.entries(condition as Record<string, unknown>).every(([op, expected]) => {
       switch (op) {
         case "$eq":
@@ -150,31 +159,42 @@ export class PostgresLongTermStore extends BaseStore {
 
   private async runSearch(op: SearchOperation): Promise<SearchItem[]> {
     const db = getAiDb();
-    const prefix = toPrefix(op.namespacePrefix);
-    // Order most-recently-updated first, with `key` as a deterministic tiebreaker.
-    // This differs from MongoDBStore, which returns natural (insertion) order; the
-    // difference is only observable once a single namespace holds more items than
-    // the caller's `limit` (e.g. readLongTermSnapshot's 200) — below that the
-    // result sets are identical. Keeping the most-recent items on truncation is the
-    // more useful behavior for long-term memory.
-    const rowsRes =
-      op.namespacePrefix.length === 0
-        ? await db.execute(sql`
-            SELECT prefix, key, value, created_at, updated_at
-            FROM ai_memory_store
-            ORDER BY updated_at DESC, key ASC
-          `)
-        : await db.execute(sql`
-            SELECT prefix, key, value, created_at, updated_at
-            FROM ai_memory_store
-            WHERE prefix = ${prefix}
-               OR prefix LIKE ${`${escapeLike(prefix)}${SEP}%`} ESCAPE '\\'
-            ORDER BY updated_at DESC, key ASC
-          `);
-    const rows = (rowsRes as unknown as { rows: Row[] }).rows;
-    const matched = rows.map(rowToItem).filter((item) => matchesFilter(item.value, op.filter));
     const offset = op.offset ?? 0;
     const limit = op.limit ?? 10;
+
+    // Most-recently-updated first; (prefix, key) is a unique tiebreaker (the PK),
+    // so pagination is stable even when rows share an `updated_at`. This differs
+    // from MongoDBStore's natural order, observable only once a namespace holds
+    // more items than `limit`; keeping the most-recent items is the better default.
+    const order = sql`ORDER BY updated_at DESC, prefix ASC, key ASC`;
+    const where =
+      op.namespacePrefix.length === 0
+        ? sql``
+        : sql`WHERE prefix = ${toPrefix(op.namespacePrefix)}
+               OR prefix LIKE ${`${escapeLike(toPrefix(op.namespacePrefix))}${SEP}%`} ESCAPE '\\'`;
+
+    // No filter: push OFFSET/LIMIT to SQL so I/O is bounded regardless of history.
+    if (!op.filter) {
+      const res = await db.execute(sql`
+        SELECT prefix, key, value, created_at, updated_at
+        FROM ai_memory_store
+        ${where}
+        ${order}
+        OFFSET ${offset} LIMIT ${limit}
+      `);
+      return (res as unknown as { rows: Row[] }).rows.map(rowToItem);
+    }
+
+    // Filter present: jsonb predicates run in JS, so fetch the prefix then paginate.
+    const res = await db.execute(sql`
+      SELECT prefix, key, value, created_at, updated_at
+      FROM ai_memory_store
+      ${where}
+      ${order}
+    `);
+    const matched = (res as unknown as { rows: Row[] }).rows
+      .map(rowToItem)
+      .filter((item) => matchesFilter(item.value, op.filter));
     return matched.slice(offset, offset + limit);
   }
 
