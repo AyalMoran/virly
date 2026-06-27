@@ -1,9 +1,12 @@
 # RAG Knowledge Base — Design Plan
 
 > Status: **M1 implemented** — vector store, retriever, `searchPolicyDocs`
-> tool, local-folder ingestion, and evals are built and tested (520 unit tests +
-> a pgvector contract suite green; end-to-end ingest+search verified). M1.5
-> (checkpointer → Postgres), M2 (Drive), M3 (MCP), M4 (fraud) remain.
+> tool, local-folder ingestion, and the eval runner are built and tested (520
+> unit tests + a pgvector contract suite green; end-to-end ingest+search
+> verified). The ingestion source points at the project's existing knowledge
+> base (no sample docs are shipped); the eval example set is authored from those
+> real documents. M1.5 (checkpointer → Postgres), M2 (Drive), M3 (MCP), M4
+> (fraud) remain.
 > Resolved M1 questions: (1) migrations run via a **separate `rag:migrate`**
 > against the AI Postgres; (2) ingestion starts from a **local folder**.
 > Scope of milestone 1: ingest plain policy / loan-package documents into a
@@ -152,9 +155,11 @@ adapter is an interface from day one so M2 is a drop-in.
   webhook is a documented future trigger that calls the same code path.
 
 ### Evals — `server/src/ai/evals/`
-A small `policy-rag.examples.jsonl`: question → expected source doc(s).
-Eval asserts the expected doc appears in top-k (recall@k) — this is the
-"how I measure retrieval quality" story for the interview.
+A `policy-rag.examples.jsonl` authored against the REAL knowledge base: each line
+is `{ "question", "expectedSourceRefs" }`. `npm run eval:policy-rag` asserts the
+expected doc appears in top-k (recall@k) — the "how I measure retrieval quality"
+story. The runner ships; the example set is created from the actual documents
+(not committed sample content).
 
 ---
 
