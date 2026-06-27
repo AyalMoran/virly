@@ -295,8 +295,21 @@ an env flip, mirroring the app-DB driver pattern.
      idempotent, and expiry/cancel safe; any holding failure degrades to a normal
      flagged transfer (never blocks). Verified: a 6-case pgvector contract suite
      (exactly-once, idempotent, wrong-token, cancel, expiry) + a shouldHold unit
-     test. Follow-up: wire the same hold into the AI confirm path (needs an
-     AiConfirmationResult "held" variant).
+     test.
+   - **Hold on the AI confirm path — DONE.** `respondToAiPendingTransfer` now
+     scores before executing; a risky AI-confirmed transfer is held (reusing the
+     same `held_transfers` store + email links) and returns a new
+     `AiConfirmationResult` `"held"` variant instead of moving money. The card is
+     claimed `pending → "confirmed"` (reused status, per decision) with the held
+     result as the idempotency payload; the pre-tx hold row is emailed on a
+     winning claim or cancelled on a replay/loss/throw. The v2 `executeTransfer`
+     node surfaces a truthful "held — check your email" message. So a risky AI
+     transfer needs both the card confirm AND the email confirm (double-confirm,
+     per decision). Also fixed a latent bug: `runAiMigrations` now uses a separate
+     `__drizzle_migrations_ai` tracking table so the AI + app migration histories
+     don't collide when they share one Postgres. Verified: node unit tests + an
+     end-to-end postgres integration run (held, no money moved, card consumed,
+     hold created).
 
 > PDF support: DONE. A shared extractor (`ai/rag/pdf.ts`, pdf-parse) turns PDFs
 > into text for BOTH the Drive source (`getPdfText`) and the local source (`.pdf`
