@@ -13,6 +13,7 @@ import {
   executeTransfer,
   type TransferFxMetadata
 } from "../services/transfer.service.js";
+import { recordTransferRiskFlag } from "../fraud/service.js";
 import { transactionQueryService } from "../services/transactionQuery.service.js";
 import { getPaginationMeta, parsePagination } from "../utils/pagination.js";
 import { toTransactionDto } from "../utils/transaction-dto.js";
@@ -166,6 +167,15 @@ router.post("/", requireAuth, async (req, res, next) => {
       amount: amountIls,
       reason: parsed.reason,
       fx
+    });
+
+    // Best-effort fraud flag (post-commit; never affects the transfer).
+    await recordTransferRiskFlag({
+      userId: req.userId,
+      recipientEmail: parsed.recipientEmail,
+      amount: amountIls,
+      transactionId: result.transaction.id,
+      alreadyExecuted: true
     });
 
     return res.status(201).json(result);

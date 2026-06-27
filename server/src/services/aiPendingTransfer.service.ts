@@ -1,4 +1,5 @@
 import { getRepositories } from "../repositories/index.js";
+import { recordTransferRiskFlag } from "../fraud/service.js";
 import type {
   ModifyPendingTransferConfirmationInput,
   ModifyPendingTransferConfirmationResult,
@@ -519,7 +520,10 @@ export async function respondToAiPendingTransfer(
     };
   }
 
-  return getRepositories().runInTransaction(async (tx) => {
+  const flag: {
+    value: { recipientEmail: string; amount: number; transactionId?: string } | null;
+  } = { value: null };
+  const confirmResult = await getRepositories().runInTransaction(async (tx) => {
     // One read under the transaction serves the superseded check, the
     // idempotency replay, and the optimistic lock — snapshot isolation makes
     // the original three identical `_id`/`userId`-scoped reads equivalent.
@@ -571,6 +575,13 @@ export async function respondToAiPendingTransfer(
       tx
     );
 
+    // Captured for a post-commit fraud flag (recorded after the tx settles).
+    flag.value = {
+      recipientEmail: owned.recipientEmail,
+      amount: owned.amount,
+      transactionId: transferResult.transaction?.id ?? undefined
+    };
+
     const result: AiConfirmationResult = {
       status: "confirmed",
       message: transferResult.message,
@@ -605,4 +616,16 @@ export async function respondToAiPendingTransfer(
 
     return result;
   });
+
+  // Post-commit, best-effort fraud flag — only when a transfer actually executed.
+  if (flag.value) {
+    await recordTransferRiskFlag({
+      userId: input.userId,
+      recipientEmail: flag.value.recipientEmail,
+      amount: flag.value.amount,
+      transactionId: flag.value.transactionId,
+      alreadyExecuted: true
+    });
+  }
+  return confirmResult;
 }
