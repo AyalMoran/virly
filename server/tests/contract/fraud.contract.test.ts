@@ -20,6 +20,9 @@ test(
     const { getAiDb, closeAiPool } = await import("../../src/db/vector.js");
     const repo = await import("../../src/fraud/repository.js");
     const { scoreByKnn } = await import("../../src/fraud/knn.js");
+    const { listFraudFlags } = await import("../../src/fraud/service.js");
+    const { newObjectId } = await import("../../src/repositories/postgres/id.js");
+    const { sql } = await import("drizzle-orm");
 
     try {
       await repo.setupFraudSchema();
@@ -54,6 +57,21 @@ test(
         for (let i = 1; i < neighbors.length; i++) {
           assert.ok(neighbors[i].distance >= neighbors[i - 1].distance);
         }
+      });
+
+      await t.test("listFraudFlags reads flags newest-first and filters by level", async () => {
+        await listFraudFlags(); // ensure table
+        await db.execute("TRUNCATE ai_fraud_flags");
+        const uid = newObjectId();
+        for (const level of ["medium", "high"]) {
+          await db.execute(sql`
+            INSERT INTO ai_fraud_flags (id, user_id, transaction_id, recipient_email, amount, score, level, reasons, created_at)
+            VALUES (${newObjectId()}, ${uid}, null, ${"dan@example.com"}, ${450}, ${0.8}, ${level}, ${"[]"}::jsonb, now())
+          `);
+        }
+        assert.equal((await listFraudFlags()).length, 2);
+        assert.equal((await listFraudFlags({ level: "high" })).length, 1);
+        assert.equal((await listFraudFlags({ userId: uid })).length, 2);
       });
     } finally {
       await closeAiPool();

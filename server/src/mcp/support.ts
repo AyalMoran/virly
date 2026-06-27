@@ -14,6 +14,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { z, type ZodRawShape } from "zod";
 
 import { retrievePolicyDocs } from "../ai/rag/retriever.js";
+import { listFraudFlags } from "../fraud/service.js";
+import { listHeldTransfers } from "../fraud/holds.js";
 import { readOnlyToolExecutors } from "../ai/tools/index.js";
 import { minimalCounterpartyRef, renderToolResult } from "../ai/v2/toolContext.js";
 import { getRepositories } from "../repositories/index.js";
@@ -28,6 +30,8 @@ export type SupportToolDeps = {
   repos: Pick<Repositories, "users">;
   executors: AssistantToolExecutors;
   retrieve: typeof retrievePolicyDocs;
+  listFraudFlags: typeof listFraudFlags;
+  listHeldTransfers: typeof listHeldTransfers;
 };
 
 export type McpToolResult = {
@@ -151,6 +155,74 @@ export function createSupportTools(deps: SupportToolDeps): SupportTool[] {
         })
     },
     {
+      name: "list_fraud_flags",
+      description:
+        "List recent fraud risk flags (medium/high) recorded on executed transfers. " +
+        "Optionally filter by level or by one customer's email. For triage/review.",
+      inputSchema: {
+        customerEmail: z.string().optional().describe("Restrict to one customer's flags."),
+        level: z.enum(["medium", "high"]).optional(),
+        limit: z.number().int().min(1).max(100).optional()
+      },
+      handler: async ({ customerEmail, level, limit }) => {
+        let userId: string | undefined;
+        if (typeof customerEmail === "string" && customerEmail.trim()) {
+          const u = await deps.repos.users.findByEmail(customerEmail.trim().toLowerCase());
+          if (!u) return fail(`No customer found with email ${customerEmail}.`);
+          userId = u.id;
+        }
+        const flags = await deps.listFraudFlags({
+          level: typeof level === "string" ? level : undefined,
+          userId,
+          limit: typeof limit === "number" ? limit : undefined
+        });
+        if (flags.length === 0) return ok("No fraud flags found.");
+        return ok(
+          flags
+            .map(
+              (f) =>
+                `${f.createdAt.toISOString()} [${f.level}] score=${f.score} ₪${f.amount} → ${f.recipientEmail} (user ${f.userId})` +
+                (f.reasons.length ? ` — ${f.reasons.join(" ")}` : "")
+            )
+            .join("\n")
+        );
+      }
+    },
+    {
+      name: "list_held_transfers",
+      description:
+        "List transfers held for email confirmation. Optionally filter by status " +
+        "(pending/confirmed/cancelled/expired) or by one customer's email.",
+      inputSchema: {
+        customerEmail: z.string().optional(),
+        status: z.enum(["pending", "confirming", "confirmed", "cancelled", "expired"]).optional(),
+        limit: z.number().int().min(1).max(100).optional()
+      },
+      handler: async ({ customerEmail, status, limit }) => {
+        let userId: string | undefined;
+        if (typeof customerEmail === "string" && customerEmail.trim()) {
+          const u = await deps.repos.users.findByEmail(customerEmail.trim().toLowerCase());
+          if (!u) return fail(`No customer found with email ${customerEmail}.`);
+          userId = u.id;
+        }
+        const held = await deps.listHeldTransfers({
+          status: status as never,
+          userId,
+          limit: typeof limit === "number" ? limit : undefined
+        });
+        if (held.length === 0) return ok("No held transfers found.");
+        return ok(
+          held
+            .map(
+              (h) =>
+                `${h.createdAt.toISOString()} [${h.status}/${h.level}] ₪${h.amount} → ${h.recipientEmail} ` +
+                `(user ${h.userId}, expires ${h.expiresAt.toISOString()})`
+            )
+            .join("\n")
+        );
+      }
+    },
+    {
       name: "search_policy_docs",
       description:
         "Semantic search over Virly's policy + loan-package knowledge base. Use for product/policy/eligibility/fee questions. Returns cited excerpts.",
@@ -190,7 +262,9 @@ export function buildSupportMcpServer(): McpServer {
   const tools = createSupportTools({
     repos: getRepositories(),
     executors: readOnlyToolExecutors,
-    retrieve: retrievePolicyDocs
+    retrieve: retrievePolicyDocs,
+    listFraudFlags,
+    listHeldTransfers
   });
   // Cast registerTool to a concrete signature: the SDK's generic inference over
   // the Zod input shape otherwise triggers TS2589 (excessively deep).

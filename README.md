@@ -233,7 +233,8 @@ there is no money movement by design.
 
 Tools: `lookup_customer`, `get_balance`, `get_recent_transactions`,
 `get_transfer_limits`, `get_daily_transfer_usage`, `get_pending_transfers`,
-`get_counterparty_summary`, `search_policy_docs`.
+`get_counterparty_summary`, `search_policy_docs`, `list_fraud_flags`,
+`list_held_transfers`.
 
 Run it (stdio):
 

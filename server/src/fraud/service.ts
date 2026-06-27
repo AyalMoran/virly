@@ -123,3 +123,54 @@ export async function recordTransferRiskFlag(
   }
   return result;
 }
+
+export type FraudFlagView = {
+  id: string;
+  userId: string;
+  transactionId: string | null;
+  recipientEmail: string;
+  amount: number;
+  score: number;
+  level: string;
+  reasons: string[];
+  createdAt: Date;
+};
+
+type FlagRow = {
+  id: string;
+  user_id: string;
+  transaction_id: string | null;
+  recipient_email: string;
+  amount: number;
+  score: number;
+  level: string;
+  reasons: string[];
+  created_at: Date | string;
+};
+
+/** Read recent fraud flags (analyst surface), newest first, optionally filtered. */
+export async function listFraudFlags(
+  opts: { level?: string; userId?: string; limit?: number } = {}
+): Promise<FraudFlagView[]> {
+  await setupFlagsTable();
+  const limit = Math.min(Math.max(opts.limit ?? 20, 1), 100);
+  const conds = [];
+  if (opts.level) conds.push(sql`level = ${opts.level}`);
+  if (opts.userId) conds.push(sql`user_id = ${opts.userId}`);
+  const where = conds.length ? sql`WHERE ${sql.join(conds, sql` AND `)}` : sql``;
+  const res = await getAiDb().execute(sql`
+    SELECT id, user_id, transaction_id, recipient_email, amount, score, level, reasons, created_at
+    FROM ai_fraud_flags ${where} ORDER BY created_at DESC LIMIT ${limit}
+  `);
+  return (res as unknown as { rows: FlagRow[] }).rows.map((r) => ({
+    id: r.id,
+    userId: r.user_id,
+    transactionId: r.transaction_id ?? null,
+    recipientEmail: r.recipient_email,
+    amount: r.amount,
+    score: r.score,
+    level: r.level,
+    reasons: r.reasons ?? [],
+    createdAt: r.created_at instanceof Date ? r.created_at : new Date(r.created_at)
+  }));
+}
