@@ -260,8 +260,9 @@ an env flip, mirroring the app-DB driver pattern.
 5. **M4 — Fraud-transaction vectors** — separate tables, separate embedding
    strategy, role-gated tools. Designed later, not now.
 
-> Note: PDF files in Drive are skipped for now (logged) — text extraction needs
-> a parser (pdf-parse) and is a small follow-up if the KB contains PDFs.
+> PDF support: DONE. A shared extractor (`ai/rag/pdf.ts`, pdf-parse) turns PDFs
+> into text for BOTH the Drive source (`getPdfText`) and the local source (`.pdf`
+> files). Other binary types (images, etc.) are still skipped + logged.
 
 ---
 

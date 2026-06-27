@@ -5,6 +5,7 @@ import {
   createDriveSource,
   FOLDER_MIME,
   GOOGLE_DOC_MIME,
+  PDF_MIME,
   type DriveClient,
   type DriveFileMeta
 } from "./drive.js";
@@ -13,9 +14,10 @@ import {
 function fakeClient(
   tree: Record<string, DriveFileMeta[]>,
   bodies: Record<string, string>
-): { client: DriveClient; exported: string[]; fetched: string[] } {
+): { client: DriveClient; exported: string[]; fetched: string[]; pdfFetched: string[] } {
   const exported: string[] = [];
   const fetched: string[] = [];
+  const pdfFetched: string[] = [];
   const client: DriveClient = {
     async listFolder(folderId) {
       return tree[folderId] ?? [];
@@ -27,9 +29,13 @@ function fakeClient(
     async getFileMedia(fileId) {
       fetched.push(fileId);
       return bodies[fileId] ?? "";
+    },
+    async getPdfText(fileId) {
+      pdfFetched.push(fileId);
+      return bodies[fileId] ?? "";
     }
   };
-  return { client, exported, fetched };
+  return { client, exported, fetched, pdfFetched };
 }
 
 describe("createDriveSource", () => {
@@ -73,11 +79,24 @@ describe("createDriveSource", () => {
     assert.deepEqual(exported, ["f2"]);
   });
 
+  test("routes PDF files through getPdfText (extracted text)", async () => {
+    const tree: Record<string, DriveFileMeta[]> = {
+      root: [{ id: "p1", name: "terms.pdf", mimeType: PDF_MIME, md5Checksum: "pdfhash" }]
+    };
+    const { client, pdfFetched } = fakeClient(tree, { p1: "Extracted loan terms text." });
+    const files = await createDriveSource("root", client).list();
+    assert.equal(files.length, 1);
+    assert.deepEqual(pdfFetched, ["p1"]);
+    assert.equal(files[0].title, "terms");
+    assert.equal(files[0].mimeType, PDF_MIME);
+    assert.match(files[0].content, /Extracted loan terms/);
+  });
+
   test("skips unsupported mime types and empty files", async () => {
     const skipped: string[] = [];
     const tree: Record<string, DriveFileMeta[]> = {
       root: [
-        { id: "pdf", name: "scan.pdf", mimeType: "application/pdf" },
+        { id: "img", name: "logo.png", mimeType: "image/png" },
         { id: "empty", name: "blank.md", mimeType: "text/markdown", md5Checksum: "x" }
       ]
     };
@@ -87,7 +106,7 @@ describe("createDriveSource", () => {
     }).list();
 
     assert.equal(files.length, 0);
-    assert.ok(skipped.some((s) => s.startsWith("pdf:")));
+    assert.ok(skipped.some((s) => s.startsWith("img:")));
     assert.ok(skipped.some((s) => s.startsWith("empty:")));
   });
 
