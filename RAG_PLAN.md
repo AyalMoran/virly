@@ -1,6 +1,6 @@
 # RAG Knowledge Base — Design Plan
 
-> Status: **M1 implemented** ✅ — vector store, retriever, `searchPolicyDocs`
+> Status: **M1 implemented** — vector store, retriever, `searchPolicyDocs`
 > tool, local-folder ingestion, and evals are built and tested (520 unit tests +
 > a pgvector contract suite green; end-to-end ingest+search verified). M1.5
 > (checkpointer → Postgres), M2 (Drive), M3 (MCP), M4 (fraud) remain.
