@@ -86,11 +86,12 @@ function splitLargeBlock(text: string, maxTokens: number): string[] {
   while (remaining.length > maxChars) {
     let cut = remaining.lastIndexOf(" ", maxChars);
     if (cut <= 0) cut = maxChars;
-    pieces.push(remaining.slice(0, cut).trim());
+    const piece = remaining.slice(0, cut).trim();
+    if (piece) pieces.push(piece);
     remaining = remaining.slice(cut).trim();
   }
   if (remaining) pieces.push(remaining);
-  return pieces;
+  return pieces.filter((p) => p.length > 0);
 }
 
 /**

@@ -56,6 +56,13 @@ app.set("trust proxy", 1);
 
 app.use(parseCookies);
 app.use(express.json({ limit: "100kb" }));
+app.use(express.urlencoded({ extended: false, limit: "100kb" }));
+// Redact one-time `token` query params (held-transfer confirm/cancel links) from
+// access logs so they can't be replayed from logs.
+morgan.token("url", (req) => {
+  const raw = (req as { originalUrl?: string; url?: string }).originalUrl ?? (req as { url?: string }).url ?? "";
+  return raw.replace(/([?&]token=)[^&]+/gi, "$1[REDACTED]");
+});
 app.use(morgan("dev"));
 
 app.get("/", (_req, res) => {

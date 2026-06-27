@@ -53,13 +53,20 @@ export function prAuc(yTrue: FraudLabel[], yScore: number[]): number {
   let fp = 0;
   let prevRecall = 0;
   let ap = 0;
-  for (const i of order) {
-    if (yTrue[i] === 1) tp++;
-    else fp++;
+  // Process all items sharing a score TOGETHER, so average precision doesn't
+  // depend on the arbitrary ordering of ties (coarse kNN probabilities tie a lot).
+  for (let i = 0; i < order.length; ) {
+    let j = i;
+    while (j < order.length && yScore[order[j]] === yScore[order[i]]) {
+      if (yTrue[order[j]] === 1) tp++;
+      else fp++;
+      j++;
+    }
     const precision = tp / (tp + fp);
     const recall = tp / totalPos;
     ap += (recall - prevRecall) * precision;
     prevRecall = recall;
+    i = j;
   }
   return ap;
 }

@@ -41,6 +41,11 @@ export function createGoogleDriveClient(): DriveClient {
 
   return {
     async listFolder(folderId: string): Promise<DriveFileMeta[]> {
+      // Drive file IDs are URL-safe base64-ish; validate before interpolating into
+      // the query string to avoid any q-injection.
+      if (!/^[A-Za-z0-9_-]+$/.test(folderId)) {
+        throw new Error(`Invalid Drive folder id: ${folderId}`);
+      }
       const files: DriveFileMeta[] = [];
       let pageToken: string | undefined;
       do {

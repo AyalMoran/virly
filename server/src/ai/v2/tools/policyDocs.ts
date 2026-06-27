@@ -47,9 +47,9 @@ export const searchPolicyDocsTool = tool(
       }
       return renderCitations(result.citations);
     } catch (error) {
-      return `That document search failed: ${
-        error instanceof Error ? error.message : "unknown error"
-      }.`;
+      // Log the detail server-side; return a generic message to the model.
+      console.error("[searchPolicyDocs] failed:", error instanceof Error ? error.message : error);
+      return "The document search is temporarily unavailable.";
     }
   },
   {
@@ -58,6 +58,7 @@ export const searchPolicyDocsTool = tool(
     schema: z.object({
       query: z
         .string()
+        .max(500)
         .describe("What to look up, in the user's words (a question or topic)."),
       category: z
         .enum(["policy", "loan_package"])
