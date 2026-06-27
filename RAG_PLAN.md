@@ -1,6 +1,9 @@
 # RAG Knowledge Base — Design Plan
 
-> Status: **proposed** (plan-first; no code yet)
+> Status: **approved, not yet built** (plan-first; no code yet)
+> Open M1 questions are now **resolved**: (1) migrations run via a **separate
+> `rag:migrate`** against the AI Postgres; (2) ingestion starts from a **local
+> folder** (Drive adapter deferred to M2).
 > Scope of milestone 1: ingest plain policy / loan-package documents into a
 > vector store and let a LangGraph **sales-agent** node retrieve them with
 > citations. Fraud-transaction vectors are a deliberately separate, later phase.
@@ -133,8 +136,11 @@ but structure the tool registry so it *can* be role-scoped later — the fraud
 phase will need that.
 
 ### Ingestion — `server/scripts/sync-knowledge-base.ts`
-1. Source adapter: `local` (a folder, default for first run / tests) or `drive`
-   (Drive API via service account; `--source=drive --folder=<id>`)
+**M1 ships the `local` source only**; the `drive` adapter is M2 but the source
+adapter is an interface from day one so M2 is a drop-in.
+1. Source adapter: **`local`** (a folder — M1 default for dev/demo/tests). The
+   `drive` adapter (`--source=drive --folder=<id>`, Drive API via service
+   account) lands in M2 behind the same interface.
 2. For each file: skip if `(source_ref, revision)` unchanged (idempotent)
 3. Extract text (md/txt/pdf), **chunk** (~800 tokens, ~100 overlap,
    heading-aware), embed in batches, `upsertDocument` + `replaceChunks`
@@ -152,10 +158,16 @@ Eval asserts the expected doc appears in top-k (recall@k) — this is the
 
 ## 5. Migrations & ops
 
-- `npm run db:generate` / `db:migrate` extend to the vector schema, **or** a
-  parallel `rag:migrate` against `VIRLY_VECTOR_DB_URL` (cleaner separation).
+- **Separate `rag:migrate`** (resolved): a dedicated `npm run rag:migrate` runs
+  the AI-store migrations against `VIRLY_AI_PG_URL`, fully independent of the
+  app's `db:migrate`/`db:generate`. This keeps the AI Postgres schema decoupled
+  from the driver-switched app schema and gives the AI store its own migration
+  history — which also cleanly hosts the M1.5 checkpointer tables later.
+  - Use a separate Drizzle config + migrations folder (e.g.
+    `server/drizzle.ai.config.ts` → `server/drizzle-ai/`) so generation/apply
+    never collide with the existing `server/drizzle/`.
 - `docker-compose.yml`: add a `postgres` (with `pgvector/pgvector` image) service
-  so `mongo`-mode local dev still gets a vector store; wire `VIRLY_VECTOR_DB_URL`.
+  so `mongo`-mode local dev still gets an AI store; wire `VIRLY_AI_PG_URL`.
 - `.env.example`: document the new vars.
 
 ---
