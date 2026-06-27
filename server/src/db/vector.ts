@@ -57,7 +57,14 @@ export function getAiDb(): AiDatabase {
 export async function runAiMigrations(): Promise<void> {
   const database = getAiDb();
   await database.execute(sql`CREATE EXTENSION IF NOT EXISTS vector`);
-  await migrate(database, { migrationsFolder: MIGRATIONS_FOLDER });
+  // Use a SEPARATE tracking table from the app's migrations: the AI store may
+  // share one Postgres with the app (VIRLY_AI_PG_URL defaults to the app URL),
+  // and Drizzle's default `__drizzle_migrations` table would otherwise be shared
+  // — making the two independent histories clobber each other.
+  await migrate(database, {
+    migrationsFolder: MIGRATIONS_FOLDER,
+    migrationsTable: "__drizzle_migrations_ai"
+  });
 }
 
 export async function closeAiPool(): Promise<void> {
