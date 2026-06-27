@@ -300,7 +300,7 @@ an env flip, mirroring the app-DB driver pattern.
      scores before executing; a risky AI-confirmed transfer is held (reusing the
      same `held_transfers` store + email links) and returns a new
      `AiConfirmationResult` `"held"` variant instead of moving money. The card is
-     claimed `pending → "confirmed"` (reused status, per decision) with the held
+     claimed `pending → "held"` (a distinct card status) with the held
      result as the idempotency payload; the pre-tx hold row is emailed on a
      winning claim or cancelled on a replay/loss/throw. The v2 `executeTransfer`
      node surfaces a truthful "held — check your email" message. So a risky AI
