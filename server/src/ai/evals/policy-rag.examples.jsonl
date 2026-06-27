@@ -1,8 +1,0 @@
-{"question": "What loan packages does Virly offer?", "expectedSourceRefs": ["loans/personal-loan-packages.md"]}
-{"question": "What is the APR on the Premium loan?", "expectedSourceRefs": ["loans/personal-loan-packages.md"]}
-{"question": "Is there an early repayment fee?", "expectedSourceRefs": ["policies/transfer-and-fees-policy.md"]}
-{"question": "What is the daily transfer limit?", "expectedSourceRefs": ["policies/transfer-and-fees-policy.md"]}
-{"question": "What do I need to apply for a loan?", "expectedSourceRefs": ["policies/eligibility-and-verification.md", "loans/personal-loan-packages.md"]}
-{"question": "How much history do I need for the Flex loan?", "expectedSourceRefs": ["loans/personal-loan-packages.md", "policies/eligibility-and-verification.md"]}
-{"question": "Are transfers between Virly users free?", "expectedSourceRefs": ["policies/transfer-and-fees-policy.md"]}
-{"question": "What are the verification levels for an account?", "expectedSourceRefs": ["policies/eligibility-and-verification.md"]}

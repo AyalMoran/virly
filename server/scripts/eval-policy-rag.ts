@@ -22,9 +22,23 @@ function getFlag(name: string, fallback: string): string {
   return hit ? hit.slice(name.length + 3) : fallback;
 }
 
+const EXAMPLES_FILE = path.resolve(
+  import.meta.dirname,
+  "../src/ai/evals/policy-rag.examples.jsonl"
+);
+
 async function loadExamples(): Promise<Example[]> {
-  const file = path.resolve(import.meta.dirname, "../src/ai/evals/policy-rag.examples.jsonl");
-  const raw = await fs.readFile(file, "utf8");
+  // The example set must be authored against the real knowledge base — one JSON
+  // object per line: { "question": "...", "expectedSourceRefs": ["<source_ref>"] }.
+  let raw: string;
+  try {
+    raw = await fs.readFile(EXAMPLES_FILE, "utf8");
+  } catch {
+    throw new Error(
+      `No eval set found at ${EXAMPLES_FILE}. Create it from your real documents ` +
+        `(one {"question","expectedSourceRefs"} object per line) before running the eval.`
+    );
+  }
   return raw
     .split("\n")
     .map((l) => l.trim())
