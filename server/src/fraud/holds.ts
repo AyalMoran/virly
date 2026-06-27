@@ -234,6 +234,48 @@ export async function confirmHold(
   }
 }
 
+export type HeldTransferListItem = {
+  id: string;
+  userId: string;
+  recipientEmail: string;
+  amount: number;
+  status: HeldTransferStatus;
+  level: string;
+  reasons: string[];
+  createdAt: Date;
+  expiresAt: Date;
+};
+
+/** Read recent held transfers (analyst surface), newest first, optionally filtered. */
+export async function listHeldTransfers(
+  opts: { status?: HeldTransferStatus; userId?: string; limit?: number } = {}
+): Promise<HeldTransferListItem[]> {
+  await setupHoldsTable();
+  const limit = Math.min(Math.max(opts.limit ?? 20, 1), 100);
+  const conds = [];
+  if (opts.status) conds.push(sql`status = ${opts.status}`);
+  if (opts.userId) conds.push(sql`user_id = ${opts.userId}`);
+  const where = conds.length ? sql`WHERE ${sql.join(conds, sql` AND `)}` : sql``;
+  const res = await getAiDb().execute(sql`
+    SELECT id, user_id, recipient_email, amount, status, level, reasons, created_at, expires_at
+    FROM held_transfers ${where} ORDER BY created_at DESC LIMIT ${limit}
+  `);
+  return rows<HeldRow & { created_at: Date | string }>(res).map((r) => ({
+    id: r.id,
+    userId: r.user_id,
+    recipientEmail: r.recipient_email,
+    amount: r.amount,
+    status: r.status,
+    level: r.level,
+    reasons: r.reasons ?? [],
+    createdAt:
+      (r as { created_at?: Date | string }).created_at instanceof Date
+        ? ((r as { created_at: Date }).created_at)
+        : new Date((r as { created_at: string }).created_at),
+    expiresAt: r.expires_at instanceof Date ? r.expires_at : new Date(r.expires_at)
+  }));
+}
+
 /** Cancel a pending held transfer (token-guarded). */
 export async function cancelHold(id: string, token: string): Promise<boolean> {
   await setupHoldsTable();

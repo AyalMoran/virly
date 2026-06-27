@@ -310,6 +310,11 @@ an env flip, mirroring the app-DB driver pattern.
      don't collide when they share one Postgres. Verified: node unit tests + an
      end-to-end postgres integration run (held, no money moved, card consumed,
      hold created).
+   - **Analyst read surface — DONE.** `listFraudFlags` (service.ts) + `listHeldTransfers`
+     (holds.ts) — newest-first reads with level/status/user filters — exposed as
+     read-only `list_fraud_flags` and `list_held_transfers` tools on the Support
+     MCP server. Verified: support-tool unit tests + contract cases for both
+     queries against pgvector.
 
 > PDF support: DONE. A shared extractor (`ai/rag/pdf.ts`, pdf-parse) turns PDFs
 > into text for BOTH the Drive source (`getPdfText`) and the local source (`.pdf`

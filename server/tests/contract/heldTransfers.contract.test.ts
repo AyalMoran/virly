@@ -77,6 +77,23 @@ test(
         assert.equal(r.status, "expired");
       });
 
+      await t.test("listHeldTransfers returns newest-first and filters by status", async () => {
+        await db.execute("TRUNCATE held_transfers");
+        const a = baseHold();
+        const b = baseHold();
+        await holds.createHold(a);
+        const second = await holds.createHold(b);
+        await holds.cancelHold(second.id, second.token);
+
+        const all = await holds.listHeldTransfers();
+        assert.equal(all.length, 2);
+        const pending = await holds.listHeldTransfers({ status: "pending" });
+        assert.equal(pending.length, 1);
+        const byUser = await holds.listHeldTransfers({ userId: a.userId });
+        assert.equal(byUser.length, 1);
+        assert.equal(byUser[0].userId, a.userId);
+      });
+
       await t.test("getHold reflects status transitions", async () => {
         const { id, token } = await holds.createHold(baseHold());
         let view = await holds.getHold(id);

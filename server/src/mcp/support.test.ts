@@ -51,6 +51,8 @@ function makeDeps(overrides: Partial<SupportToolDeps> = {}): {
       }
     ) as SupportToolDeps["executors"],
     retrieve: (async () => ({ available: false, reason: "disabled", citations: [] })) as SupportToolDeps["retrieve"],
+    listFraudFlags: (async () => []) as SupportToolDeps["listFraudFlags"],
+    listHeldTransfers: (async () => []) as SupportToolDeps["listHeldTransfers"],
     ...overrides
   };
   return { deps, calls };
@@ -96,6 +98,49 @@ describe("support MCP tools", () => {
     const out = await tool(deps, "lookup_customer").handler({ customerEmail: "dan@example.com" });
     assert.match(out.content[0].text, /dan@example\.com/);
     assert.match(out.content[0].text, /balance: 1840\.50/);
+  });
+
+  test("list_fraud_flags formats flags and passes filters through", async () => {
+    let received: unknown;
+    const { deps } = makeDeps({
+      listFraudFlags: (async (opts: unknown) => {
+        received = opts;
+        return [
+          {
+            id: "f1",
+            userId: "u1",
+            transactionId: "t1",
+            recipientEmail: "dan@example.com",
+            amount: 450,
+            score: 0.8,
+            level: "high",
+            reasons: ["new recipient"],
+            createdAt: new Date("2026-06-01T00:00:00.000Z")
+          }
+        ];
+      }) as SupportToolDeps["listFraudFlags"]
+    });
+    const out = await tool(deps, "list_fraud_flags").handler({ level: "high", limit: 5 });
+    assert.match(out.content[0].text, /\[high\] score=0\.8 ₪450 → dan@example\.com/);
+    assert.deepEqual(received, { level: "high", userId: undefined, limit: 5 });
+  });
+
+  test("list_fraud_flags resolves customerEmail to a userId filter", async () => {
+    let received: { userId?: string } = {};
+    const { deps } = makeDeps({
+      listFraudFlags: (async (opts: { userId?: string }) => {
+        received = opts;
+        return [];
+      }) as SupportToolDeps["listFraudFlags"]
+    });
+    await tool(deps, "list_fraud_flags").handler({ customerEmail: "dan@example.com" });
+    assert.equal(received.userId, "507f1f77bcf86cd799439011");
+  });
+
+  test("list_held_transfers reports an empty result cleanly", async () => {
+    const { deps } = makeDeps();
+    const out = await tool(deps, "list_held_transfers").handler({ status: "pending" });
+    assert.match(out.content[0].text, /No held transfers/);
   });
 
   test("search_policy_docs reports a friendly message when RAG is disabled", async () => {
