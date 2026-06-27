@@ -10,7 +10,7 @@ docs
 .agents
 .claude
 .instance
-/scripts
+/scripts/*
 /compare
 /skills-lock.json
 
@@ -20,6 +20,11 @@ docs
 .claude
 
 scripts/fill-personal-details.api.js
+
+# restored scripts removed in d54ded9 — keep these tracked despite *.sh and /scripts/*
+!scripts/logs-tmux.sh
+!scripts/ai-eval-chat.sh
+!scripts/fill-personal-details.mongodb.js
 
 # design-sync (claude.ai/design) — staged scripts, build output, machine state
 .ds-sync/
