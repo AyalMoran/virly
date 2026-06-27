@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Virly Docs Sync Playground - PRs #6 &amp; #7</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        padding: 48px 16px;
+        display: flex;
+        justify-content: center;
+        background: #f6f7f9;
+        color: #16181d;
+        font-family: "Hanken Grotesk", system-ui, sans-serif;
+        line-height: 1.5;
+      }
+      main { width: 100%; max-width: 760px; }
+      h1 { font-size: 24px; margin: 0 0 4px; }
+      p.lede { color: #5b616e; margin: 0 0 28px; }
+      section { background: #fff; border: 1px solid #e4e7ec; border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+      h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.04em; color: #6b7280; margin: 0 0 10px; }
+      ul { margin: 0; padding-left: 18px; }
+      li { margin: 4px 0; }
+      code { background: #f0f1f4; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+      a { color: #2255cc; text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      footer { color: #9099a6; font-size: 13px; margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Virly Docs Sync - Playground</h1>
+      <p class="lede">
+        A static index for the documentation refreshed on this branch. It maps the
+        merged work in PR #6 (RAG knowledge base, fraud detection, Support MCP
+        server, swappable AI-memory backend) and PR #7 (boot splash +
+        <code>VIRLY_THROTTLE_MS</code>) to the reference docs they updated.
+      </p>
+
+      <section>
+        <h2>New subsystems documented</h2>
+        <ul>
+          <li><strong>RAG knowledge base</strong> - dedicated pgvector Postgres, <code>searchPolicyDocs</code> tool, ingestion via <code>rag:sync</code>.</li>
+          <li><strong>Fraud detection</strong> - rules + kNN anomaly scoring, hold-until-email-confirmation, <code>assessTransactionRisk</code> tool.</li>
+          <li><strong>Support MCP server</strong> - read-only, customer-scoped, OS-level trust boundary.</li>
+          <li><strong>Swappable AI-memory backend</strong> - <code>VIRLY_AI_MEMORY_BACKEND</code> (mongo | postgres).</li>
+          <li><strong>Boot splash</strong> - split-flap loader; dev latency via <code>VIRLY_THROTTLE_MS</code>.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Updated reference docs</h2>
+        <ul>
+          <li><a href="../configuration.md">configuration.md</a> - new RAG/fraud/AI-memory env vars</li>
+          <li><a href="../api/README.md">api/README.md</a> + <code>openapi.yaml</code> - held-transfer endpoints + quote path</li>
+          <li><a href="../domain/transfers.md">domain/transfers.md</a> - fraud scoring + hold lifecycle</li>
+          <li><a href="../security.md">security.md</a> - hold gate, token security, MCP trust boundary</li>
+          <li><a href="../ai/architecture.md">ai/architecture.md</a> - RAG, fraud tool, MCP, memory backend</li>
+          <li><a href="../backend/index.md">backend/</a> - new fraud / rag-knowledge / mcp-support areas</li>
+          <li><a href="../operations.md">operations.md</a> - rag/fraud/mcp scripts, drizzle-ai, pgvector compose</li>
+          <li><a href="../testing.md">testing.md</a> - new contract + unit tests</li>
+          <li><a href="../adr/README.md">adr/</a> - 0009-0014 architectural decisions</li>
+          <li><a href="../frontend/areas/layout-nav.md">frontend/</a> - BootSplash component</li>
+        </ul>
+      </section>
+
+      <footer>Generated for branch <code>docs/sync-prs-6-7</code>.</footer>
+    </main>
+  </body>
+</html>
