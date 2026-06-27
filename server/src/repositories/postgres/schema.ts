@@ -122,7 +122,7 @@ export const aiPendingTransfers = pgTable("ai_pending_transfers", {
   index("ai_pending_conv_idx").on(t.conversationId),
   index("ai_pending_status_idx").on(t.status),
   index("ai_pending_expires_idx").on(t.expiresAt),
-  check("ai_pending_status_ck", sql`${t.status} in ('pending','confirmed','denied','expired','superseded')`),
+  check("ai_pending_status_ck", sql`${t.status} in ('pending','confirmed','denied','expired','superseded','held')`),
   check("ai_pending_currency_ck", sql`${t.currency} = 'ILS'`)
 ]);
 

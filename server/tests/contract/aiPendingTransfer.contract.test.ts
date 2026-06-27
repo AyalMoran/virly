@@ -164,6 +164,15 @@ describeContract("AiPendingTransferRepository", {
     assert.equal((await repos.aiPendingTransfers.findById(created.id))?.status, "pending");
   },
 
+  "updateStatus can set the 'held' status (fraud hold)": async ({ repos }) => {
+    const created = await repos.aiPendingTransfers.create(makePending());
+    const updated = await repos.aiPendingTransfers.updateStatus(created.id, "held", {
+      expectedStatus: "pending"
+    });
+    assert.ok(updated);
+    assert.equal(updated.status, "held");
+  },
+
   "updateStatus sets supersededById alongside the status flip": async ({ repos }) => {
     const created = await repos.aiPendingTransfers.create(makePending());
     const replacement = "c".repeat(24);

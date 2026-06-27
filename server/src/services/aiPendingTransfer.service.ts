@@ -657,9 +657,11 @@ export async function respondToAiPendingTransfer(
         expiresAt: holdPlan.expiresAt.toISOString(),
         message: "This transfer was held for review. Confirm it from the email we sent you."
       };
+      // Distinct 'held' status (not 'confirmed'): the card is consumed but the
+      // money has NOT moved — the held_transfers row tracks the real execution.
       const claimed = await repos.aiPendingTransfers.updateStatus(
         input.pendingTransferId,
-        "confirmed",
+        "held",
         {
           userId: input.userId,
           version: input.version,
