@@ -17,7 +17,7 @@ import { MongoDBSaver } from "@langchain/langgraph-checkpoint-mongodb";
 import { PostgresSaver } from "@langchain/langgraph-checkpoint-postgres";
 import type { MongoClient } from "mongodb";
 
-import { config } from "../../../config.js";
+import { resolveAiPgUrl } from "../../../db/vector.js";
 
 export const V2_CHECKPOINT_COLLECTION = "ai_v2_checkpoints";
 export const V2_CHECKPOINT_WRITES_COLLECTION = "ai_v2_checkpoint_writes";
@@ -49,20 +49,10 @@ export function createMongoCheckpointer(
  */
 let pgCheckpointer: PostgresSaver | undefined;
 
-function aiPgUrl(): string {
-  const url =
-    process.env.VIRLY_AI_PG_URL ??
-    process.env.VIRLY_VECTOR_DB_URL ??
-    config.rag.aiPgUrl;
-  if (!url) {
-    throw new Error("VIRLY_AI_PG_URL is required for the postgres AI-memory backend.");
-  }
-  return url;
-}
-
 export function getPostgresCheckpointer(): BaseCheckpointSaver {
   if (!pgCheckpointer) {
-    pgCheckpointer = PostgresSaver.fromConnString(aiPgUrl());
+    // Shares the AI-Postgres URL resolution with db/vector.ts (single source).
+    pgCheckpointer = PostgresSaver.fromConnString(resolveAiPgUrl());
   }
   return pgCheckpointer as unknown as BaseCheckpointSaver;
 }

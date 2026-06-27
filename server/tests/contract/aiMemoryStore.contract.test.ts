@@ -74,6 +74,21 @@ test(
         assert.equal(limited.length, 1);
       });
 
+      await t.test("paginated search is stable across pages (no skip/dup on ties)", async () => {
+        await reset();
+        // Insert in one statement-batch so several rows can share updated_at.
+        for (const k of ["a", "b", "c", "d", "e"]) {
+          await store.put(["ns"], k, { k });
+        }
+        const seen: string[] = [];
+        for (let offset = 0; offset < 5; offset += 2) {
+          const page = await store.search(["ns"], { limit: 2, offset });
+          seen.push(...page.map((i) => i.key));
+        }
+        assert.deepEqual([...seen].sort(), ["a", "b", "c", "d", "e"]);
+        assert.equal(new Set(seen).size, 5, "no duplicates across pages");
+      });
+
       await t.test("search filter matches exact + comparison operators", async () => {
         await reset();
         await store.put(["ns"], "a", { status: "active", score: 5 });
