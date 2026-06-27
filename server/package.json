@@ -16,6 +16,7 @@
     "eval:policy-rag": "tsx scripts/eval-policy-rag.ts",
     "mcp:support": "tsx scripts/mcp-support-server.ts",
     "fraud:ingest": "tsx scripts/fraud-ingest.ts",
+    "fraud:train": "tsx scripts/fraud-train.ts",
     "test:contract": "tsx --test --test-concurrency=1 \"tests/contract/**/*.test.ts\""
   },
   "dependencies": {

@@ -265,8 +265,14 @@ an env flip, mirroring the app-DB driver pattern.
      Postgres with an L2 HNSW index; scored by nearest-neighbor fraud fraction.
      Verified: 11 unit tests + a pgvector contract suite (separable clusters) +
      end-to-end ingest of a committed synthetic sample.
-   - **Phase 2 (trained model) — NEXT.** Offline LogReg/LightGBM → free JS scorer
-     (exported weights / m2cgen), PR-AUC/recall eval, baseline-vs-model compare.
+   - **Phase 2 (trained model) — DONE.** Logistic regression in pure TS
+     (`logreg.ts`, balanced class weights) trained offline by `npm run fraud:train`;
+     runtime scoring is a free dot-product + sigmoid (no Python, no ML runtime
+     dep). `metrics.ts` (PR-AUC, precision/recall/F1, best-F1 threshold) +
+     `knnEval.ts` give a baseline-vs-model comparison on the same stratified split.
+     Saves a `{ scaler, model, threshold }` artifact. LightGBM via m2cgen remains
+     the documented accuracy upgrade behind the same artifact shape. Verified: 8
+     more unit tests + an end-to-end train run on the synthetic sample.
    - **Phase 3 — surface** behind role-gated tools / a fraud-analyst MCP server.
    Not wired to real Virly transactions (different schema) — that's a follow-up.
 
