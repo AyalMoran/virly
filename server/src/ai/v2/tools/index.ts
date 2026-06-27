@@ -10,11 +10,15 @@
  */
 import { ToolNode } from "@langchain/langgraph/prebuilt";
 
+import { fraudTools } from "./fraud.js";
 import { moneyTools } from "./money.js";
+import { knowledgeTools } from "./policyDocs.js";
 import { readOnlyTools } from "./readOnly.js";
 
 export { readOnlyTools } from "./readOnly.js";
 export { moneyTools } from "./money.js";
+export { knowledgeTools } from "./policyDocs.js";
+export { fraudTools } from "./fraud.js";
 
 /** Tool names that propose money movement (built into cards, never executed). */
 export const MONEY_TOOL_NAMES = new Set([
@@ -23,7 +27,7 @@ export const MONEY_TOOL_NAMES = new Set([
   "cancelPendingTransfer"
 ]);
 
-export const allTools = [...readOnlyTools, ...moneyTools];
+export const allTools = [...readOnlyTools, ...knowledgeTools, ...fraudTools, ...moneyTools];
 
 /** A ToolNode over the full v2 toolbelt; per-call deps ride in config.configurable. */
 export function createV2ToolNode(): ToolNode {

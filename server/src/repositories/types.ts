@@ -132,7 +132,7 @@ export type AiPendingTransferRecord = {
   recipientLastName: string | null;
   amount: number;
   reason: string | null;
-  status: "pending" | "confirmed" | "denied" | "expired" | "superseded";
+  status: "pending" | "confirmed" | "denied" | "expired" | "superseded" | "held";
   supersededById: string | null;
   supersedesId: string | null;
   idempotencyResults: Record<string, unknown>;

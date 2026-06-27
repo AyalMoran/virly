@@ -125,6 +125,75 @@ if (dbDriver === "postgres" && !postgresUrl) {
   throw new Error("VIRLY_POSTGRES_URL is required when VIRLY_DB_DRIVER=postgres.");
 }
 
+// The RAG knowledge base lives in a DEDICATED Postgres (pgvector), independent of
+// VIRLY_DB_DRIVER — so it is reachable even in mongo mode. It falls back to the
+// app's Postgres URL when a separate one isn't supplied. See RAG_PLAN.md §1.
+function resolveAiPgUrl(): string | undefined {
+  const raw = getOptionalStringEnv("VIRLY_AI_PG_URL", {
+    aliases: ["VIRLY_VECTOR_DB_URL"]
+  });
+  const cleaned = raw === "undefined" ? undefined : raw;
+  return cleaned ?? postgresUrl;
+}
+
+const aiPgUrl = resolveAiPgUrl();
+
+const ragEnabled = getBooleanEnv("VIRLY_RAG_ENABLED", { defaultValue: false });
+
+if (ragEnabled && !aiPgUrl) {
+  throw new Error(
+    "VIRLY_AI_PG_URL (or VIRLY_VECTOR_DB_URL / VIRLY_POSTGRES_URL) is required when VIRLY_RAG_ENABLED is on."
+  );
+}
+
+const ragMinScoreRaw = getOptionalStringEnv("VIRLY_RAG_MIN_SCORE");
+const ragMinScore = ragMinScoreRaw === undefined ? 0 : Number(ragMinScoreRaw);
+if (!Number.isFinite(ragMinScore) || ragMinScore < 0 || ragMinScore > 1) {
+  throw new Error("VIRLY_RAG_MIN_SCORE must be a number between 0 and 1.");
+}
+
+// Where the LangGraph checkpointer + long-term store live (RAG_PLAN.md §7 / M1.5).
+// Orthogonal to VIRLY_DB_DRIVER: "postgres" puts AI memory on the dedicated AI
+// Postgres (single-store end-state); "mongo" (default) keeps the prior behavior.
+// Reversible by an env flip, mirroring the app-DB driver.
+function resolveAiMemoryBackend(): "mongo" | "postgres" {
+  // Guard against the string "undefined" that process.env can coerce from an
+  // undefined value (same hazard resolveDbDriver guards) — default to mongo.
+  const envVal = process.env.VIRLY_AI_MEMORY_BACKEND;
+  const effective = !envVal || envVal === "undefined" ? undefined : envVal;
+  const raw = (effective ?? "mongo").trim().toLowerCase();
+  if (raw !== "mongo" && raw !== "postgres") {
+    throw new Error("VIRLY_AI_MEMORY_BACKEND must be one of: mongo, postgres.");
+  }
+  return raw;
+}
+
+const aiMemoryBackend = resolveAiMemoryBackend();
+
+if (aiMemoryBackend === "postgres" && !aiPgUrl) {
+  throw new Error(
+    "VIRLY_AI_PG_URL (or VIRLY_VECTOR_DB_URL / VIRLY_POSTGRES_URL) is required when VIRLY_AI_MEMORY_BACKEND=postgres."
+  );
+}
+
+// Hold high-risk transfers until the sender confirms by email (M4 follow-up).
+// "off" (default) = flag only; "high"/"medium" = hold at that risk level and above.
+function resolveFraudHoldLevel(): "off" | "medium" | "high" {
+  const raw = (getOptionalStringEnv("VIRLY_FRAUD_HOLD_LEVEL") ?? "off").trim().toLowerCase();
+  if (raw !== "off" && raw !== "medium" && raw !== "high") {
+    throw new Error("VIRLY_FRAUD_HOLD_LEVEL must be one of: off, medium, high.");
+  }
+  return raw;
+}
+
+const fraudHoldLevel = resolveFraudHoldLevel();
+
+if (fraudHoldLevel !== "off" && !aiPgUrl) {
+  throw new Error(
+    "VIRLY_AI_PG_URL (or VIRLY_VECTOR_DB_URL / VIRLY_POSTGRES_URL) is required when VIRLY_FRAUD_HOLD_LEVEL is enabled."
+  );
+}
+
 export const config = {
   port: getIntEnv("VIRLY_PORT", {
     defaultValue: 3000,
@@ -212,5 +281,42 @@ export const config = {
     sameSite: getCookieSameSite()
   },
   dbDriver,
-  postgresUrl
+  postgresUrl,
+  /** Backend for the LangGraph checkpointer + long-term store ("mongo" | "postgres"). */
+  aiMemoryBackend,
+  rag: {
+    // Feature flag — when off, the searchPolicyDocs tool stays inert (returns a
+    // graceful "unavailable" message) so the app/evals run without an AI Postgres.
+    enabled: ragEnabled,
+    /** Dedicated pgvector Postgres for AI/ML data (vectors now; checkpointer in M1.5). */
+    aiPgUrl,
+    embeddingModel: getStringEnv("VIRLY_RAG_EMBEDDING_MODEL", "text-embedding-3-small"),
+    /** Fixed vector width — must match the schema's vector(N) column. */
+    embeddingDimensions: 1536,
+    topK: getIntEnv("VIRLY_RAG_TOP_K", { defaultValue: 5, min: 1, max: 50 }),
+    /** Drop retrieved chunks whose cosine similarity is below this (0..1). */
+    minScore: ragMinScore,
+    /** Local-folder ingestion source (M1) — path lives outside the repo. */
+    localDir: getOptionalStringEnv("VIRLY_RAG_LOCAL_DIR"),
+    /** Google Drive ingestion source (M2). Auth via a service account. */
+    drive: {
+      folderId: getOptionalStringEnv("VIRLY_RAG_DRIVE_FOLDER_ID"),
+      /** Service-account key as a raw JSON string... */
+      serviceAccountJson: getOptionalStringEnv("VIRLY_GOOGLE_SERVICE_ACCOUNT_JSON"),
+      /** ...or a path to the key file (one of the two is required for Drive). */
+      serviceAccountFile: getOptionalStringEnv("VIRLY_GOOGLE_APPLICATION_CREDENTIALS", {
+        aliases: ["GOOGLE_APPLICATION_CREDENTIALS"]
+      })
+    }
+  },
+  fraud: {
+    /** Hold transfers at this risk level and above until email confirmation. */
+    holdLevel: fraudHoldLevel,
+    /** How long a held transfer's email-confirmation link stays valid. */
+    holdExpiryHours: getIntEnv("VIRLY_FRAUD_HOLD_EXPIRY_HOURS", {
+      defaultValue: 24,
+      min: 1,
+      max: 24 * 7
+    })
+  }
 };

@@ -55,7 +55,7 @@ const aiPendingTransferSchema = new Schema(
     },
     status: {
       type: String,
-      enum: ["pending", "confirmed", "denied", "expired", "superseded"],
+      enum: ["pending", "confirmed", "denied", "expired", "superseded", "held"],
       required: true,
       default: "pending",
       index: true

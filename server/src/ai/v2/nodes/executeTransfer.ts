@@ -31,6 +31,18 @@ export async function executeTransferNode(
     idempotencyKey: state.resumeMeta?.idempotencyKey
   });
 
+  // A high-risk transfer is held for email confirmation rather than executed —
+  // tell the user the truth (the money has NOT moved yet).
+  if ((result as { status?: string }).status === "held") {
+    return {
+      transferResult: result,
+      responseMessage:
+        cfg.locale === "he"
+          ? `העברה של ₪${card.amount} ל-${card.recipientEmail} הוחזקה לבדיקה. שלחנו לך אימייל לאישור.`
+          : `Your ₪${card.amount} transfer to ${card.recipientEmail} was held for review. Check your email to confirm it.`
+    };
+  }
+
   return {
     transferResult: result,
     responseMessage:

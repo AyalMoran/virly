@@ -1,0 +1,56 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+
+jobs:
+  unit:
+    name: typecheck + unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Typecheck (server)
+        run: npx tsc -p server/tsconfig.json --noEmit
+      - name: Unit tests (server)
+        run: npm test --workspace server
+
+  contract:
+    name: contract tests (pgvector)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        # pgvector image (superset of postgres) so the knowledge/fraud/held suites
+        # can CREATE EXTENSION vector. One instance backs both the app contract
+        # tests and the AI-store ones (safe: separate migration tracking tables).
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_DB: virly
+          POSTGRES_USER: virly
+          POSTGRES_PASSWORD: virly
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U virly"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - name: Contract tests (app Postgres + AI store)
+        # Mongo contract cases self-skip without CONTRACT_MONGO_URL (a Mongo
+        # replica set is awkward in CI); the Postgres + pgvector suites run here.
+        env:
+          CONTRACT_PG_URL: postgres://virly:virly@localhost:5432/virly
+          CONTRACT_VECTOR_URL: postgres://virly:virly@localhost:5432/virly
+        run: npm run test:contract --workspace server
