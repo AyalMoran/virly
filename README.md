@@ -223,6 +223,45 @@ virly/
 
 ---
 
+## Support MCP server (read-only)
+
+Virly exposes its read-only assistant capabilities to internal support/ops staff
+over the [Model Context Protocol](https://modelcontextprotocol.io) — the same
+executors the in-app assistant uses, plus the policy/loan knowledge base, as MCP
+tools (e.g. for Claude Desktop). It is **read-only and customer-scoped by email**;
+there is no money movement by design.
+
+Tools: `lookup_customer`, `get_balance`, `get_recent_transactions`,
+`get_transfer_limits`, `get_daily_transfer_usage`, `get_pending_transfers`,
+`get_counterparty_summary`, `search_policy_docs`.
+
+Run it (stdio):
+
+```bash
+npm run mcp:support --workspace server
+```
+
+It uses the same env as the server (`VIRLY_MONGODB_URI`/`VIRLY_DB_DRIVER`, and
+`VIRLY_AI_PG_URL` + `OPENAI_API_KEY` for `search_policy_docs`). Example Claude
+Desktop config (`claude_desktop_config.json`):
+
+```json
+{
+  "mcpServers": {
+    "virly-support": {
+      "command": "npm",
+      "args": ["run", "mcp:support", "--workspace", "server"],
+      "cwd": "/absolute/path/to/virly",
+      "env": { "VIRLY_MONGODB_URI": "mongodb://localhost:27017/virly" }
+    }
+  }
+}
+```
+
+Run it with read-scoped database credentials — every tool only reads.
+
+---
+
 ## License
 
 MIT

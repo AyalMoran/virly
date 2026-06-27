@@ -251,8 +251,12 @@ an env flip, mirroring the app-DB driver pattern.
    (reversible by env flip). Verified: 8/8 store contract tests incl. parity via
    the real memory helpers; boot creates checkpointer + store tables. Full graph
    turn/resume not run here (needs OpenAI).
-4. **M3 — MCP server** wrapping `retrievePolicyDocs` for external clients (only
-   if a real external consumer appears).
+4. **M3 — MCP server** — DONE, broader than originally scoped. Instead of a
+   RAG-only server, built a read-only **Support MCP server** (`src/mcp/support.ts`,
+   `npm run mcp:support`) that exposes the existing read-only executors AND
+   `search_policy_docs` to internal staff (e.g. Claude Desktop). Read-only,
+   customer-scoped by email; no money movement. Verified end-to-end over the MCP
+   in-memory transport (tools/list + tool calls) plus unit tests.
 5. **M4 — Fraud-transaction vectors** — separate tables, separate embedding
    strategy, role-gated tools. Designed later, not now.
 
