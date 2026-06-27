@@ -10,22 +10,30 @@
 import type { BaseStore } from "@langchain/langgraph";
 import mongoose from "mongoose";
 
+import { config } from "../../../config.js";
 import type { CounterpartyMemory } from "../../state.js";
 import type { KnownCounterparty } from "../prompt.js";
 import { createMongoLongTermStore } from "./store.js";
 import { readLongTermSnapshot, upsertCounterparty, userNamespace } from "./store.js";
+import { getPostgresLongTermStore } from "./postgresStore.js";
 
 let cachedStore: BaseStore | undefined;
 let storeResolved = false;
 
-/** The Mongo-backed long-term store when connected; undefined otherwise (eval/dev). */
+/**
+ * The long-term store for the active AI-memory backend: the Postgres store when
+ * `VIRLY_AI_MEMORY_BACKEND=postgres`, otherwise the Mongo store when connected;
+ * undefined otherwise (eval/dev → in-memory behavior).
+ */
 export function resolveLongTermStore(): BaseStore | undefined {
   if (storeResolved) {
     return cachedStore;
   }
   storeResolved = true;
   try {
-    if (mongoose.connection.readyState === 1) {
+    if (config.aiMemoryBackend === "postgres") {
+      cachedStore = getPostgresLongTermStore();
+    } else if (mongoose.connection.readyState === 1) {
       cachedStore = createMongoLongTermStore(mongoose.connection.getClient());
     }
   } catch {
