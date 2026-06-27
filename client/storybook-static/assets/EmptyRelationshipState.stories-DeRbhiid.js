@@ -1,0 +1,5 @@
+import{E as d}from"./EmptyRelationshipState-CAtE4K7D.js";import"./iframe-DZ5yRNij.js";import"./preload-helper-C1FmrZbK.js";import"./Primitives-DzJ49MJc.js";import"./createLucideIcon-WwrtmSrE.js";const f={title:"Shared UI/EmptyRelationshipState",component:d,parameters:{layout:"centered"},args:{viewedName:"Dana Levi",canSendMoney:!0,onSendMoney:()=>{}}},a={},e={args:{canSendMoney:!1}};var r,t,o;a.parameters={...a.parameters,docs:{...(r=a.parameters)==null?void 0:r.docs,source:{originalSource:"{}",...(o=(t=a.parameters)==null?void 0:t.docs)==null?void 0:o.source}}};var s,n,p,c,m;e.parameters={...e.parameters,docs:{...(s=e.parameters)==null?void 0:s.docs,source:{originalSource:`{
+  args: {
+    canSendMoney: false
+  }
+}`,...(p=(n=e.parameters)==null?void 0:n.docs)==null?void 0:p.source},description:{story:"Same empty history, but transfers to this user aren't allowed.",...(m=(c=e.parameters)==null?void 0:c.docs)==null?void 0:m.description}}};const g=["Default","CannotSend"];export{e as CannotSend,a as Default,g as __namedExportsOrder,f as default};

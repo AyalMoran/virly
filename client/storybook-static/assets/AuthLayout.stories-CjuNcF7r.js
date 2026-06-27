@@ -1,0 +1,9 @@
+import{j as a}from"./iframe-DZ5yRNij.js";import{A as g}from"./AuthLayout-B7SrXR19.js";import"./preload-helper-C1FmrZbK.js";import"./animated-text-C45JbJfK.js";import"./utils-DCADjnpI.js";import"./proxy-BzfIBfh9.js";const S={title:"Auth/AuthLayout",component:g,parameters:{layout:"fullscreen",docs:{description:{component:"The split-panel auth shell (brand visual + content panel)."}}},args:{title:"Sign in",subtitle:"Welcome back to Virly.",children:a.jsxs("form",{className:"form-stack",children:[a.jsx("p",{children:"Auth content (form) renders inside the panel."}),a.jsx("button",{className:"button button-primary",type:"button",children:"Continue"})]})}},e={},r={args:{visualText:"Virly"}},t={args:{barePanel:!0}};var s,o,n,i,c;e.parameters={...e.parameters,docs:{...(s=e.parameters)==null?void 0:s.docs,source:{originalSource:"{}",...(n=(o=e.parameters)==null?void 0:o.docs)==null?void 0:n.source},description:{story:"Card panel with a title + the balance visual (no `visualText`).",...(c=(i=e.parameters)==null?void 0:i.docs)==null?void 0:c.description}}};var l,p,d,m,u;r.parameters={...r.parameters,docs:{...(l=r.parameters)==null?void 0:l.docs,source:{originalSource:`{
+  args: {
+    visualText: "Virly"
+  }
+}`,...(d=(p=r.parameters)==null?void 0:p.docs)==null?void 0:d.source},description:{story:"Animated brand wordmark in the visual panel.",...(u=(m=r.parameters)==null?void 0:m.docs)==null?void 0:u.description}}};var h,b,y,x,f;t.parameters={...t.parameters,docs:{...(h=t.parameters)==null?void 0:h.docs,source:{originalSource:`{
+  args: {
+    barePanel: true
+  }
+}`,...(y=(b=t.parameters)==null?void 0:b.docs)==null?void 0:y.source},description:{story:"Bare panel (children render without the card chrome).",...(f=(x=t.parameters)==null?void 0:x.docs)==null?void 0:f.description}}};const T=["Default","WithBrandVisual","BarePanel"];export{t as BarePanel,e as Default,r as WithBrandVisual,T as __namedExportsOrder,S as default};

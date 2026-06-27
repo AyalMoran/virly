@@ -1,0 +1,5 @@
+import{j as p}from"./iframe-DZ5yRNij.js";import{E as u}from"./Primitives-DzJ49MJc.js";import"./preload-helper-C1FmrZbK.js";import"./createLucideIcon-WwrtmSrE.js";const f={title:"Shared UI/EmptyState",component:u,parameters:{layout:"centered"},args:{title:"No transactions",message:"Money you send or receive will show up here. Start by sending your first transfer."}},r={},t={args:{children:p.jsx("button",{className:"button button-primary",children:"Transfer"})}};var e,a,o;r.parameters={...r.parameters,docs:{...(e=r.parameters)==null?void 0:e.docs,source:{originalSource:"{}",...(o=(a=r.parameters)==null?void 0:a.docs)==null?void 0:o.source}}};var s,n,c,i,m;t.parameters={...t.parameters,docs:{...(s=t.parameters)==null?void 0:s.docs,source:{originalSource:`{
+  args: {
+    children: <button className="button button-primary">Transfer</button>
+  }
+}`,...(c=(n=t.parameters)==null?void 0:n.docs)==null?void 0:c.source},description:{story:"With a call-to-action in the action slot.",...(m=(i=t.parameters)==null?void 0:i.docs)==null?void 0:m.description}}};const b=["Default","WithAction"];export{r as Default,t as WithAction,b as __namedExportsOrder,f as default};
