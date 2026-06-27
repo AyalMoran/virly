@@ -10,6 +10,10 @@
     "test": "tsx --test \"src/**/*.test.ts\"",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "tsx -e \"import('./src/db/postgres.js').then(m => m.runPgMigrations()).then(() => process.exit(0))\"",
+    "rag:generate": "drizzle-kit generate --config=drizzle.ai.config.ts",
+    "rag:migrate": "tsx -e \"import('./src/db/vector.js').then(m => m.runAiMigrations()).then(() => process.exit(0))\"",
+    "rag:sync": "tsx scripts/sync-knowledge-base.ts",
+    "eval:policy-rag": "tsx scripts/eval-policy-rag.ts",
     "test:contract": "tsx --test --test-concurrency=1 \"tests/contract/**/*.test.ts\""
   },
   "dependencies": {
