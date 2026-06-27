@@ -13,6 +13,12 @@ tags:
   - name: Account
   - name: Transactions
   - name: AI Assistant
+  - name: Held Transfers
+    description: |
+      Public, token-guarded endpoints for reviewing and acting on fraud-held
+      transfers. No session cookie is required. The one-time `token` is
+      delivered by email and is rate-limited to 20 requests per 60 seconds.
+      All responses are `text/html`.
 paths:
   /api/auth/register:
     post:
@@ -383,6 +389,16 @@ paths:
       description: |
         Creates a debit transaction for the sender and a matching credit
         transaction for the receiver.
+
+        When the fraud gate is enabled (`config.fraud.holdLevel !== "off"`)
+        and the transfer scores above the hold threshold, the transfer is NOT
+        executed immediately. Instead the server returns HTTP **202** with a
+        `TransferHeldResponse` body and sends an email containing a one-time
+        review link. The transfer is only executed after the sender confirms it
+        via `GET /api/transactions/held/confirm` (review page) followed by
+        `POST /api/transactions/held/confirm`. If the fraud gate is off or
+        scoring degrades (fail-open), the transfer executes immediately and
+        returns **201**.
       security:
         - cookieAuth: []
       parameters:
@@ -394,11 +410,22 @@ paths:
             schema:
               $ref: '#/components/schemas/TransferRequest'
             examples:
-              default:
+              ils:
+                summary: ILS transfer (no quote needed)
                 value:
                   recipientEmail: receiver@example.com
                   amount: 125.5
                   reason: Dinner split
+              foreign:
+                summary: USD transfer (quote required)
+                value:
+                  recipientEmail: receiver@example.com
+                  amount: 100
+                  currency: USD
+                  quote:
+                    rate: 3.72
+                    fetchedAt: "2026-06-25T08:00:00.000Z"
+                  reason: Rent
       responses:
         '201':
           description: Transfer completed successfully
@@ -406,8 +433,19 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TransferResponse'
+        '202':
+          description: |
+            Transfer held for fraud review. The sender receives an email with a
+            one-time link to confirm or cancel the transfer.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferHeldResponse'
         '400':
-          description: Validation error, insufficient balance, or invalid amount
+          description: |
+            Validation error, insufficient balance, invalid amount, or missing
+            quote (`QUOTE_REQUIRED` code when a non-ILS transfer is submitted
+            without a quote).
           content:
             application/json:
               schema:
@@ -430,6 +468,252 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: |
+            Exchange rate changed since quote was issued (`QUOTE_RATE_CHANGED`
+            code). Refresh the quote and resubmit.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/transactions/quote:
+    post:
+      tags:
+        - Transactions
+      summary: Get a server-issued FX quote for a transfer
+      description: |
+        Returns the authoritative exchange-rate quote the client must echo back
+        in the `quote` field of a non-ILS `POST /api/transactions` request. An
+        `ILS` request returns a fixed `rate` of `1` with `rateFetchedAt: null`
+        and no provider call.
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - amount
+                - currency
+              properties:
+                amount:
+                  type: number
+                  description: Amount to convert, in the entered currency. Must be greater than 0.
+                  example: 100
+                currency:
+                  type: string
+                  description: ISO currency code of the entered amount (e.g. ILS, USD, EUR).
+                  example: USD
+      responses:
+        '200':
+          description: Server-issued FX quote
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  quote:
+                    $ref: '#/components/schemas/TransferQuote'
+        '400':
+          description: Validation error or unsupported currency
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing or invalid CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/transactions/held/confirm:
+    get:
+      tags:
+        - Held Transfers
+      summary: Render the held-transfer review page
+      description: |
+        Returns an HTML page with Confirm and Cancel buttons. This endpoint is
+        **read-only**: it does not execute or cancel the transfer, so
+        email-client link-prefetch scanners cannot trigger money movement.
+
+        The page embeds the `id` and `token` in hidden form fields; the actual
+        state change is performed by `POST /api/transactions/held/confirm` or
+        `POST /api/transactions/held/cancel`.
+
+        Rate-limited to 20 requests per 60 seconds. No session cookie required.
+        Token is redacted from server access logs.
+      parameters:
+        - in: query
+          name: id
+          required: true
+          schema:
+            type: string
+          description: Held-transfer id.
+        - in: query
+          name: token
+          required: true
+          schema:
+            type: string
+          description: One-time review token delivered by email.
+      responses:
+        '200':
+          description: HTML review page with Confirm and Cancel buttons.
+          content:
+            text/html:
+              schema:
+                type: string
+        '400':
+          description: Missing `id` or `token` query parameter.
+          content:
+            text/html:
+              schema:
+                type: string
+        '429':
+          description: Rate limit exceeded (20 requests / 60 s).
+          content:
+            text/html:
+              schema:
+                type: string
+
+    post:
+      tags:
+        - Held Transfers
+      summary: Confirm and execute a held transfer
+      description: |
+        Executes the held transfer exactly once. `id` and `token` are sent as
+        form fields in the request body (not in the URL) to keep them out of
+        server access logs.
+
+        Rate-limited to 20 requests per 60 seconds. No session cookie required.
+
+        | Outcome | HTTP status | Meaning |
+        |---|---|---|
+        | `executed` | 200 | Transfer confirmed and sent. |
+        | `already_confirmed` | 200 | Transfer was already confirmed. |
+        | `in_progress` | 409 | Transfer is currently being processed. |
+        | `expired` | 410 | Confirmation link has expired. |
+        | `cancelled` | 409 | Transfer was previously cancelled. |
+        | `failed` | 400 | Transfer execution failed. |
+        | (default / invalid token) | 404 | Confirmation link is not valid. |
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - id
+                - token
+              properties:
+                id:
+                  type: string
+                  description: Held-transfer id.
+                token:
+                  type: string
+                  description: One-time review token.
+      responses:
+        '200':
+          description: Transfer executed, or was already confirmed.
+          content:
+            text/html:
+              schema:
+                type: string
+        '400':
+          description: Missing parameters, or transfer execution failed.
+          content:
+            text/html:
+              schema:
+                type: string
+        '404':
+          description: Token not valid (default / unrecognised hold id).
+          content:
+            text/html:
+              schema:
+                type: string
+        '409':
+          description: Transfer in progress or already cancelled.
+          content:
+            text/html:
+              schema:
+                type: string
+        '410':
+          description: Confirmation link has expired.
+          content:
+            text/html:
+              schema:
+                type: string
+        '429':
+          description: Rate limit exceeded (20 requests / 60 s).
+          content:
+            text/html:
+              schema:
+                type: string
+
+  /api/transactions/held/cancel:
+    post:
+      tags:
+        - Held Transfers
+      summary: Cancel a held transfer
+      description: |
+        Cancels a pending held transfer. `id` and `token` are sent as form
+        fields in the request body (not in the URL) to keep them out of server
+        access logs.
+
+        Returns an HTML result page. A 200 is returned whether or not the
+        transfer could be cancelled (the page body indicates success or "no
+        change" when the hold was already actioned or the token was invalid).
+
+        Rate-limited to 20 requests per 60 seconds. No session cookie required.
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - id
+                - token
+              properties:
+                id:
+                  type: string
+                  description: Held-transfer id.
+                token:
+                  type: string
+                  description: One-time review token.
+      responses:
+        '200':
+          description: |
+            HTML result page. Page body indicates "Transfer cancelled" on
+            success, or "No change / could not be cancelled" when the hold was
+            already actioned or the token was invalid.
+          content:
+            text/html:
+              schema:
+                type: string
+        '400':
+          description: Missing `id` or `token` in the request body.
+          content:
+            text/html:
+              schema:
+                type: string
+        '429':
+          description: Rate limit exceeded (20 requests / 60 s).
+          content:
+            text/html:
+              schema:
+                type: string
 
   /api/ai/chat:
     post:
@@ -1018,10 +1302,82 @@ components:
           exclusiveMinimum: true
           minimum: 0
           example: 125.5
+        currency:
+          type: string
+          description: |
+            ISO 4217 currency code. Defaults to `ILS` when omitted. Non-ILS
+            transfers require the `quote` field to lock the exchange rate.
+          example: USD
+        quote:
+          type: object
+          description: |
+            Echo the server-issued quote to lock the rate. Required when
+            `currency` is non-ILS. Missing quote returns 400 `QUOTE_REQUIRED`;
+            stale quote returns 409 `QUOTE_RATE_CHANGED`.
+          required:
+            - rate
+            - fetchedAt
+          properties:
+            rate:
+              type: number
+              format: double
+              example: 3.72
+            fetchedAt:
+              type: string
+              description: The `rateFetchedAt` value from the quote response.
+              example: "2026-06-25T08:00:00.000Z"
         reason:
           type: string
           maxLength: 200
           example: Dinner split
+
+    TransferHeldResponse:
+      type: object
+      description: |
+        Returned (HTTP 202) when the fraud gate is enabled and the transfer
+        meets the hold policy. The transfer is NOT executed yet. An email with
+        a one-time review link is sent to the sender.
+      required:
+        - status
+        - heldId
+        - level
+        - reasons
+        - expiresAt
+        - message
+      properties:
+        status:
+          type: string
+          enum:
+            - held
+          example: held
+        heldId:
+          type: string
+          description: Opaque identifier for the held transfer. Included in the email review link.
+          example: 6650cc68782e55fbbf857333
+        level:
+          type: string
+          enum:
+            - medium
+            - high
+          description: Risk level that triggered the hold.
+          example: high
+        reasons:
+          type: array
+          items:
+            type: string
+          description: Human-readable reasons the transfer was flagged.
+          example:
+            - New recipient
+            - Unusually large amount
+        expiresAt:
+          type: string
+          format: date-time
+          description: ISO 8601 timestamp after which the review link expires.
+          example: "2026-06-26T08:00:00.000Z"
+        message:
+          type: string
+          description: Human-readable summary shown to the sender.
+          example: "This transfer was held for review. Check your email to confirm it."
 
     TransferResponse:
       type: object
@@ -1039,6 +1395,42 @@ components:
           type: number
           format: double
           example: 917.25
+
+    TransferQuote:
+      type: object
+      description: Server-issued FX quote returned by POST /api/transactions/quote.
+      properties:
+        enteredAmount:
+          type: number
+          description: The amount in the entered currency.
+          example: 100
+        enteredCurrency:
+          type: string
+          example: USD
+        amountIls:
+          type: number
+          description: The equivalent amount in ILS at the quoted rate.
+          example: 372
+        rate:
+          type: number
+          description: ILS per one unit of the entered currency (1 for ILS).
+          example: 3.72
+        rateFetchedAt:
+          type: string
+          nullable: true
+          description: When the rate was fetched (null for ILS).
+          example: "2026-06-25T08:00:00.000Z"
+        rateValidForDate:
+          type: string
+          nullable: true
+          example: "2026-06-25"
+        baseCurrency:
+          type: string
+          example: ILS
+        provider:
+          type: string
+          nullable: true
+          example: exchangerate-api
 
     AiChatRequest:
       type: object
