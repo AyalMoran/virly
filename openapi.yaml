@@ -13,6 +13,10 @@ tags:
   - name: Account
   - name: Transactions
   - name: AI Assistant
+  - name: Exchange Rates
+  - name: Users
+  - name: Video Sessions
+  - name: Admin
 paths:
   /api/auth/register:
     post:
@@ -33,7 +37,6 @@ paths:
                 value:
                   email: user@example.com
                   password: StrongPass123!
-                  rememberMe: true
                   phone: "+15551234567"
       responses:
         '201':
@@ -624,6 +627,517 @@ paths:
                   - $ref: '#/components/schemas/AiSupersededConfirmationError'
         '403':
           description: Missing or invalid CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/transactions/quote:
+    post:
+      tags:
+        - Transactions
+      summary: Get an FX quote for a non-ILS transfer
+      description: |
+        Returns a server-signed exchange-rate quote for the requested amount and
+        currency. ILS amounts are returned as a pass-through (rate: 1). For
+        non-ILS currencies, echo the returned `quote.rate` and `quote.rateFetchedAt`
+        back in the transfer request body; the transfer endpoint rejects quotes
+        that have become stale (409 QUOTE_RATE_CHANGED).
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferQuoteRequest'
+            examples:
+              default:
+                value:
+                  amount: 100
+                  currency: USD
+      responses:
+        '200':
+          description: Exchange-rate quote for the requested amount
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferQuoteResponse'
+        '400':
+          description: Validation error or unsupported currency
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing or invalid CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/exchange-rates/current:
+    get:
+      tags:
+        - Exchange Rates
+      summary: Get current FX rates
+      description: Returns the latest exchange rates relative to ILS for all supported display currencies.
+      security:
+        - cookieAuth: []
+      responses:
+        '200':
+          description: Current exchange rates
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExchangeRatesResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '503':
+          description: Exchange rates unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/users/{userId}/profile:
+    get:
+      tags:
+        - Users
+      summary: Get a user's public profile and your relationship summary
+      description: |
+        Returns public profile data for the target user plus a relationship
+        summary between the authenticated viewer and the target. The `userId`
+        path parameter accepts either a MongoDB ObjectId or an email address.
+        Viewing your own profile sets `relationship.relationshipStatus` to
+        `"self"` and returns an empty `recentTransactions` array.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Target user's MongoDB ObjectId or email address
+      responses:
+        '200':
+          description: Public profile and relationship summary
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/users/{userId}/transactions:
+    get:
+      tags:
+        - Users
+      summary: List the viewer's transactions with a specific counterparty
+      description: |
+        Returns the authenticated viewer's own ledger entries filtered to
+        transactions with the specified counterparty. Viewing your own profile
+        yields an empty list. The `userId` path parameter accepts either a
+        MongoDB ObjectId or an email address.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Target user's MongoDB ObjectId or email address
+        - $ref: '#/components/parameters/PageParam'
+        - $ref: '#/components/parameters/LimitParam'
+      responses:
+        '200':
+          description: Paginated transaction list with the counterparty
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransactionsResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: User not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/video-sessions:
+    post:
+      tags:
+        - Video Sessions
+      summary: Create a video support session
+      description: Creates a new video session for the authenticated user and returns its initial state.
+      security:
+        - cookieAuth: []
+      parameters:
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateVideoSessionRequest'
+            examples:
+              default:
+                value:
+                  type: support
+                  topic: Transfer issue
+                  source: dashboard
+      responses:
+        '201':
+          description: Video session created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoSessionResponse'
+        '400':
+          description: Validation error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing or invalid CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/video-sessions/{id}:
+    get:
+      tags:
+        - Video Sessions
+      summary: Get a video session
+      description: Returns a video session owned by the authenticated user.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Video session MongoDB ObjectId (24 hex chars)
+      responses:
+        '200':
+          description: Video session
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoSessionResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Session not found or not owned by caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/video-sessions/{id}/join-token:
+    post:
+      tags:
+        - Video Sessions
+      summary: Issue a Jitsi join token for the authenticated user
+      description: Issues a short-lived Jitsi join configuration for the user to join their own video session.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Video session MongoDB ObjectId
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      responses:
+        '200':
+          description: Session state and Jitsi join config
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoSessionJoinResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing or invalid CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Session not found or not owned by caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/video-sessions/{id}/end:
+    post:
+      tags:
+        - Video Sessions
+      summary: End a video session (user)
+      description: Marks the video session as ended by the user.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Video session MongoDB ObjectId
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      responses:
+        '200':
+          description: Updated session state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoSessionResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing or invalid CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Session not found or not owned by caller
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/video-sessions:
+    get:
+      tags:
+        - Admin
+      summary: List video sessions for agents (admin)
+      description: Returns video sessions visible to the authenticated agent. Requires a video-agent role.
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: type
+          schema:
+            type: string
+            enum:
+              - support
+              - sales
+          description: Filter by session type
+        - in: query
+          name: status
+          schema:
+            type: string
+            enum:
+              - requested
+              - waiting_for_agent
+              - active
+              - ended
+              - missed
+              - cancelled
+              - failed
+          description: Filter by session status
+      responses:
+        '200':
+          description: List of video sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - sessions
+                properties:
+                  sessions:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/VideoSession'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing role or invalid CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/video-sessions/{id}/assign:
+    post:
+      tags:
+        - Admin
+      summary: Assign a video session to the authenticated agent
+      description: Assigns the video session to the calling agent. Requires a video-agent role.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Video session MongoDB ObjectId
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      responses:
+        '200':
+          description: Updated session state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoSessionResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing role or invalid CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/video-sessions/{id}/join-token:
+    post:
+      tags:
+        - Admin
+      summary: Issue a Jitsi join token for an agent
+      description: Issues a short-lived Jitsi join configuration for the agent to join a video session. Requires a video-agent role.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Video session MongoDB ObjectId
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      responses:
+        '200':
+          description: Session state and Jitsi join config
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoSessionJoinResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing role or invalid CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Session not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/admin/video-sessions/{id}/end:
+    post:
+      tags:
+        - Admin
+      summary: End a video session (agent)
+      description: Marks the video session as ended by the agent. Requires a video-agent role.
+      security:
+        - cookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+          description: Video session MongoDB ObjectId
+        - $ref: '#/components/parameters/CsrfTokenHeader'
+      responses:
+        '200':
+          description: Updated session state
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/VideoSessionResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Missing role or invalid CSRF token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Session not found
           content:
             application/json:
               schema:
@@ -1680,3 +2194,297 @@ components:
               message:
                 type: string
                 example: Invalid email
+
+    TransferQuoteRequest:
+      type: object
+      required:
+        - amount
+        - currency
+      properties:
+        amount:
+          type: number
+          format: double
+          exclusiveMinimum: true
+          minimum: 0
+          example: 100
+        currency:
+          type: string
+          description: Supported display currency (ILS, USD, EUR, GBP)
+          example: USD
+
+    TransferQuoteResponse:
+      type: object
+      required:
+        - quote
+      properties:
+        quote:
+          type: object
+          required:
+            - enteredAmount
+            - enteredCurrency
+            - amountIls
+            - rate
+          properties:
+            enteredAmount:
+              type: number
+              format: double
+              example: 100
+            enteredCurrency:
+              type: string
+              example: USD
+            amountIls:
+              type: number
+              format: double
+              example: 372.5
+            rate:
+              type: number
+              format: double
+              description: Exchange rate used (ILS per foreign currency unit)
+              example: 3.725
+            rateFetchedAt:
+              type: string
+              format: date-time
+              nullable: true
+              example: "2026-06-25T10:00:00.000Z"
+            rateValidForDate:
+              type: string
+              nullable: true
+              example: "2026-06-25"
+            baseCurrency:
+              type: string
+              example: ILS
+            provider:
+              type: string
+              nullable: true
+              example: open_exchange_rates
+
+    ExchangeRatesResponse:
+      type: object
+      required:
+        - baseCurrency
+        - supportedCurrencies
+        - rates
+        - provider
+        - fetchedAt
+        - validForDate
+        - expiresAt
+        - isStale
+      properties:
+        baseCurrency:
+          type: string
+          example: ILS
+        supportedCurrencies:
+          type: array
+          items:
+            type: string
+          example:
+            - ILS
+            - USD
+            - EUR
+            - GBP
+        rates:
+          type: object
+          additionalProperties:
+            type: number
+          example:
+            ILS: 1
+            USD: 3.725
+            EUR: 4.05
+            GBP: 4.72
+        provider:
+          type: string
+          example: open_exchange_rates
+        fetchedAt:
+          type: string
+          format: date-time
+          example: "2026-06-25T10:00:00.000Z"
+        validForDate:
+          type: string
+          example: "2026-06-25"
+        expiresAt:
+          type: string
+          format: date-time
+          example: "2026-06-25T22:00:00.000Z"
+        isStale:
+          type: boolean
+          example: false
+
+    UserProfileResponse:
+      type: object
+      required:
+        - user
+        - relationship
+        - recentTransactions
+      properties:
+        user:
+          type: object
+          required:
+            - id
+            - email
+          properties:
+            id:
+              type: string
+              example: 6630c4b2e93e5f6c8a321001
+            email:
+              type: string
+              format: email
+              example: user@example.com
+            displayName:
+              type: string
+              nullable: true
+              example: Ada Lovelace
+            isVerified:
+              type: boolean
+              example: true
+        relationship:
+          type: object
+          required:
+            - viewerUserId
+            - viewedUserId
+            - totalSentToUser
+            - totalReceivedFromUser
+            - netAmount
+            - transactionCount
+            - isVerifiedRecipient
+            - canTransferToUser
+            - relationshipStatus
+          properties:
+            viewerUserId:
+              type: string
+            viewedUserId:
+              type: string
+            totalSentToUser:
+              type: number
+              format: double
+            totalReceivedFromUser:
+              type: number
+              format: double
+            netAmount:
+              type: number
+              format: double
+            transactionCount:
+              type: integer
+            lastTransactionAt:
+              type: string
+              format: date-time
+              nullable: true
+            isVerifiedRecipient:
+              type: boolean
+            canTransferToUser:
+              type: boolean
+            relationshipStatus:
+              type: string
+              enum:
+                - self
+                - new
+                - known
+                - trusted
+        recentTransactions:
+          type: array
+          items:
+            $ref: '#/components/schemas/Transaction'
+
+    VideoSession:
+      type: object
+      required:
+        - id
+        - userId
+        - type
+        - status
+        - source
+      properties:
+        id:
+          type: string
+          example: 6630c4b2e93e5f6c8a321abc
+        userId:
+          type: string
+          example: 6630c4b2e93e5f6c8a321001
+        type:
+          type: string
+          enum:
+            - support
+            - sales
+        status:
+          type: string
+          enum:
+            - requested
+            - waiting_for_agent
+            - active
+            - ended
+            - missed
+            - cancelled
+            - failed
+        source:
+          type: string
+          enum:
+            - dashboard
+            - ai_assistant
+            - transfer_flow
+            - account_page
+        topic:
+          type: string
+          nullable: true
+          maxLength: 200
+        userProblemSummary:
+          type: string
+          nullable: true
+          maxLength: 1000
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    VideoSessionResponse:
+      type: object
+      required:
+        - session
+      properties:
+        session:
+          $ref: '#/components/schemas/VideoSession'
+
+    VideoSessionJoinResponse:
+      type: object
+      required:
+        - session
+        - jitsi
+      properties:
+        session:
+          $ref: '#/components/schemas/VideoSession'
+        jitsi:
+          type: object
+          description: Jitsi Meet join configuration
+          additionalProperties: true
+
+    CreateVideoSessionRequest:
+      type: object
+      required:
+        - type
+      properties:
+        type:
+          type: string
+          enum:
+            - support
+            - sales
+          example: support
+        topic:
+          type: string
+          maxLength: 200
+          example: Transfer issue
+        userProblemSummary:
+          type: string
+          maxLength: 1000
+          example: I cannot complete a transfer to my contact.
+        source:
+          type: string
+          enum:
+            - dashboard
+            - ai_assistant
+            - transfer_flow
+            - account_page
+          default: dashboard
+        locale:
+          type: string
+          maxLength: 50
+          example: en-US

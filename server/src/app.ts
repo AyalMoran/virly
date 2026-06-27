@@ -58,6 +58,16 @@ app.use(parseCookies);
 app.use(express.json({ limit: "100kb" }));
 app.use(morgan("dev"));
 
+// Dev latency simulator: when VIRLY_THROTTLE_MS is set, delay every response by
+// that many ms — handy for previewing the client's boot/loading states against
+// a slow (e.g. cold-starting) API. Off unless the env var is present.
+const throttleMs = Number(process.env.VIRLY_THROTTLE_MS) || 0;
+if (throttleMs > 0) {
+  app.use((_req, _res, next) => {
+    setTimeout(next, throttleMs);
+  });
+}
+
 app.get("/", (_req, res) => {
   return res.json({ name: "Virly API", status: "ok" });
 });

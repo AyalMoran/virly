@@ -7,6 +7,7 @@ coverage
 *.sh
 
 docs
+future-plans
 .agents
 .claude
 .instance
@@ -34,3 +35,6 @@ ds-bundle/
 .design-sync/previews/
 .design-sync/node_modules
 client/.ds-styles.css
+
+*storybook.log
+storybook-static

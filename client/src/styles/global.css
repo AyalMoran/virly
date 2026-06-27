@@ -2733,6 +2733,126 @@ dd {
   }
 }
 
+/* ------------------------------------------------------------------ */
+/* Boot splash — a split-flap board flapping through witty phrases.    */
+/* The mechanical flap reads as loading; the ledger ink + printer slot */
+/* tie it to the empty-state/printing idiom. Flap loop runs in JS.     */
+/* ------------------------------------------------------------------ */
+
+.boot-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+  background: radial-gradient(
+    120% 90% at 50% 45%,
+    rgba(14, 42, 46, 0.22),
+    rgba(14, 42, 46, 0.06) 60%,
+    transparent 100%
+  );
+  opacity: 1;
+  transition: opacity 0.4s var(--ease-spring);
+}
+
+.boot-splash-exiting {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.boot-splash-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  padding: 26px clamp(24px, 6vw, 36px);
+  border-radius: var(--radius-card);
+  background: var(--color-surface-glass);
+  border: 1px solid var(--color-border);
+  box-shadow: var(--shadow-card);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  animation: rise-in 0.5s var(--ease-spring) backwards;
+}
+
+/* The printer slot the board feeds from — same as the .printing skeleton. */
+.boot-splash-slot {
+  width: 78%;
+  height: 7px;
+  border-radius: 5px;
+  background: linear-gradient(180deg, #2f4446, #1c2b2d);
+  box-shadow:
+    inset 0 -2px 3px rgba(0, 0, 0, 0.34),
+    0 3px 7px rgba(23, 61, 66, 0.22);
+}
+
+.boot-flap-board {
+  display: flex;
+  gap: 3px;
+  perspective: 520px;
+}
+
+.boot-flap-cell {
+  position: relative;
+  width: clamp(17px, 4.6vw, 26px);
+  height: clamp(28px, 7vw, 38px);
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  background: linear-gradient(180deg, #2c4143, #1a2b2d);
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.08),
+    inset 0 -3px 5px rgba(0, 0, 0, 0.42),
+    0 5px 11px rgba(15, 28, 30, 0.32);
+  transition: opacity 0.3s ease;
+}
+
+/* The split-flap seam across the middle of each cell. */
+.boot-flap-cell::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 2px;
+  transform: translateY(-1px);
+  background: rgba(0, 0, 0, 0.5);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+/* Blank cells — the padding around a centered phrase — settle dark. */
+.boot-flap-cell.is-blank {
+  opacity: 0.42;
+}
+
+.boot-flap-char {
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-weight: 700;
+  font-size: clamp(14px, 3.4vw, 20px);
+  line-height: 1;
+  color: #eef2dc;
+  transform-origin: top center;
+  backface-visibility: hidden;
+  will-change: transform;
+}
+
+.boot-splash-dots {
+  width: 64%;
+  border-bottom: 1.5px dotted rgba(31, 95, 103, 0.4);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .boot-splash {
+    transition: opacity 0.2s linear;
+  }
+
+  .boot-splash-panel {
+    animation: none;
+  }
+}
+
 .mobile-nav {
   display: none;
 }
@@ -5468,6 +5588,87 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .statement-line {
     animation: none !important;
+  }
+}
+
+/* ------------------------------------------------------------------ */
+/* Transactions pagination — numbered page-jump controls.              */
+/* Appended after the earlier .pagination rules so these win on source  */
+/* order and stay robust to mid-file edits of the base layout.          */
+/* ------------------------------------------------------------------ */
+
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 12px;
+  color: var(--color-muted);
+}
+
+/* Size every pagination button to its content; the earlier responsive
+   rules stretch .pagination .button to full width, which breaks the row. */
+.pagination .button {
+  width: auto;
+}
+
+.pagination-pages {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.pagination-page-item {
+  display: flex;
+}
+
+.pagination .pagination-pages .pagination-page {
+  width: auto;
+  min-width: 2.5rem;
+  padding-inline: 10px;
+  flex: 0 0 auto;
+}
+
+.pagination-page[aria-current="page"] {
+  font-weight: 600;
+  cursor: default;
+}
+
+.pagination-gap {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.75rem;
+  padding-inline: 4px;
+  color: var(--color-muted);
+  user-select: none;
+}
+
+.pagination-jump {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.pagination-jump-label {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+}
+
+.pagination-jump-input {
+  width: 4.5rem;
+}
+
+@media (min-width: 520px) {
+  .pagination {
+    justify-content: flex-end;
   }
 }
 

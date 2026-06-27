@@ -129,7 +129,11 @@ test("recipient status for self profile hides the transfer action", () => {
   );
 
   assert.match(html, /Your account/);
-  assert.doesNotMatch(html, /Transfer/);
+  // No transfer action button should render for a self profile. Assert the
+  // absence of the actual <button>Transfer</button> action rather than a bare
+  // /Transfer/ substring, which would also catch the explanatory copy
+  // ("Transfers to yourself are not possible.").
+  assert.doesNotMatch(html, /<button[^>]*>[\s\S]*?Transfer[\s\S]*?<\/button>/);
 });
 
 test("empty relationship state offers a safe send-money entry point", () => {

@@ -2,8 +2,10 @@ import { Suspense, lazy } from "react";
 import { MotionConfig } from "framer-motion";
 import { Navigate, Route, Routes, useLocation } from "react-router-dom";
 import { AppShell } from "../components/AppShell";
+import { BootSplash } from "../components/BootSplash";
 import { Skeleton } from "../components/Primitives";
 import { GuestRoute, ProtectedRoute } from "../components/RouteGuards";
+import { useAuth } from "../features/auth/AuthProvider";
 import { CurrencyProvider } from "../features/currency/CurrencyProvider";
 import { DashboardPage } from "../features/dashboard/DashboardPage";
 import { LoginPage } from "../features/auth/LoginPage";
@@ -42,10 +44,12 @@ function RouteFallback() {
 
 export function App() {
   const location = useLocation();
+  const { isLoading } = useAuth();
 
   return (
     <MotionConfig reducedMotion="user">
       <ShaderBackground />
+      <BootSplash active={isLoading} />
       <div className="app-content-layer">
         <Routes location={location}>
           <Route

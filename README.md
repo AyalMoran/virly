@@ -221,6 +221,12 @@ virly/
 └── scripts/         # Seed scripts and dev utilities
 ```
 
+**Backend reference:** for the server's request lifecycle, layering rules, and a
+per-area route → service → repository map, see
+[`docs/backend/index.md`](docs/backend/index.md).
+
+**Architecture decisions:** key design choices (DB driver, auth scheme, AI graph, personas) are recorded in [`docs/adr/`](docs/adr/).
+
 ---
 
 ## License
