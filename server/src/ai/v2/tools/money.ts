@@ -12,6 +12,7 @@ import { tool } from "@langchain/core/tools";
 import { z } from "zod";
 
 import { config } from "../../../config.js";
+import { scoreTransfer } from "../../../fraud/service.js";
 import { getToolDisplayData } from "../../toolResults.js";
 import type { TransferDraft } from "../../state.js";
 import { transferConfirmationBlock } from "../blocks.js";
@@ -30,6 +31,21 @@ function overPerTransferLimit(amount: number, locale: string): string | null {
       : `₪${amount} is over the per-transfer limit of ₪${limit}. Ask the user for a lower amount.`;
   }
   return null;
+}
+
+/** Best-effort fraud-risk note appended to the prepare result so the agent warns. */
+async function prepareRiskNote(
+  userId: string,
+  recipientEmail: string,
+  amount: number
+): Promise<string> {
+  try {
+    const risk = await scoreTransfer({ userId, recipientEmail, amount, alreadyExecuted: false });
+    if (risk.level === "low") return "";
+    return ` Risk check: ${risk.level} — ${risk.reasons.join(" ")} Warn the user about this before they confirm.`;
+  } catch {
+    return "";
+  }
 }
 import {
   baseToolContext,
@@ -110,10 +126,12 @@ export const prepareTransferTool = tool(
 
     cfg.turnOutcome.confirmation = result.confirmation;
     cfg.turnOutcome.uiBlocks.push(transferConfirmationBlock(result.confirmation));
+    // Fraud risk check (best-effort) so the assistant can warn before confirm.
+    const riskNote = await prepareRiskNote(cfg.userId, result.confirmation.recipientEmail, result.confirmation.amount);
     return (
       `Prepared a confirmation card: ₪${result.confirmation.amount} to ` +
       `${result.confirmation.recipientEmail} (card ${result.confirmation.id}). ` +
-      `It is NOT sent — the user must click Confirm. Tell them to review and confirm.`
+      `It is NOT sent — the user must click Confirm. Tell them to review and confirm.${riskNote}`
     );
   },
   {

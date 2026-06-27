@@ -273,8 +273,19 @@ an env flip, mirroring the app-DB driver pattern.
      Saves a `{ scaler, model, threshold }` artifact. LightGBM via m2cgen remains
      the documented accuracy upgrade behind the same artifact shape. Verified: 8
      more unit tests + an end-to-end train run on the synthetic sample.
-   - **Phase 3 — surface** behind role-gated tools / a fraud-analyst MCP server.
-   Not wired to real Virly transactions (different schema) — that's a follow-up.
+   - **Phase 3 (real-transfer scoring) — DONE.** A shared `FraudScoringService`
+     (`src/fraud/service.ts`) scores REAL Virly transfers with rules
+     (`risk.ts`: new counterparty, high amount, near/over daily limit, amount
+     spike, odd hour) + unsupervised kNN-anomaly on the user's own history
+     (`anomaly.ts`) — no labels, no embeddings. Wired into all three consumers:
+     (a) the regular transfer route and (b) the AI confirm path record a
+     best-effort flag post-commit (`ai_fraud_flags`, flag-only — hold-until-email
+     is a later step); (c) the v2 `prepareTransfer` tool + an `assessTransactionRisk`
+     agent tool warn before the user confirms. Scoring reads app repos only (works
+     in mongo or postgres mode); flagging writes to the AI Postgres best-effort and
+     never affects a transfer. Verified: pure-module unit tests + flags-table SQL.
+   Note: the Kaggle-trained model (phases 1-2) stays a separate benchmark; the
+   real-transfer path is rules + per-user anomaly on Virly-derived features.
 
 > PDF support: DONE. A shared extractor (`ai/rag/pdf.ts`, pdf-parse) turns PDFs
 > into text for BOTH the Drive source (`getPdfText`) and the local source (`.pdf`
