@@ -15,8 +15,6 @@ export const users = pgTable("users", {
   phone: text("phone").notNull(),
   isVerified: boolean("is_verified").notNull().default(false),
   personalDetails: char("personal_details", { length: 24 }),
-  verificationTokenHash: text("verification_token_hash"),
-  verificationTokenExpiresAt: timestamp("verification_token_expires_at", { withTimezone: true }),
   balance: doublePrecision("balance").notNull(),
   role: text("role").notNull().default("user"),
   createdAt: createdAt(),

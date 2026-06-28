@@ -17,8 +17,6 @@ function toRecord(d: Lean): UserRecord {
     phone: d.phone as string,
     isVerified: Boolean(d.isVerified),
     personalDetails: d.personalDetails ? String(d.personalDetails) : null,
-    verificationTokenHash: (d.verificationTokenHash as string | null) ?? null,
-    verificationTokenExpiresAt: (d.verificationTokenExpiresAt as Date | null) ?? null,
     balance: d.balance as number,
     role: d.role as UserRecord["role"],
     createdAt: d.createdAt as Date,
@@ -42,7 +40,7 @@ export const mongoUserRepository: UserRepository = {
   async findByIdSafe(id, tx) {
     const rec = await this.findById(id, tx);
     if (!rec) return null;
-    const { passwordHash, verificationTokenHash, ...safe } = rec;
+    const { passwordHash, ...safe } = rec;
     return safe as PublicUserRecord;
   },
   async findByEmail(email, tx) {
@@ -78,17 +76,10 @@ export const mongoUserRepository: UserRepository = {
   async setBalance(id, balance, tx) {
     await User.updateOne({ _id: id }, { $set: { balance } }, { session: asSession(tx) });
   },
-  async setVerificationToken(id, hash, expiresAt, tx) {
-    await User.updateOne(
-      { _id: id },
-      { $set: { verificationTokenHash: hash, verificationTokenExpiresAt: expiresAt } },
-      { session: asSession(tx) }
-    );
-  },
   async markVerified(id, tx) {
     await User.updateOne(
       { _id: id },
-      { $set: { isVerified: true, verificationTokenHash: null, verificationTokenExpiresAt: null } },
+      { $set: { isVerified: true } },
       { session: asSession(tx) }
     );
   },
