@@ -1,24 +1,21 @@
-import assert from "node:assert/strict";
-import { describe, test } from "node:test";
-
 import { shouldHold } from "../holds.js";
 
 describe("shouldHold policy", () => {
   test("'off' never holds", () => {
-    assert.equal(shouldHold("high", "off"), false);
-    assert.equal(shouldHold("medium", "off"), false);
-    assert.equal(shouldHold("low", "off"), false);
+    expect(shouldHold("high", "off")).toBe(false);
+    expect(shouldHold("medium", "off")).toBe(false);
+    expect(shouldHold("low", "off")).toBe(false);
   });
 
   test("'high' holds only high-risk transfers", () => {
-    assert.equal(shouldHold("high", "high"), true);
-    assert.equal(shouldHold("medium", "high"), false);
-    assert.equal(shouldHold("low", "high"), false);
+    expect(shouldHold("high", "high")).toBe(true);
+    expect(shouldHold("medium", "high")).toBe(false);
+    expect(shouldHold("low", "high")).toBe(false);
   });
 
   test("'medium' holds medium and high", () => {
-    assert.equal(shouldHold("high", "medium"), true);
-    assert.equal(shouldHold("medium", "medium"), true);
-    assert.equal(shouldHold("low", "medium"), false);
+    expect(shouldHold("high", "medium")).toBe(true);
+    expect(shouldHold("medium", "medium")).toBe(true);
+    expect(shouldHold("low", "medium")).toBe(false);
   });
 });

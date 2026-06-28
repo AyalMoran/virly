@@ -1,6 +1,3 @@
-import assert from "node:assert/strict";
-import { describe, test } from "node:test";
-
 import { fitScaler, transform } from "../scaler.js";
 
 describe("fitScaler / transform", () => {
@@ -11,11 +8,11 @@ describe("fitScaler / transform", () => {
       [4, 30]
     ];
     const scaler = fitScaler(rows);
-    assert.deepEqual(scaler.mean, [2, 20]);
+    expect(scaler.mean).toStrictEqual([2, 20]);
     // population std: sqrt(((-2)^2+0+2^2)/3) = sqrt(8/3)
-    assert.ok(Math.abs(scaler.std[0] - Math.sqrt(8 / 3)) < 1e-9);
+    expect(Math.abs(scaler.std[0] - Math.sqrt(8 / 3))).toBeLessThan(1e-9);
     const t = transform([2, 20], scaler);
-    assert.deepEqual(t, [0, 0]);
+    expect(t).toStrictEqual([0, 0]);
   });
 
   test("guards zero-variance columns against divide-by-zero", () => {
@@ -23,14 +20,14 @@ describe("fitScaler / transform", () => {
       [5, 1],
       [5, 3]
     ]);
-    assert.equal(scaler.std[0], 1); // constant column -> std forced to 1
-    assert.deepEqual(transform([5, 2], scaler), [0, 0]);
+    expect(scaler.std[0]).toBe(1); // constant column -> std forced to 1
+    expect(transform([5, 2], scaler)).toStrictEqual([0, 0]);
   });
 
   test("throws on inconsistent feature lengths and empty input", () => {
-    assert.throws(() => fitScaler([]));
-    assert.throws(() => fitScaler([[1, 2], [1]]));
+    expect(() => fitScaler([])).toThrow();
+    expect(() => fitScaler([[1, 2], [1]])).toThrow();
     const scaler = fitScaler([[1, 2]]);
-    assert.throws(() => transform([1], scaler));
+    expect(() => transform([1], scaler)).toThrow();
   });
 });

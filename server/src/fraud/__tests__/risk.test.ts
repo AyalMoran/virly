@@ -1,6 +1,3 @@
-import assert from "node:assert/strict";
-import { describe, test } from "node:test";
-
 import { computeRisk, type RiskSignals } from "../risk.js";
 
 function signals(overrides: Partial<RiskSignals> = {}): RiskSignals {
@@ -20,42 +17,43 @@ function signals(overrides: Partial<RiskSignals> = {}): RiskSignals {
 describe("computeRisk", () => {
   test("a normal, repeat-recipient, in-range transfer is low risk", () => {
     const r = computeRisk(signals());
-    assert.equal(r.level, "low");
-    assert.equal(r.score, 0);
-    assert.deepEqual(r.reasons, []);
+    expect(r.level).toBe("low");
+    expect(r.score).toBe(0);
+    expect(r.reasons).toStrictEqual([]);
   });
 
   test("new counterparty + high amount raises the score and explains why", () => {
     const r = computeRisk(signals({ isNewCounterparty: true, amount: 450 }));
-    assert.ok(r.flags.newCounterparty && r.flags.highAmount);
-    assert.ok(r.score >= 0.4, `expected >=0.4, got ${r.score}`);
-    assert.ok(r.reasons.some((m) => /first transfer/i.test(m)));
-    assert.ok(r.reasons.some((m) => /per-transfer limit/i.test(m)));
+    expect(r.flags.newCounterparty && r.flags.highAmount).toBeTruthy();
+    expect(r.score).toBeGreaterThanOrEqual(0.4);
+    expect(r.reasons.some((m) => /first transfer/i.test(m))).toBeTruthy();
+    expect(r.reasons.some((m) => /per-transfer limit/i.test(m))).toBeTruthy();
   });
 
   test("over the daily limit is flagged distinctly from near it", () => {
     const over = computeRisk(signals({ projectedDailyTotal: 1000 }));
-    assert.ok(over.flags.overDailyLimit && !over.flags.nearDailyLimit);
+    expect(over.flags.overDailyLimit && !over.flags.nearDailyLimit).toBeTruthy();
     const near = computeRisk(signals({ projectedDailyTotal: 950 }));
-    assert.ok(near.flags.nearDailyLimit && !near.flags.overDailyLimit);
+    expect(near.flags.nearDailyLimit && !near.flags.overDailyLimit).toBeTruthy();
   });
 
   test("an amount far above the user's norm is a spike", () => {
     const r = computeRisk(signals({ amount: 400, recentDebitAmounts: [40, 50, 45, 55, 50] }));
-    assert.ok(r.flags.amountSpike);
+    expect(r.flags.amountSpike).toBeTruthy();
   });
 
   test("a high anomaly score pushes the transfer to high risk", () => {
     const r = computeRisk(signals({ isNewCounterparty: true, amount: 450, anomalyScore: 0.95 }));
-    assert.equal(r.level, "high");
-    assert.ok(r.flags.anomalous);
+    expect(r.level).toBe("high");
+    expect(r.flags.anomalous).toBeTruthy();
   });
 
   test("score is clamped to [0,1]", () => {
     const r = computeRisk(
       signals({ isNewCounterparty: true, amount: 500, projectedDailyTotal: 2000, anomalyScore: 1, hourOfDay: 3 })
     );
-    assert.ok(r.score <= 1 && r.score >= 0);
-    assert.equal(r.level, "high");
+    expect(r.score).toBeLessThanOrEqual(1);
+    expect(r.score).toBeGreaterThanOrEqual(0);
+    expect(r.level).toBe("high");
   });
 });

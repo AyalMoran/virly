@@ -1,6 +1,3 @@
-import assert from "node:assert/strict";
-import { describe, test } from "node:test";
-
 import { predictProba, trainLogReg } from "../logreg.js";
 import type { FraudLabel } from "../types.js";
 
@@ -16,8 +13,8 @@ describe("trainLogReg / predictProba", () => {
       y.push(0);
     }
     const model = trainLogReg(X, y, { epochs: 400, learningRate: 0.3 });
-    assert.ok(predictProba(model, [3]) > 0.9, "positive cluster -> high");
-    assert.ok(predictProba(model, [-3]) < 0.1, "negative cluster -> low");
+    expect(predictProba(model, [3])).toBeGreaterThan(0.9);
+    expect(predictProba(model, [-3])).toBeLessThan(0.1);
   });
 
   test("balanced weights let the rare class be learned despite imbalance", () => {
@@ -31,10 +28,10 @@ describe("trainLogReg / predictProba", () => {
     X.push([5]);
     y.push(1);
     const model = trainLogReg(X, y, { epochs: 500, learningRate: 0.3, balanced: true });
-    assert.ok(predictProba(model, [5]) > 0.5, "rare positive is recognized");
+    expect(predictProba(model, [5])).toBeGreaterThan(0.5);
   });
 
   test("throws on empty training data", () => {
-    assert.throws(() => trainLogReg([], []));
+    expect(() => trainLogReg([], [])).toThrow();
   });
 });
