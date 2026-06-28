@@ -1,6 +1,4 @@
 // client/tests/realtime.test.tsx
-import assert from "node:assert/strict";
-import test from "node:test";
 import { dispatchRealtimeEvent } from "../../lib/realtime";
 
 test("routes a transfer:received frame to the right handler", () => {
@@ -10,11 +8,11 @@ test("routes a transfer:received frame to the right handler", () => {
     { amount: 50, reason: null },
     { onTransferReceived: (p) => (got = p) }
   );
-  assert.equal(got!.amount, 50);
+  expect(got!.amount).toBe(50);
 });
 
 test("ignores unknown events", () => {
-  assert.doesNotThrow(() =>
+  expect(() =>
     dispatchRealtimeEvent("nope" as never, {}, { onTransferReceived: () => {} })
-  );
+  ).not.toThrow();
 });
