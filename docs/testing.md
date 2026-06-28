@@ -27,8 +27,11 @@ and AI evals (live LLM, LangSmith).
 
 ### Runner
 
-Unit tests use Node's built-in `node:test` runner via `tsx`. No Jest, no Vitest.
-Tests are discovered by glob and run in parallel by default.
+Unit tests run on **Jest** (native-ESM mode via `@swc/jest`). Tests use injected
+Jest globals (`describe`/`it`/`expect`); `jest` (fn/spyOn/mock) is imported from
+`@jest/globals` when needed. Tests are discovered by glob and run in parallel by
+default. Server config: `server/jest.config.mjs`; contract config (serial,
+self-skipping): `server/jest.contract.config.mjs`; client: `client/jest.config.mjs`.
 
 ### Server unit tests (69 files)
 
@@ -43,10 +46,10 @@ cd server && npm test
 This expands to:
 
 ```
-tsx --test "src/**/*.test.ts"
+NODE_OPTIONS=--experimental-vm-modules jest
 ```
 
-All 69 test files under `server/src/**` are covered. Tests mock at the **repository
+which discovers `src/**/__tests__/**/*.test.ts`. Tests mock at the **repository
 interface** (`Repositories` type in `server/src/repositories/types.ts`), so no
 live database connection is needed.
 
@@ -77,7 +80,7 @@ npm run test:client
 This expands to:
 
 ```
-tsx --tsconfig client/tsconfig.json --test "client/tests/**/*.test.tsx"
+NODE_OPTIONS=--experimental-vm-modules jest   # discovers client/src/**/__tests__/**/*.test.tsx
 ```
 
 No live DB or network calls. Tests render React components with `react-dom/test-utils`
@@ -209,7 +212,7 @@ npm run test:contract --workspace server
 This expands to:
 
 ```
-tsx --test --test-concurrency=1 "tests/contract/**/*.test.ts"
+NODE_OPTIONS=--experimental-vm-modules jest --config jest.contract.config.mjs   # serial; tests/contract/**/*.test.ts
 ```
 
 `--test-concurrency=1` is required because each test truncates/drops the database

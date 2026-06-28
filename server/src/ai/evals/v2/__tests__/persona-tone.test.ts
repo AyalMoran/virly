@@ -4,7 +4,7 @@
  * v2-conformance.test.ts. Run with:
  *
  *   VIRLY_AI_V2_EVAL=1 VIRLY_AI_GRAPH_VERSION=v2 LANGSMITH_TRACING=false \
- *     npx tsx --test src/ai/evals/v2/persona-tone.test.ts
+ *     NODE_OPTIONS=--experimental-vm-modules npx jest src/ai/evals/v2/__tests__/persona-tone.test.ts
  *
  * (server/.env is auto-loaded, so usually just: VIRLY_AI_V2_EVAL=1 ...)
  *

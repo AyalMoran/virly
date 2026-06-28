@@ -1,7 +1,7 @@
 
 
 /**
- * V2 live conformance suite (Node test runner).
+ * V2 live conformance suite (Jest).
  *
  * This is the RED suite for the V2 design: it drives long multi-turn
  * conversations through the live LLM and asserts the V2 behavioural contract.
@@ -11,7 +11,7 @@
  *
  * Opt-in (kept out of the default `npm test`):
  *   VIRLY_AI_V2_EVAL=1 OPENAI_API_KEY=... VIRLY_AI_MODEL=... \
- *     npx tsx --test src/ai/evals/v2/v2-conformance.test.ts
+ *     NODE_OPTIONS=--experimental-vm-modules npx jest src/ai/evals/v2/__tests__/v2-conformance.test.ts
  * (server/.env is auto-loaded, so usually just: VIRLY_AI_V2_EVAL=1 ...)
  */
 import { config } from "../../../../config.js";
