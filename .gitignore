@@ -4,6 +4,13 @@ dist
 .DS_Store
 coverage
 
+# Build artifacts (Storybook build output, TS incremental cache, compiled vite config)
+client/storybook-static/
+*.tsbuildinfo
+*.log
+client/vite.config.js
+client/vite.config.d.ts
+
 # Generated ML artifacts (scaler/model weights are fit from the user's dataset)
 server/artifacts/
 
