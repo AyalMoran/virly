@@ -3,14 +3,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import bcrypt from "bcryptjs";
-import { AppError } from "./utils/app-error.js";
-import { createVerificationToken } from "./utils/auth.js";
-import { hashToken, verificationTokenExpiry } from "./utils/token.js";
-import { config } from "./config.js";
-import { authService } from "./services/auth.service.js";
-import { getRepositories, setRepositories } from "./repositories/index.js";
-import { createMongoRepositories } from "./repositories/mongo/index.js";
-import type { Repositories, UserRecord } from "./repositories/types.js";
+import { AppError } from "../utils/app-error.js";
+import { createVerificationToken } from "../utils/auth.js";
+import { hashToken, verificationTokenExpiry } from "../utils/token.js";
+import { config } from "../config.js";
+import { authService } from "./auth.service.js";
+import { getRepositories, setRepositories } from "../repositories/index.js";
+import { createMongoRepositories } from "../repositories/mongo/index.js";
+import type { Repositories, UserRecord } from "../repositories/types.js";
 
 // ---------------------------------------------------------------------------
 // Repository-backed mocks
@@ -44,7 +44,7 @@ function withUsers(stub: Partial<Repositories["users"]>) {
 
 /** Minimal in-memory VerificationTokenRepository stub. */
 function makeVerificationTokenStub(
-  initial: import("./repositories/types.js").VerificationTokenRecord | null
+  initial: import("../repositories/types.js").VerificationTokenRecord | null
 ) {
   let record = initial;
   return {

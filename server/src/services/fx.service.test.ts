@@ -15,7 +15,7 @@ import {
   normalizeProviderRates,
   rateToIls,
   utcDateKey
-} from "./services/fx.service.js";
+} from "./fx.service.js";
 
 const rates: FxRates = { ILS: 1, USD: 0.27, EUR: 0.25 };
 

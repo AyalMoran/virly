@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
 import express from "express";
-import { parseCookies } from "./middleware/cookies.js";
-import { errorHandler } from "./middleware/error-handler.js";
-import videoSessionRoutes from "./routes/videoSession.routes.js";
-import { setRepositories, getRepositories } from "./repositories/index.js";
-import type { PublicUserRecord, UserRepository, VideoSessionRecord, VideoSessionRepository, VideoAuditLogRepository, Repositories } from "./repositories/types.js";
+import { parseCookies } from "../middleware/cookies.js";
+import { errorHandler } from "../middleware/error-handler.js";
+import videoSessionRoutes from "../routes/videoSession.routes.js";
+import { setRepositories, getRepositories } from "../repositories/index.js";
+import type { PublicUserRecord, UserRepository, VideoSessionRecord, VideoSessionRepository, VideoAuditLogRepository, Repositories } from "../repositories/types.js";
 import {
   createVideoSession,
   endVideoSession,
@@ -14,7 +14,7 @@ import {
   issueVideoJoinConfig,
   listAgentVideoSessions,
   VideoSessionServiceError
-} from "./services/videoSession.service.js";
+} from "./videoSession.service.js";
 
 const userId = "507f1f77bcf86cd799439011";
 const otherUserId = "507f191e810c19729de860ea";

@@ -2,10 +2,10 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { setRepositories, getRepositories } from "./repositories/index.js";
-import { createMongoRepositories } from "./repositories/mongo/index.js";
-import { transactionQueryService } from "./services/transactionQuery.service.js";
-import type { TransactionRecord } from "./repositories/types.js";
+import { setRepositories, getRepositories } from "../repositories/index.js";
+import { createMongoRepositories } from "../repositories/mongo/index.js";
+import { transactionQueryService } from "./transactionQuery.service.js";
+import type { TransactionRecord } from "../repositories/types.js";
 
 const OWNER_OID = "507f1f77bcf86cd799439011";
 

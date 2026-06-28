@@ -2,17 +2,17 @@ import assert from "node:assert/strict";
 import http from "node:http";
 import test from "node:test";
 import express from "express";
-import { parseCookies } from "./middleware/cookies.js";
-import { errorHandler } from "./middleware/error-handler.js";
-import { ExchangeRate } from "./models/ExchangeRate.js";
-import { createMongoRepositories } from "./repositories/mongo/index.js";
-import { getRepositories, setRepositories } from "./repositories/index.js";
-import type { Repositories } from "./repositories/types.js";
-import transactionRoutes from "./routes/transaction.routes.js";
-import { utcDateKey } from "./services/fx.service.js";
-import { executeTransfer } from "./services/transfer.service.js";
-import { AppError } from "./utils/app-error.js";
-import { setAuthCookies } from "./utils/session.js";
+import { parseCookies } from "../middleware/cookies.js";
+import { errorHandler } from "../middleware/error-handler.js";
+import { ExchangeRate } from "../models/ExchangeRate.js";
+import { createMongoRepositories } from "../repositories/mongo/index.js";
+import { getRepositories, setRepositories } from "../repositories/index.js";
+import type { Repositories } from "../repositories/types.js";
+import transactionRoutes from "./transaction.routes.js";
+import { utcDateKey } from "../services/fx.service.js";
+import { executeTransfer } from "../services/transfer.service.js";
+import { AppError } from "../utils/app-error.js";
+import { setAuthCookies } from "../utils/session.js";
 
 // Ensure the mongo repository seam is wired so defaultDeps() can resolve
 // getRepositories(). Individual tests then patch ExchangeRate.findOne as before,
