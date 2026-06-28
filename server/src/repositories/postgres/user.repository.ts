@@ -12,8 +12,6 @@ function toRecord(r: Row): UserRecord {
   return {
     id: r.id, email: r.email, passwordHash: r.passwordHash, phone: r.phone,
     isVerified: r.isVerified, personalDetails: r.personalDetails,
-    verificationTokenHash: r.verificationTokenHash,
-    verificationTokenExpiresAt: r.verificationTokenExpiresAt,
     balance: r.balance, role: r.role as UserRecord["role"],
     createdAt: r.createdAt, updatedAt: r.updatedAt
   };
@@ -28,7 +26,7 @@ export const postgresUserRepository: UserRepository = {
   async findByIdSafe(id, tx) {
     const rec = await this.findById(id, tx);
     if (!rec) return null;
-    const { passwordHash, verificationTokenHash, ...safe } = rec;
+    const { passwordHash, ...safe } = rec;
     return safe as PublicUserRecord;
   },
   async findByEmail(email, tx) {
@@ -56,8 +54,6 @@ export const postgresUserRepository: UserRepository = {
         phone: input.phone,
         isVerified: false,
         personalDetails: null,
-        verificationTokenHash: null,
-        verificationTokenExpiresAt: null,
         balance: input.balance,
         role: "user",
         createdAt: now, updatedAt: now
@@ -68,11 +64,8 @@ export const postgresUserRepository: UserRepository = {
   async setBalance(id, balance, tx) {
     await asPgTx(tx).update(users).set({ balance, updatedAt: new Date() }).where(eq(users.id, id));
   },
-  async setVerificationToken(id, hash, expiresAt, tx) {
-    await asPgTx(tx).update(users).set({ verificationTokenHash: hash, verificationTokenExpiresAt: expiresAt, updatedAt: new Date() }).where(eq(users.id, id));
-  },
   async markVerified(id, tx) {
-    await asPgTx(tx).update(users).set({ isVerified: true, verificationTokenHash: null, verificationTokenExpiresAt: null, updatedAt: new Date() }).where(eq(users.id, id));
+    await asPgTx(tx).update(users).set({ isVerified: true, updatedAt: new Date() }).where(eq(users.id, id));
   },
   async setPersonalDetails(id, personalDetailsId, tx) {
     await asPgTx(tx).update(users).set({ personalDetails: personalDetailsId, updatedAt: new Date() }).where(eq(users.id, id));

@@ -16,7 +16,7 @@ import { AppError } from "../utils/app-error.js";
  */
 async function sendNewVerificationLink(user: UserRecord): Promise<string> {
   const verificationToken = createVerificationToken(user.id);
-  await getRepositories().users.setVerificationToken(
+  await getRepositories().verificationTokens.upsertForUser(
     user.id,
     hashToken(verificationToken),
     verificationTokenExpiry()
@@ -87,23 +87,21 @@ export const authService = {
       return { user, alreadyVerified: true };
     }
 
-    const isExpired =
-      !user.verificationTokenExpiresAt ||
-      user.verificationTokenExpiresAt.getTime() < Date.now();
-    const isMatch = user.verificationTokenHash === hashToken(token);
+    const tokenRecord = await getRepositories().verificationTokens.findByUserId(user.id);
+    const isExpired = !tokenRecord || tokenRecord.expiresAt.getTime() < Date.now();
+    const isMatch = Boolean(tokenRecord) && tokenRecord!.tokenHash === hashToken(token);
 
     if (isExpired || !isMatch) {
       throw new AppError(400, "Verification token is invalid or expired.");
     }
 
     await getRepositories().users.markVerified(user.id);
+    await getRepositories().verificationTokens.deleteForUser(user.id);
 
     return {
       user: {
         ...user,
-        isVerified: true,
-        verificationTokenHash: null,
-        verificationTokenExpiresAt: null
+        isVerified: true
       },
       alreadyVerified: false
     };

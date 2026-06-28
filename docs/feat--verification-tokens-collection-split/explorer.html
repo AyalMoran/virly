@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Virly Verification-Tokens Split - Playground</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        padding: 48px 16px;
+        display: flex;
+        justify-content: center;
+        background: #f6f7f9;
+        color: #16181d;
+        font-family: "Hanken Grotesk", system-ui, sans-serif;
+        line-height: 1.5;
+      }
+      main { width: 100%; max-width: 760px; }
+      h1 { font-size: 24px; margin: 0 0 4px; }
+      p.lede { color: #5b616e; margin: 0 0 28px; }
+      section { background: #fff; border: 1px solid #e4e7ec; border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+      h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.04em; color: #6b7280; margin: 0 0 10px; }
+      ul { margin: 0; padding-left: 18px; }
+      li { margin: 4px 0; }
+      code { background: #f0f1f4; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+      a { color: #2255cc; text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      footer { color: #9099a6; font-size: 13px; margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Verification-Tokens Collection Split - Playground</h1>
+      <p class="lede">
+        A static index for the work on this branch: email-verification tokens move
+        off the <code>User</code> record into a dedicated <code>verification_tokens</code>
+        collection (Mongo) / table (Postgres), behind a new
+        <code>VerificationTokenRepository</code> in the existing repository seam.
+      </p>
+
+      <section>
+        <h2>What changed</h2>
+        <ul>
+          <li><strong>New repository</strong> - <code>VerificationTokenRepository</code> (<code>upsertForUser</code> / <code>findByUserId</code> / <code>deleteForUser</code> / <code>deleteExpired</code>), Mongo + Postgres impls behind the seam.</li>
+          <li><strong>Mongo store</strong> - <code>VerificationToken</code> model with a TTL index on <code>expiresAt</code> (auto-expiry).</li>
+          <li><strong>Postgres store</strong> - <code>verification_tokens</code> table (unique on <code>user_id</code>), migration <code>0002</code>; swept by the Postgres TTL sweeper.</li>
+          <li><strong>auth.service</strong> - issues / verifies / clears tokens via the new store instead of inline <code>User</code> fields.</li>
+          <li><strong>Inline fields removed</strong> - <code>verificationTokenHash</code> / <code>verificationTokenExpiresAt</code> dropped from <code>User</code> (migration <code>0003</code>), after backfill scripts.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Reference</h2>
+        <ul>
+          <li><a href="../superpowers/plans/2026-06-26-verification-tokens-collection-split.md">plan (with as-built notes)</a></li>
+          <li><a href="../adr/0004-repository-interface-seam.md">ADR 0004 - repository interface seam</a></li>
+          <li><a href="../superpowers/specs/2026-06-22-postgres-migration-design.md">postgres migration design spec</a></li>
+        </ul>
+      </section>
+
+      <footer>Generated for branch <code>feat/verification-tokens-collection-split</code>.</footer>
+    </main>
+  </body>
+</html>
