@@ -686,8 +686,9 @@ export function dispatchRealtimeEvent(
 
 export function realtimeUrl(): string {
   // Same origin as the API; the JWT cookie rides along with withCredentials.
-  // VERIFIED: client reads VITE_API_BASE_URL (see client/src/lib/api.ts).
-  return import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
+  // VERIFIED: client reads VITE_API_BASE_URL (see client/src/lib/api.ts), with
+  // optional chaining so importing this module is safe under the node test runner.
+  return import.meta.env?.VITE_API_BASE_URL ?? "http://localhost:3000";
 }
 
 export function connectRealtime(handlers: RealtimeHandlers): () => void {
@@ -699,9 +700,51 @@ export function connectRealtime(handlers: RealtimeHandlers): () => void {
 
 - [ ] **Step 5: Wire into the app**
 
-In the authenticated data surface (e.g. `AuthProvider` once a user is present, or
-`DashboardPage`), `useEffect(() => connectRealtime({ onTransferReceived: () => { refetchBalance(); refetchTransactions(); } }), [])` and disconnect on unmount. Use whatever
-refetch/invalidation the page already exposes (match the existing data-loading pattern).
+VERIFIED wiring target: `client/src/features/dashboard/DashboardPage.tsx` owns the
+account summary (`summary` state) and loads it in a `useEffect(() => { ... api.accountSummary(1, 10) ... }, [])`
+that also calls `auth.updateBalance(response.balance)`. It uses manual fetch + state
+(no React Query).
+
+Wire realtime there with a **silent** refetch (do NOT flip `isLoading`/the skeleton on a
+live update — that would flash the page each time a transfer lands; the plan chose silent
+refetch). Use a connect-once + ref pattern so the socket is created exactly once and always
+calls the latest refetch (no reconnect per render):
+
+```tsx
+import { useEffect, useRef } from "react";
+import { connectRealtime } from "../../lib/realtime";
+
+// inside DashboardPage, alongside the existing state/effects:
+
+// Silent refetch: refresh summary + balance without toggling the full-page skeleton.
+const refreshSummary = async () => {
+  try {
+    const response = await api.accountSummary(1, 10);
+    setSummary(response);
+    auth.updateBalance(response.balance);
+    setError("");
+  } catch {
+    // keep the current view on a transient refresh failure
+  }
+};
+
+// Keep the latest refresh in a ref so the socket connects once but always calls fresh state.
+const refreshRef = useRef(refreshSummary);
+refreshRef.current = refreshSummary;
+
+useEffect(() => {
+  const disconnect = connectRealtime({
+    onTransferReceived: () => {
+      void refreshRef.current();
+    }
+  });
+  return disconnect;
+}, []);
+```
+
+The initial-load `useEffect` (with its `isLoading` skeleton and `active` guard) stays as-is.
+DashboardPage renders only when authenticated, so the socket connects post-login and the
+JWT cookie rides along via `withCredentials`.
 
 - [ ] **Step 6: Run client tests + build**
 
