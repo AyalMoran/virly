@@ -3,10 +3,10 @@ import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
-import { CurrencyProvider } from "../src/features/currency/CurrencyProvider";
-import { CurrencySelector } from "../src/features/currency/CurrencySelector";
-import { TransferQuoteSmallPrint } from "../src/features/transfer/TransferQuoteSmallPrint";
-import { TransactionList } from "../src/components/TransactionList";
+import { CurrencyProvider } from "../../../features/currency/CurrencyProvider";
+import { CurrencySelector } from "../../../features/currency/CurrencySelector";
+import { TransferQuoteSmallPrint } from "../../../features/transfer/TransferQuoteSmallPrint";
+import { TransactionList } from "../../../components/TransactionList";
 import {
   CURRENCY_STORAGE_KEY,
   convertIlsForDisplay,
@@ -14,9 +14,9 @@ import {
   formatMoneyIn,
   readStoredCurrency,
   storeCurrency
-} from "../src/lib/currency";
-import { formatCurrency } from "../src/lib/format";
-import type { ExchangeRatesResponse, TransferQuote } from "../src/lib/types";
+} from "../../../lib/currency";
+import { formatCurrency } from "../../../lib/format";
+import type { ExchangeRatesResponse, TransferQuote } from "../../../lib/types";
 
 const rates: ExchangeRatesResponse = {
   baseCurrency: "ILS",
@@ -107,7 +107,7 @@ test("provider initializes from the persisted currency selection", () => {
 
 //#region Header selector
 test("header renders the currency dropdown in the top-right actions area", async () => {
-  const { ShellTopbar } = await import("../src/components/ShellTopbar");
+  const { ShellTopbar } = await import("../../../components/ShellTopbar");
 
   const html = withMockLocalStorage({}, () =>
     renderToStaticMarkup(

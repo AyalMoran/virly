@@ -2,15 +2,15 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { EmptyRelationshipState } from "../src/features/users/EmptyRelationshipState";
-import { RecentRelationshipTransactions } from "../src/features/users/RecentRelationshipTransactions";
-import { RecipientStatusCard } from "../src/features/users/RecipientStatusCard";
-import { RelationshipSummaryCard } from "../src/features/users/RelationshipSummaryCard";
-import { UserProfileHeader } from "../src/features/users/UserProfileHeader";
+import { EmptyRelationshipState } from "../../../features/users/EmptyRelationshipState";
+import { RecentRelationshipTransactions } from "../../../features/users/RecentRelationshipTransactions";
+import { RecipientStatusCard } from "../../../features/users/RecipientStatusCard";
+import { RelationshipSummaryCard } from "../../../features/users/RelationshipSummaryCard";
+import { UserProfileHeader } from "../../../features/users/UserProfileHeader";
 import type {
   RelationshipTransaction,
   UserRelationshipSummary
-} from "../src/lib/types";
+} from "../../../lib/types";
 
 const relationship: UserRelationshipSummary = {
   viewerUserId: "viewer-1",

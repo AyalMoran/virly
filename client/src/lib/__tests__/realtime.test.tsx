@@ -1,7 +1,7 @@
 // client/tests/realtime.test.tsx
 import assert from "node:assert/strict";
 import test from "node:test";
-import { dispatchRealtimeEvent } from "../src/lib/realtime";
+import { dispatchRealtimeEvent } from "../../lib/realtime";
 
 test("routes a transfer:received frame to the right handler", () => {
   let got: { amount: number } | null = null;

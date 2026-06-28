@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { BootSplashView } from "../src/components/BootSplash";
+import { BootSplashView } from "../../components/BootSplash";
 
 test("boot splash view is an accessible split-flap phrase board", () => {
   const html = renderToStaticMarkup(<BootSplashView phase="visible" />);
