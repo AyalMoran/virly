@@ -1,5 +1,3 @@
-import assert from "node:assert/strict";
-import test from "node:test";
 import {
   FxUnavailableError,
   type FxDeps,
@@ -78,73 +76,73 @@ function createDeps(overrides: Partial<FxDeps> = {}): FxDeps & {
 
 //#region Currency validation
 test("supported currencies are ILS, USD, EUR only", () => {
-  assert.ok(isSupportedCurrency("ILS"));
-  assert.ok(isSupportedCurrency("USD"));
-  assert.ok(isSupportedCurrency("EUR"));
-  assert.ok(!isSupportedCurrency("GBP"));
-  assert.ok(!isSupportedCurrency("ils"));
-  assert.ok(!isSupportedCurrency(undefined));
+  expect(isSupportedCurrency("ILS")).toBeTruthy();
+  expect(isSupportedCurrency("USD")).toBeTruthy();
+  expect(isSupportedCurrency("EUR")).toBeTruthy();
+  expect(isSupportedCurrency("GBP")).toBeFalsy();
+  expect(isSupportedCurrency("ils")).toBeFalsy();
+  expect(isSupportedCurrency(undefined)).toBeFalsy();
 });
 
 test("assertSupportedCurrency rejects unsupported currency with status 400", () => {
-  assert.throws(
-    () => assertSupportedCurrency("GBP"),
-    (error: Error & { status?: number }) => {
-      assert.equal(error.status, 400);
-      assert.match(error.message, /Unsupported currency "GBP"/);
-      return true;
-    }
-  );
+  let err: Error & { status?: number } | undefined;
+  try {
+    assertSupportedCurrency("GBP");
+  } catch (e) {
+    err = e as Error & { status?: number };
+  }
+  expect(err!.status).toBe(400);
+  expect(err!.message).toMatch(/Unsupported currency "GBP"/);
 });
 //#endregion
 
 //#region Conversion math
 test("converts USD to ILS using the daily rate", () => {
   // 50 USD at 0.27 USD per ILS => 50 / 0.27 = 185.185... => 185.19 ILS
-  assert.equal(convertToIls(50, "USD", rates), 185.19);
+  expect(convertToIls(50, "USD", rates)).toBe(185.19);
 });
 
 test("converts EUR to ILS using the daily rate", () => {
   // 100 EUR at 0.25 EUR per ILS => 400 ILS
-  assert.equal(convertToIls(100, "EUR", rates), 400);
+  expect(convertToIls(100, "EUR", rates)).toBe(400);
 });
 
 test("converts ILS to USD and EUR for display", () => {
-  assert.equal(convertFromIls(370, "USD", rates), 99.9);
-  assert.equal(convertFromIls(370, "EUR", rates), 92.5);
+  expect(convertFromIls(370, "USD", rates)).toBe(99.9);
+  expect(convertFromIls(370, "EUR", rates)).toBe(92.5);
 });
 
 test("converting between identical currencies returns the rounded amount", () => {
-  assert.equal(convertToIls(12.345, "ILS", rates), 12.35);
-  assert.equal(convertAmount(10.1, "USD", "USD", rates), 10.1);
+  expect(convertToIls(12.345, "ILS", rates)).toBe(12.35);
+  expect(convertAmount(10.1, "USD", "USD", rates)).toBe(10.1);
 });
 
 test("conversion avoids floating point drift via integer minor units", () => {
   // 0.1 + 0.2 style input: 0.30000000000000004 must behave as 0.30.
-  assert.equal(convertToIls(0.1 + 0.2, "ILS", rates), 0.3);
-  assert.equal(convertAmount(0.1 + 0.2, "USD", "EUR", rates), 0.28);
+  expect(convertToIls(0.1 + 0.2, "ILS", rates)).toBe(0.3);
+  expect(convertAmount(0.1 + 0.2, "USD", "EUR", rates)).toBe(0.28);
 });
 
 test("cross conversion USD <-> EUR works through the ILS base", () => {
-  assert.equal(convertAmount(27, "USD", "EUR", rates), 25);
-  assert.equal(convertAmount(25, "EUR", "USD", rates), 27);
+  expect(convertAmount(27, "USD", "EUR", rates)).toBe(25);
+  expect(convertAmount(25, "EUR", "USD", rates)).toBe(27);
 });
 
 test("conversion with missing rate fails with status 503", () => {
   const brokenRates = { ILS: 1, USD: 0, EUR: Number.NaN } as FxRates;
-  assert.throws(
-    () => convertToIls(10, "USD", brokenRates),
-    (error: Error & { status?: number }) => {
-      assert.equal(error.status, 503);
-      return true;
-    }
-  );
+  let err: Error & { status?: number } | undefined;
+  try {
+    convertToIls(10, "USD", brokenRates);
+  } catch (e) {
+    err = e as Error & { status?: number };
+  }
+  expect(err!.status).toBe(503);
 });
 
 test("rateToIls reports the inverse rate used for small print", () => {
-  assert.equal(rateToIls("ILS", rates), 1);
-  assert.equal(rateToIls("USD", rates), 3.703704);
-  assert.equal(rateToIls("EUR", rates), 4);
+  expect(rateToIls("ILS", rates)).toBe(1);
+  expect(rateToIls("USD", rates)).toBe(3.703704);
+  expect(rateToIls("EUR", rates)).toBe(4);
 });
 //#endregion
 
@@ -155,7 +153,7 @@ test("normalizes provider rates from an ILS base", () => {
     EUR: 0.25,
     GBP: 0.21
   });
-  assert.deepEqual(normalized, { ILS: 1, USD: 0.27, EUR: 0.25 });
+  expect(normalized).toStrictEqual({ ILS: 1, USD: 0.27, EUR: 0.25 });
 });
 
 test("normalizes provider rates from a non-ILS base into ILS values", () => {
@@ -164,14 +162,13 @@ test("normalizes provider rates from a non-ILS base into ILS values", () => {
     EUR: 0.925,
     USD: 1
   });
-  assert.equal(normalized.ILS, 1);
-  assert.ok(Math.abs(normalized.USD - 1 / 3.7) < 1e-12);
-  assert.ok(Math.abs(normalized.EUR - 0.925 / 3.7) < 1e-12);
+  expect(normalized.ILS).toBe(1);
+  expect(Math.abs(normalized.USD - 1 / 3.7)).toBeLessThan(1e-12);
+  expect(Math.abs(normalized.EUR - 0.925 / 3.7)).toBeLessThan(1e-12);
 });
 
 test("provider normalization fails when ILS rate is missing", () => {
-  assert.throws(
-    () => normalizeProviderRates("USD", { EUR: 0.9 }),
+  expect(() => normalizeProviderRates("USD", { EUR: 0.9 })).toThrow(
     /missing a usable ILS rate/
   );
 });
@@ -184,12 +181,12 @@ test("fetches from the vendor once and caches the snapshot for the day", async (
   const first = await getCurrentRatesWithDeps(deps);
   const second = await getCurrentRatesWithDeps(deps);
 
-  assert.equal(deps.fetchCalls(), 1);
-  assert.deepEqual(first.rates, rates);
-  assert.deepEqual(second.rates, rates);
-  assert.equal(first.validForDate, "2026-06-11");
-  assert.equal(first.isStale, false);
-  assert.equal(second.fetchedAt.toISOString(), first.fetchedAt.toISOString());
+  expect(deps.fetchCalls()).toBe(1);
+  expect(first.rates).toStrictEqual(rates);
+  expect(second.rates).toStrictEqual(rates);
+  expect(first.validForDate).toBe("2026-06-11");
+  expect(first.isStale).toBe(false);
+  expect(second.fetchedAt.toISOString()).toBe(first.fetchedAt.toISOString());
 });
 
 test("a new day triggers a fresh vendor fetch", async () => {
@@ -200,9 +197,9 @@ test("a new day triggers a fresh vendor fetch", async () => {
   currentTime = new Date("2026-06-12T08:00:00.000Z");
   const next = await getCurrentRatesWithDeps(deps);
 
-  assert.equal(deps.fetchCalls(), 2);
-  assert.equal(next.validForDate, "2026-06-12");
-  assert.equal(next.isStale, false);
+  expect(deps.fetchCalls()).toBe(2);
+  expect(next.validForDate).toBe("2026-06-12");
+  expect(next.isStale).toBe(false);
 });
 
 test("vendor failure falls back to the latest non-expired cached snapshot", async () => {
@@ -225,9 +222,9 @@ test("vendor failure falls back to the latest non-expired cached snapshot", asyn
 
   const snapshot = await getCurrentRatesWithDeps(deps);
 
-  assert.deepEqual(snapshot.rates, rates);
-  assert.equal(snapshot.validForDate, "2026-06-10");
-  assert.equal(snapshot.isStale, true);
+  expect(snapshot.rates).toStrictEqual(rates);
+  expect(snapshot.validForDate).toBe("2026-06-10");
+  expect(snapshot.isStale).toBe(true);
 });
 
 test("vendor failure with an expired cache degrades to FxUnavailableError", async () => {
@@ -248,13 +245,8 @@ test("vendor failure with an expired cache degrades to FxUnavailableError", asyn
     }
   });
 
-  await assert.rejects(
-    () => getCurrentRatesWithDeps(deps),
-    (error: FxUnavailableError) => {
-      assert.equal(error.status, 503);
-      return true;
-    }
-  );
+  const err = await getCurrentRatesWithDeps(deps).then(() => null, (e) => e);
+  expect((err as FxUnavailableError).status).toBe(503);
 });
 
 test("vendor failure with no cache at all degrades to FxUnavailableError", async () => {
@@ -264,7 +256,7 @@ test("vendor failure with no cache at all degrades to FxUnavailableError", async
     }
   });
 
-  await assert.rejects(() => getCurrentRatesWithDeps(deps), FxUnavailableError);
+  await expect(getCurrentRatesWithDeps(deps)).rejects.toThrow(FxUnavailableError);
 });
 
 test("expired same-day snapshot is refreshed from the vendor", async () => {
@@ -282,12 +274,12 @@ test("expired same-day snapshot is refreshed from the vendor", async () => {
 
   const snapshot = await getCurrentRatesWithDeps(deps);
 
-  assert.equal(deps.fetchCalls(), 1);
-  assert.deepEqual(snapshot.rates, rates);
+  expect(deps.fetchCalls()).toBe(1);
+  expect(snapshot.rates).toStrictEqual(rates);
 });
 
 test("utcDateKey derives the YYYY-MM-DD UTC day", () => {
-  assert.equal(utcDateKey(new Date("2026-06-11T23:59:59.000Z")), "2026-06-11");
-  assert.equal(utcDateKey(new Date("2026-06-12T00:00:00.000Z")), "2026-06-12");
+  expect(utcDateKey(new Date("2026-06-11T23:59:59.000Z"))).toBe("2026-06-11");
+  expect(utcDateKey(new Date("2026-06-12T00:00:00.000Z"))).toBe("2026-06-12");
 });
 //#endregion
