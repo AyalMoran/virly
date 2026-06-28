@@ -1,9 +1,12 @@
+import { createServer } from "node:http";
 import { app } from "./app.js";
 import { config } from "./config.js";
 import { connectDb, initRepositories } from "./db.js";
 import { setupAiMemoryBackend } from "./ai/v2/memory/setup.js";
 import { startDailyFxRefresh } from "./services/fx.service.js";
 import { startTtlSweeper } from "./ttl/sweeper.js";
+import { attachSocketServer } from "./realtime/server.js";
+import { setRealtime } from "./realtime/registry.js";
 
 async function bootstrap() {
   await connectDb();
@@ -13,7 +16,10 @@ async function bootstrap() {
   // Postgres has no native TTL; sweep expired conversations/pending transfers.
   if (config.dbDriver === "postgres") startTtlSweeper();
   startDailyFxRefresh();
-  app.listen(config.port, () => {
+  const httpServer = createServer(app);
+  const { gateway } = attachSocketServer(httpServer);
+  setRealtime(gateway);
+  httpServer.listen(config.port, () => {
     console.log(`Server running on ${config.serverUrl}:${config.port}`);
   });
 }

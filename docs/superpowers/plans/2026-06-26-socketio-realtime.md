@@ -35,6 +35,38 @@ existing `jsonwebtoken` cookie auth, Express, React, `node:test` + `tsx`.
   SSE/WebSocket over polling). AI streaming keeps using its existing SSE — untouched.
 - TDD for pure logic; live socket wiring is integration/smoke, not unit.
 
+## Implementation Notes (verified deltas, resolved during execution 2026-06-28)
+
+These resolve the plan's flagged verify-and-match placeholders against the real code:
+
+- **Auth verify:** there is **no** `verifyAuthToken` util. The REST middleware
+  (`server/src/middleware/auth.ts`) verifies the cookie inline via
+  `jwt.verify(token, config.jwtSecret)` and reads `payload.userId`. So
+  `handshakeAuth.ts` verifies the JWT directly with `jsonwebtoken` + `config.jwtSecret`.
+- **Cookie name + signer source:** `AUTH_COOKIE_NAME = "virly_auth"` and
+  `createToken(userId, csrfTokenHash, options?)` are exported from
+  **`server/src/utils/auth.ts`** (not `middleware/cookies.ts`). The test mints a
+  cookie via `createToken(userId, "<any-csrf-hash>")`; the handshake checks only the
+  JWT signature + `userId` (no CSRF on the socket handshake).
+- **Client env var:** the client reads **`VITE_API_BASE_URL`** (fallback
+  `http://localhost:3000`) in `client/src/lib/api.ts` — not `VITE_API_URL`.
+  `realtimeUrl()` reuses `VITE_API_BASE_URL`.
+- **Client data surface:** `client/src/features/dashboard/DashboardPage.tsx` loads
+  data with a manual `api.accountSummary(...)` fetch (no React Query). Wire
+  `connectRealtime` there; on `transfer:received` re-run the page's load function.
+- **Test locations:** server unit tests are co-located `server/src/**/*.test.ts` and
+  run via `cd server && npm test`. Client tests live in `client/tests/**/*.test.tsx`
+  and run via `npm run test:client` (root). There is **no** existing
+  `transfer.service.test.ts`; build fakes using the `account.service.test.ts`
+  `withUsers`/`setRepositories` pattern and read `executeTransferWithSession`
+  (`transfer.service.ts`) for which repo methods to stub.
+- **Registry seam:** the module-level `getRealtime()`/`setRealtime()` deliberately
+  mirrors the existing `getRepositories()`/`setRepositories()` registry — DI at boot,
+  not ambient global state (the project's documented seam pattern).
+- **docs/env:** `docs/` is tracked in git (so `docs/realtime.md` is committable).
+  There are three `.env.example` files (root, `client/`, `server/`);
+  `VITE_API_BASE_URL` already exists in the client env.
+
 ## Approach & rationale
 
 What real-time event to ship first? Options: (a) incoming-transfer notification, (b)
@@ -221,11 +253,14 @@ export function userRoom(userId: string): string {
 
 ```ts
 // src/realtime/handshakeAuth.ts
-// Reuse the SAME cookie name + JWT verification the REST auth middleware uses.
-import { verifyAuthToken } from "../utils/auth.js"; // adjust to the real verify fn
-// import the cookie name constant the app uses; re-export for tests:
-export { AUTH_COOKIE_NAME } from "../middleware/cookies.js"; // adjust to the real source
-import { AUTH_COOKIE_NAME } from "../middleware/cookies.js";
+// VERIFIED: there is no verifyAuthToken util; the REST middleware verifies the
+// cookie inline. Mirror it here. AUTH_COOKIE_NAME + createToken come from utils/auth.js.
+import jwt from "jsonwebtoken";
+import { config } from "../config.js";
+import { AUTH_COOKIE_NAME, createToken } from "../utils/auth.js";
+
+// Re-export so the test can import the real cookie name + a signer from one place:
+export { AUTH_COOKIE_NAME };
 
 function parseCookies(header: string): Record<string, string> {
   return header.split(";").reduce<Record<string, string>>((acc, part) => {
@@ -246,14 +281,19 @@ export function userIdFromCookieHeader(cookieHeader: string | undefined): string
     return null;
   }
   try {
-    return verifyAuthToken(token).userId ?? null; // match the real payload shape
+    const payload = jwt.verify(token, config.jwtSecret) as jwt.JwtPayload;
+    const userId = payload.userId;
+    return typeof userId === "string" ? userId : null;
   } catch {
     return null;
   }
 }
 
-// Test helper (only if the app doesn't already export a signer to import in the test):
-// export function signAuthCookieValue(userId: string): string { return signAuthToken({ userId }); }
+// Test signer: the auth cookie value IS the JWT; mint one the way the app does.
+// (Handshake validates only the JWT signature + userId, no CSRF.)
+export function signAuthCookieValue(userId: string): string {
+  return createToken(userId, "handshake-test-csrf-hash");
+}
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -450,21 +490,67 @@ git commit -m "feat(realtime): attach Socket.IO to the HTTP server at boot"
 
 - [ ] **Step 1: Write the failing test**
 
-Using the transfer suite's existing fake repositories, add a test that injects a fake
-realtime gateway via `setRealtime(...)` and asserts `executeTransfer` emits
-`transfer:received` to the recipient after a successful transfer:
+VERIFIED: there is no existing `transfer.service.test.ts`. Build fakes the way
+`account.service.test.ts` does (`createMongoRepositories()` + `setRepositories({...})`,
+which never touches a real DB), overriding exactly the methods the transfer path calls
+(`executeTransfer` does NOT invoke `assertAiTransferWithinLimits`, so no
+`getDailyDebitUsage` stub is needed). Place the test at
+`server/src/services/transfer.service.test.ts` (co-located; runs under `cd server && npm test`).
+
+Two tests: (1) the recipient is notified after a successful transfer, and (2) the
+binding constraint that a realtime emit failure must NOT break the transfer.
 
 ```ts
-import { setRealtime, noopRealtime } from "../realtime/registry.js"; // adjust path
+import assert from "node:assert/strict";
+import test from "node:test";
+import { executeTransfer } from "./transfer.service.js";
+import { setRealtime, noopRealtime } from "../realtime/registry.js";
+import { setRepositories } from "../repositories/index.js";
+import { createMongoRepositories } from "../repositories/mongo/index.js";
+import type { Repositories } from "../repositories/types.js";
+
+function withTransferRepos() {
+  const base = createMongoRepositories();
+  const sender = { id: "sender-id", email: "sender@example.com", balance: 1000 } as never;
+  const recipient = { id: "recipient-id", email: "recip@example.com", balance: 0 } as never;
+  setRepositories({
+    ...base,
+    runInTransaction: (async (cb: (tx: unknown) => unknown) => cb(undefined)) as never,
+    users: {
+      ...base.users,
+      findById: async (id: string) => (id === "sender-id" ? sender : null),
+      findByEmail: async (email: string) => (email === "recip@example.com" ? recipient : null),
+      setBalance: (async () => {}) as never
+    } as Repositories["users"],
+    transactions: {
+      ...base.transactions,
+      createMany: (async (records: Array<Record<string, unknown>>) =>
+        records.map((r, i) => ({ ...r, id: `tx-${i}`, createdAt: new Date(0) }))) as never
+    } as Repositories["transactions"]
+  });
+}
 
 test("executeTransfer notifies the recipient in real time", async () => {
+  withTransferRepos();
   const emits: Array<{ userId: string; event: string; amount: number }> = [];
-  setRealtime({ emitToUser: (userId, event, p) => emits.push({ userId, event, amount: (p as { amount: number }).amount }) });
+  setRealtime({
+    emitToUser: (userId, event, p) =>
+      emits.push({ userId, event, amount: (p as { amount: number }).amount })
+  });
 
-  // …existing setup: sender + recipient in the fake user repo, sufficient balance…
   await executeTransfer({ senderId: "sender-id", recipientEmail: "recip@example.com", amount: 50, reason: null });
 
   assert.deepEqual(emits, [{ userId: "recipient-id", event: "transfer:received", amount: 50 }]);
+  setRealtime(noopRealtime);
+});
+
+test("a realtime emit failure does not break the transfer", async () => {
+  withTransferRepos();
+  setRealtime({ emitToUser: () => { throw new Error("socket down"); } });
+
+  const result = await executeTransfer({ senderId: "sender-id", recipientEmail: "recip@example.com", amount: 50, reason: null });
+
+  assert.equal(result.newBalance, 950); // 1000 - 50; transfer still succeeded
   setRealtime(noopRealtime);
 });
 ```
@@ -600,7 +686,9 @@ export function dispatchRealtimeEvent(
 
 export function realtimeUrl(): string {
   // Same origin as the API; the JWT cookie rides along with withCredentials.
-  return import.meta.env.VITE_API_URL ?? "";
+  // VERIFIED: client reads VITE_API_BASE_URL (see client/src/lib/api.ts), with
+  // optional chaining so importing this module is safe under the node test runner.
+  return import.meta.env?.VITE_API_BASE_URL ?? "http://localhost:3000";
 }
 
 export function connectRealtime(handlers: RealtimeHandlers): () => void {
@@ -612,9 +700,51 @@ export function connectRealtime(handlers: RealtimeHandlers): () => void {
 
 - [ ] **Step 5: Wire into the app**
 
-In the authenticated data surface (e.g. `AuthProvider` once a user is present, or
-`DashboardPage`), `useEffect(() => connectRealtime({ onTransferReceived: () => { refetchBalance(); refetchTransactions(); } }), [])` and disconnect on unmount. Use whatever
-refetch/invalidation the page already exposes (match the existing data-loading pattern).
+VERIFIED wiring target: `client/src/features/dashboard/DashboardPage.tsx` owns the
+account summary (`summary` state) and loads it in a `useEffect(() => { ... api.accountSummary(1, 10) ... }, [])`
+that also calls `auth.updateBalance(response.balance)`. It uses manual fetch + state
+(no React Query).
+
+Wire realtime there with a **silent** refetch (do NOT flip `isLoading`/the skeleton on a
+live update — that would flash the page each time a transfer lands; the plan chose silent
+refetch). Use a connect-once + ref pattern so the socket is created exactly once and always
+calls the latest refetch (no reconnect per render):
+
+```tsx
+import { useEffect, useRef } from "react";
+import { connectRealtime } from "../../lib/realtime";
+
+// inside DashboardPage, alongside the existing state/effects:
+
+// Silent refetch: refresh summary + balance without toggling the full-page skeleton.
+const refreshSummary = async () => {
+  try {
+    const response = await api.accountSummary(1, 10);
+    setSummary(response);
+    auth.updateBalance(response.balance);
+    setError("");
+  } catch {
+    // keep the current view on a transient refresh failure
+  }
+};
+
+// Keep the latest refresh in a ref so the socket connects once but always calls fresh state.
+const refreshRef = useRef(refreshSummary);
+refreshRef.current = refreshSummary;
+
+useEffect(() => {
+  const disconnect = connectRealtime({
+    onTransferReceived: () => {
+      void refreshRef.current();
+    }
+  });
+  return disconnect;
+}, []);
+```
+
+The initial-load `useEffect` (with its `isLoading` skeleton and `active` guard) stays as-is.
+DashboardPage renders only when authenticated, so the socket connects post-login and the
+JWT cookie rides along via `withCredentials`.
 
 - [ ] **Step 6: Run client tests + build**
 
