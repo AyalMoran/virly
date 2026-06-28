@@ -682,3 +682,77 @@ git commit -m "feat(ttl): sweep expired verification tokens (Postgres)"
    script defaults to now+24h; acceptable, or expire immediately?
 3. **Driver scope** — implement both Mongo + Postgres now (this plan), or Mongo-only
    since Postgres is still behind a flag? (Plan does both to keep the seam honest.)
+
+---
+
+## As-Built Implementation Notes
+
+Implemented 2026-06-28 on branch `feat/verification-tokens-collection-split` via
+subagent-driven-development (fresh implementer + spec/quality reviewer per task, then a
+whole-branch review). All 7 tasks landed; final state: `tsc -p tsconfig.json --noEmit`
+clean, `npm test` = 573/573 pass. Commits (oldest first):
+
+```
+e1f53c4 feat(repos): VerificationTokenRepository interface + record type
+0eb86e7 feat(repos): Mongo verification-token store with TTL index
+0e169bd feat(repos): Postgres verification-token table + repository
+6209b35 refactor(auth): issue/verify/clear via verification_tokens store
+aeccce7 chore(repos): backfill scripts for verification-token split
+fac0b29 refactor(repos): drop inline verification-token fields from User
+b4062d4 feat(ttl): sweep expired verification tokens (Postgres)
+cdae020 test(repos): drop stale verification-token residue; clarify sweeper test + backfill docs
+```
+
+### Reconciliations between the plan's illustrative code and the real codebase
+
+- **Repos are module-level singletons, not factories.** Both impls are exported as
+  `mongoVerificationTokenRepository` / `postgresVerificationTokenRepository` consts and
+  registered uniformly with the other ten entries — the plan's `createMongo…()` /
+  `createPostgres…()` factory form was dropped to match neighbors.
+- **Task 2 (Mongo):** `asSession` is at `mongo/transaction.ts` (matched). A null-guard was
+  added after `findOneAndUpdate(...).lean()` in `upsertForUser` (review fix), mirroring
+  `findByUserId`. Mapper uses `String(d._id)`/`String(d.userId)` per convention.
+- **Task 3 (Postgres):** id helper is `newObjectId()` (NOT the plan's `newId()`); schema uses
+  the file's `id()`/`createdAt()`/`updatedAt()` helpers with `char(24)` for `id`/`user_id`
+  (not `text`), and `uniqueIndex("verification_tokens_user_id_uq")` in the table callback.
+  Tx via `asPgTx`. Migration `0002_happy_hedge_knight.sql`.
+- **Task 4 (auth.service):** the real test harness is `withUsers()` + `createMongoRepositories()`
+  base + `setRepositories(...)` — there is no `makeFakeRepos()`. The existing `verifyEmail`
+  tests were MIGRATED to drive behavior through a stateful in-memory `verificationTokens`
+  stub (new `withRepos` + `makeVerificationTokenStub` helpers); an absent-token case was
+  added. Service success path calls `markVerified` then `deleteForUser`.
+- **Task 5 (backfill):** standalone scripts under `server/scripts/`
+  (`migrate-verification-tokens.mongodb.js` mongosh + `migrate-verification-tokens.postgres.sql`),
+  NOT a hand-authored drizzle migration (avoids journal fragility). Postgres mints the
+  `char(24)` id via `substr(md5(random()::text || clock_timestamp()::text || u.id),1,24)`
+  (no extension); idempotent via `ON CONFLICT (user_id) DO NOTHING`. RUN BOTH BEFORE the
+  Task 6 column-drop migration.
+- **Task 6 (drop fields):** compiler-guided removal; `tsc` surfaced one extra fixture
+  (`mcp/support.test.ts`) beyond the grep map. Migration `0003_omniscient_inhumans.sql`
+  drops both `users` columns. One stale fixture in `mongo/user.repository.test.ts` was
+  hidden behind an `as Record<string, unknown>` cast (so `tsc` stayed clean) and slipped
+  past per-task review — the whole-branch review caught it; fixed in `cdae020`.
+- **Task 7 (sweeper):** `sweepExpired(db, now)` appends a direct-drizzle
+  `db.delete(verificationTokens).where(lt(verificationTokens.expiresAt, now))` matching its
+  existing two deletes — NOT `getRepositories().verificationTokens.deleteExpired()`, which
+  would resolve the configured driver (Mongo default) instead of the passed Postgres `db`.
+  `deleteExpired` stays an interface method (implemented + unit-tested in both drivers) for
+  symmetry; it is intentionally not wired into the Postgres sweeper.
+
+### Open questions — resolved as implemented
+1. Single active token per user (keyed by `userId`, unique) — as planned.
+2. Legacy rows missing an expiry: backfill defaults to `now + 24h`. Harmless — the
+   verification JWT itself already expires in 10 minutes, so the DB expiry is a secondary check.
+3. Both Mongo + Postgres implemented.
+
+### Deferred (non-blocking, cosmetic — from the final review)
+- `postgres/schema.ts` declares `verificationTokens` between `videoSessions` and
+  `videoAuditLogs` (not strict alpha order). No runtime impact.
+- The already-verified `verifyEmail` test does not assert `findByUserId` was never called
+  on the early-return path (behavior is correct; coverage-only).
+
+### Environment note
+The worktree's `server/` had no `node_modules`; drizzle-orm lives only in the main
+worktree's `server/node_modules`. A gitignored symlink
+`server/node_modules -> <main>/server/node_modules` was created so drizzle-orm resolves for
+`tsc`/`npm test`/`db:generate`. This is a local build-env detail, not part of the branch.
