@@ -1,12 +1,18 @@
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import * as schema from "../repositories/postgres/schema.js";
 import { config } from "../config.js";
 
-/** Absolute path to the generated migrations dir (server/drizzle), CWD-independent. */
-const MIGRATIONS_FOLDER = path.resolve(import.meta.dirname, "../../drizzle");
+/** Absolute path to the generated migrations dir (server/drizzle), CWD-independent.
+ * Derived from import.meta.url (portable across Node ESM and Jest's ESM runtime,
+ * which does not populate import.meta.dirname). */
+const MIGRATIONS_FOLDER = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../drizzle"
+);
 
 export type PgDatabase = NodePgDatabase<typeof schema>;
 
