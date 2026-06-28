@@ -11,10 +11,10 @@ server/artifacts/
 
 # docs/ is tracked, but keep transient agent run-logs and scratch playgrounds out
 docs/**/*.log
-docs/feat--boot-splash-loader/
 
 .agents
 .claude
+.superpowers
 .instance
 /scripts
 /compare
@@ -22,8 +22,7 @@ docs/feat--boot-splash-loader/
 
 # LangGraph API
 .langgraph_api
-.instance
-.claude
+
 
 scripts/fill-personal-details.api.js
 

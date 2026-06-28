@@ -1,0 +1,155 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Virly — Boot Splash Playground</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        display: grid;
+        place-items: center;
+        font-family: "Hanken Grotesk", system-ui, sans-serif;
+        background: linear-gradient(125deg, #0e2f34 0%, #2f7e87 48%, #c2d099 100%);
+      }
+      .stage { position: relative; display: grid; place-items: center; gap: 22px; padding: 40px; }
+      .caption {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-size: 11px; letter-spacing: 0.28em; text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      /* --- Faithful port of the BootSplash styles (.boot-* in global.css) --- */
+      .boot-splash-panel {
+        display: flex; flex-direction: column; align-items: center; gap: 14px;
+        padding: 26px clamp(24px, 6vw, 36px);
+        border-radius: 18px;
+        background: rgba(230, 238, 201, 0.5);
+        border: 1px solid rgba(53, 133, 142, 0.2);
+        box-shadow: 0 18px 40px rgba(14, 42, 46, 0.26);
+        backdrop-filter: blur(10px);
+      }
+      .boot-splash-slot {
+        width: 78%; height: 7px; border-radius: 5px;
+        background: linear-gradient(180deg, #2f4446, #1c2b2d);
+        box-shadow: inset 0 -2px 3px rgba(0, 0, 0, 0.34), 0 3px 7px rgba(23, 61, 66, 0.22);
+      }
+      .boot-flap-board { display: flex; gap: 3px; perspective: 520px; }
+      .boot-flap-cell {
+        position: relative;
+        width: clamp(17px, 4.6vw, 26px); height: clamp(28px, 7vw, 38px);
+        border-radius: 5px; display: grid; place-items: center; overflow: hidden;
+        background: linear-gradient(180deg, #2c4143, #1a2b2d);
+        box-shadow: inset 0 1px 1px rgba(255, 255, 255, 0.08),
+          inset 0 -3px 5px rgba(0, 0, 0, 0.42), 0 5px 11px rgba(15, 28, 30, 0.32);
+        transition: opacity 0.3s ease;
+      }
+      .boot-flap-cell::after {
+        content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 2px;
+        transform: translateY(-1px); background: rgba(0, 0, 0, 0.5);
+        box-shadow: 0 1px 0 rgba(255, 255, 255, 0.06);
+      }
+      .boot-flap-cell.is-blank { opacity: 0.42; }
+      .boot-flap-char {
+        font-family: ui-monospace, Menlo, Consolas, monospace;
+        font-weight: 700; font-size: clamp(14px, 3.4vw, 20px); line-height: 1;
+        color: #eef2dc; transform-origin: top center; backface-visibility: hidden;
+        will-change: transform;
+      }
+      .boot-splash-dots { width: 64%; border-bottom: 1.5px dotted rgba(31, 95, 103, 0.4); }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <div class="boot-splash-panel">
+        <span class="boot-splash-slot"></span>
+        <div class="boot-flap-board" id="board"></div>
+        <span class="boot-splash-dots"></span>
+      </div>
+      <span class="caption">boot splash playground · LOADING… leads &amp; recurs every 3rd phrase</span>
+    </div>
+
+    <script>
+      // Mirrors client/src/components/BootSplash.tsx. Keep this demo in sync when
+      // the component changes.
+      const PHRASES = [
+        "COUNTING COINS...", "CHASING CENTS...", "MINTING PIXELS...",
+        "BALANCING ACT...", "MAKING CHANGE...", "STACKING PAPER...",
+        "ROUNDING UP...", "FETCHING FUNDS...", "HERDING ZEROS...",
+        "COUNTING BEANS...", "WARMING VAULTS...", "TIDYING BOOKS...",
+        "BOOTING BILLS...", "CACHING COINS...", "HOW ARE YOU?", "FIX YOUR POSTURE"
+      ];
+      const LOADING = "LOADING...";
+      const COLS = [LOADING, ...PHRASES].reduce((m, p) => Math.max(m, p.length), 0);
+      const SCRAMBLE = "0123456789";
+
+      const board = document.getElementById("board");
+      const reels = [];
+      for (let i = 0; i < COLS; i++) {
+        const cell = document.createElement("div");
+        cell.className = "boot-flap-cell";
+        const span = document.createElement("span");
+        span.className = "boot-flap-char";
+        cell.appendChild(span);
+        board.appendChild(cell);
+        reels.push(span);
+      }
+
+      function layout(phrase) {
+        const total = COLS - phrase.length;
+        const left = Math.floor(total / 2);
+        return (" ".repeat(left) + phrase + " ".repeat(total - left)).split("");
+      }
+      function setCell(el, ch) {
+        const cell = el.parentElement;
+        if (ch === " ") { el.textContent = ""; cell.classList.add("is-blank"); }
+        else { el.textContent = ch; cell.classList.remove("is-blank"); }
+      }
+      function flip(el) {
+        el.animate(
+          [{ transform: "rotateX(-82deg)", opacity: 0.3 }, { transform: "rotateX(0deg)", opacity: 1 }],
+          { duration: 95, easing: "cubic-bezier(0.3, 0.7, 0.4, 1)" }
+        );
+      }
+      function createSequencer() {
+        let step = 0, bag = [];
+        return () => {
+          const showLoading = step % 3 === 0;
+          step += 1;
+          if (showLoading) return LOADING;
+          if (bag.length === 0) {
+            bag = PHRASES.map((_, i) => i);
+            for (let i = bag.length - 1; i > 0; i--) {
+              const j = Math.floor(Math.random() * (i + 1));
+              [bag[i], bag[j]] = [bag[j], bag[i]];
+            }
+          }
+          return PHRASES[bag.pop()];
+        };
+      }
+
+      const next = createSequencer();
+      function show(phrase) {
+        const target = layout(phrase);
+        let settled = 0;
+        reels.forEach((el, index) => {
+          const iv = setInterval(() => {
+            el.parentElement.classList.remove("is-blank");
+            el.textContent = SCRAMBLE[Math.floor(Math.random() * SCRAMBLE.length)];
+            flip(el);
+          }, 65);
+          setTimeout(() => {
+            clearInterval(iv);
+            setCell(el, target[index]);
+            flip(el);
+            if (++settled === reels.length) setTimeout(() => show(next()), 1700);
+          }, 480 + index * 85);
+        });
+      }
+      show(next());
+    </script>
+  </body>
+</html>
