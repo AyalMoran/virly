@@ -1,6 +1,4 @@
-import assert from "node:assert/strict";
 import http from "node:http";
-import test from "node:test";
 import express from "express";
 import { parseCookies } from "../../middleware/cookies.js";
 import { Transaction } from "../../models/Transaction.js";
@@ -39,15 +37,19 @@ function createMockUser(id: string, email: string, isVerified = true): MockUser 
   };
 }
 
+const cleanups: Array<() => void | Promise<void>> = [];
+afterEach(async () => {
+  for (const c of cleanups.splice(0).reverse()) await c();
+});
+
 function patchModel<T extends object, K extends keyof T>(
   model: T,
   key: K,
-  value: T[K],
-  t: test.TestContext
+  value: T[K]
 ) {
   const original = model[key];
   model[key] = value;
-  t.after(() => {
+  cleanups.push(() => {
     model[key] = original;
   });
 }
@@ -57,7 +59,7 @@ type TransactionFindMock = {
   results: unknown[];
 };
 
-function patchTransactionFind(t: test.TestContext, results: unknown[]) {
+function patchTransactionFind(results: unknown[]) {
   const mock: TransactionFindMock = { calls: [], results };
 
   patchModel(
@@ -73,8 +75,7 @@ function patchTransactionFind(t: test.TestContext, results: unknown[]) {
         lean: async () => mock.results
       };
       return chain;
-    }) as unknown as typeof Transaction.find,
-    t
+    }) as unknown as typeof Transaction.find
   );
 
   return mock;
@@ -98,7 +99,7 @@ function toUserRecord(user: MockUser): UserRecord {
 // The route now reaches the User store through getRepositories().users, so we
 // stub the repository instead of the Mongoose model. Transaction access still
 // flows through the Mongoose model (Task 6), so those patches stay.
-function patchUsers(t: test.TestContext, users: MockUser[]) {
+function patchUsers(users: MockUser[]) {
   const records = users.map(toUserRecord);
   const byId = new Map(records.map((user) => [user.id, user]));
   const byEmail = new Map(records.map((user) => [user.email.toLowerCase(), user]));
@@ -112,7 +113,7 @@ function patchUsers(t: test.TestContext, users: MockUser[]) {
       findByEmail: async (email: string) => byEmail.get(email.trim().toLowerCase()) ?? null
     } as Repositories["users"]
   });
-  t.after(() => {
+  cleanups.push(() => {
     setRepositories(base);
   });
 }
@@ -120,7 +121,6 @@ function patchUsers(t: test.TestContext, users: MockUser[]) {
 // The profile route reads display name through getRepositories().personalDetails
 // (the seam), so we stub the repository instead of the Mongoose model.
 function patchPersonalDetails(
-  t: test.TestContext,
   details: { status: string; firstName?: string | null; lastName?: string | null } | null
 ) {
   const record: PersonalDetailsRecord | null = details
@@ -145,24 +145,22 @@ function patchPersonalDetails(
       findByUserId: async () => record
     } as Repositories["personalDetails"]
   });
-  t.after(() => setRepositories(current));
+  cleanups.push(() => setRepositories(current));
 }
 
-function patchAggregate(t: test.TestContext, stats: unknown[]) {
+function patchAggregate(stats: unknown[]) {
   patchModel(
     Transaction,
     "aggregate",
-    (async () => stats) as unknown as typeof Transaction.aggregate,
-    t
+    (async () => stats) as unknown as typeof Transaction.aggregate
   );
 }
 
-function patchCount(t: test.TestContext, total: number) {
+function patchCount(total: number) {
   patchModel(
     Transaction,
     "countDocuments",
-    (async () => total) as unknown as typeof Transaction.countDocuments,
-    t
+    (async () => total) as unknown as typeof Transaction.countDocuments
   );
 }
 
@@ -217,12 +215,12 @@ async function issueAuthCookie(baseUrl: string) {
 test("profile requires authentication", async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/users/${viewedId}/profile`);
-    assert.equal(response.status, 401);
+    expect(response.status).toBe(401);
   });
 });
 
-test("profile returns 404 for unknown user and invalid identifiers", async (t) => {
-  patchUsers(t, [createMockUser(viewerId, "viewer@example.com")]);
+test("profile returns 404 for unknown user and invalid identifiers", async () => {
+  patchUsers([createMockUser(viewerId, "viewer@example.com")]);
 
   await withServer(async (baseUrl) => {
     const cookie = await issueAuthCookie(baseUrl);
@@ -231,25 +229,25 @@ test("profile returns 404 for unknown user and invalid identifiers", async (t) =
       `${baseUrl}/api/users/${encodeURIComponent("ghost@example.com")}/profile`,
       { headers: { Cookie: cookie } }
     );
-    assert.equal(unknownEmail.status, 404);
+    expect(unknownEmail.status).toBe(404);
 
     const invalidIdentifier = await fetch(`${baseUrl}/api/users/not-a-user/profile`, {
       headers: { Cookie: cookie }
     });
-    assert.equal(invalidIdentifier.status, 404);
+    expect(invalidIdentifier.status).toBe(404);
   });
 });
 
-test("profile exposes only safe public fields and viewer-relative data", async (t) => {
+test("profile exposes only safe public fields and viewer-relative data", async () => {
   const viewer = createMockUser(viewerId, "viewer@example.com");
   const viewed = createMockUser(viewedId, "daniel@example.com", true);
-  patchUsers(t, [viewer, viewed]);
-  patchPersonalDetails(t, {
+  patchUsers([viewer, viewed]);
+  patchPersonalDetails({
     status: "provided",
     firstName: "Daniel",
     lastName: "Cohen"
   });
-  patchAggregate(t, [
+  patchAggregate([
     {
       totalSent: 300,
       totalReceived: 120.5,
@@ -257,7 +255,7 @@ test("profile exposes only safe public fields and viewer-relative data", async (
       lastTransactionAt: new Date("2026-06-03T12:00:00.000Z")
     }
   ]);
-  patchTransactionFind(t, [
+  patchTransactionFind([
     {
       _id: "tx-1",
       amount: 120,
@@ -279,15 +277,15 @@ test("profile exposes only safe public fields and viewer-relative data", async (
     const response = await fetch(`${baseUrl}/api/users/${viewedId}/profile`, {
       headers: { Cookie: cookie }
     });
-    assert.equal(response.status, 200);
+    expect(response.status).toBe(200);
     const body = (await response.json()) as Record<string, unknown>;
 
-    assert.deepEqual(Object.keys(body).sort(), [
+    expect(Object.keys(body).sort()).toEqual([
       "recentTransactions",
       "relationship",
       "user"
     ]);
-    assert.deepEqual(body.user, {
+    expect(body.user).toEqual({
       id: viewedId,
       email: "daniel@example.com",
       displayName: "Daniel Cohen",
@@ -296,89 +294,89 @@ test("profile exposes only safe public fields and viewer-relative data", async (
     });
 
     const raw = JSON.stringify(body);
-    assert.doesNotMatch(raw, /passwordHash|super-secret-hash/);
-    assert.doesNotMatch(raw, /1234\.56/);
-    assert.doesNotMatch(raw, /\+972500000000/);
-    assert.doesNotMatch(raw, /"role"/);
+    expect(raw).not.toMatch(/passwordHash|super-secret-hash/);
+    expect(raw).not.toMatch(/1234\.56/);
+    expect(raw).not.toMatch(/\+972500000000/);
+    expect(raw).not.toMatch(/"role"/);
 
     const relationship = body.relationship as Record<string, unknown>;
-    assert.equal(relationship.totalSentToUser, 300);
-    assert.equal(relationship.totalReceivedFromUser, 120.5);
-    assert.equal(relationship.netAmount, 179.5);
-    assert.equal(relationship.transactionCount, 4);
-    assert.equal(relationship.lastTransactionAt, "2026-06-03T12:00:00.000Z");
-    assert.equal(relationship.isVerifiedRecipient, true);
-    assert.equal(relationship.canTransferToUser, true);
-    assert.equal(relationship.relationshipStatus, "verified_recipient");
+    expect(relationship.totalSentToUser).toBe(300);
+    expect(relationship.totalReceivedFromUser).toBe(120.5);
+    expect(relationship.netAmount).toBe(179.5);
+    expect(relationship.transactionCount).toBe(4);
+    expect(relationship.lastTransactionAt).toBe("2026-06-03T12:00:00.000Z");
+    expect(relationship.isVerifiedRecipient).toBe(true);
+    expect(relationship.canTransferToUser).toBe(true);
+    expect(relationship.relationshipStatus).toBe("verified_recipient");
 
     const transactions = body.recentTransactions as Array<Record<string, unknown>>;
-    assert.equal(transactions.length, 2);
-    assert.equal(transactions[0].direction, "sent");
-    assert.equal(transactions[0].status, "completed");
-    assert.equal(transactions[0].description, "Lunch");
-    assert.equal(transactions[1].direction, "received");
+    expect(transactions.length).toBe(2);
+    expect(transactions[0].direction).toBe("sent");
+    expect(transactions[0].status).toBe("completed");
+    expect(transactions[0].description).toBe("Lunch");
+    expect(transactions[1].direction).toBe("received");
   });
 });
 
-test("profile reports no_history when there are no shared transactions", async (t) => {
+test("profile reports no_history when there are no shared transactions", async () => {
   const viewer = createMockUser(viewerId, "viewer@example.com");
   const viewed = createMockUser(viewedId, "daniel@example.com", false);
-  patchUsers(t, [viewer, viewed]);
-  patchPersonalDetails(t, null);
-  patchAggregate(t, []);
-  patchTransactionFind(t, []);
+  patchUsers([viewer, viewed]);
+  patchPersonalDetails(null);
+  patchAggregate([]);
+  patchTransactionFind([]);
 
   await withServer(async (baseUrl) => {
     const cookie = await issueAuthCookie(baseUrl);
     const response = await fetch(`${baseUrl}/api/users/${viewedId}/profile`, {
       headers: { Cookie: cookie }
     });
-    assert.equal(response.status, 200);
+    expect(response.status).toBe(200);
     const body = (await response.json()) as {
       user: { displayName: string };
       relationship: Record<string, unknown>;
       recentTransactions: unknown[];
     };
 
-    assert.equal(body.user.displayName, "Daniel");
-    assert.equal(body.relationship.totalSentToUser, 0);
-    assert.equal(body.relationship.totalReceivedFromUser, 0);
-    assert.equal(body.relationship.netAmount, 0);
-    assert.equal(body.relationship.transactionCount, 0);
-    assert.equal(body.relationship.lastTransactionAt, null);
-    assert.equal(body.relationship.relationshipStatus, "no_history");
-    assert.deepEqual(body.recentTransactions, []);
+    expect(body.user.displayName).toBe("Daniel");
+    expect(body.relationship.totalSentToUser).toBe(0);
+    expect(body.relationship.totalReceivedFromUser).toBe(0);
+    expect(body.relationship.netAmount).toBe(0);
+    expect(body.relationship.transactionCount).toBe(0);
+    expect(body.relationship.lastTransactionAt).toBeNull();
+    expect(body.relationship.relationshipStatus).toBe("no_history");
+    expect(body.recentTransactions).toEqual([]);
   });
 });
 
-test("self profile returns self status without relationship metrics", async (t) => {
+test("self profile returns self status without relationship metrics", async () => {
   const viewer = createMockUser(viewerId, "viewer@example.com");
-  patchUsers(t, [viewer]);
-  patchPersonalDetails(t, null);
+  patchUsers([viewer]);
+  patchPersonalDetails(null);
 
   await withServer(async (baseUrl) => {
     const cookie = await issueAuthCookie(baseUrl);
     const response = await fetch(`${baseUrl}/api/users/${viewerId}/profile`, {
       headers: { Cookie: cookie }
     });
-    assert.equal(response.status, 200);
+    expect(response.status).toBe(200);
     const body = (await response.json()) as {
       relationship: Record<string, unknown>;
       recentTransactions: unknown[];
     };
 
-    assert.equal(body.relationship.relationshipStatus, "self");
-    assert.equal(body.relationship.canTransferToUser, false);
-    assert.equal(body.relationship.transactionCount, 0);
-    assert.deepEqual(body.recentTransactions, []);
+    expect(body.relationship.relationshipStatus).toBe("self");
+    expect(body.relationship.canTransferToUser).toBe(false);
+    expect(body.relationship.transactionCount).toBe(0);
+    expect(body.recentTransactions).toEqual([]);
   });
 });
 
-test("relationship transactions only query the viewer's shared ledger", async (t) => {
+test("relationship transactions only query the viewer's shared ledger", async () => {
   const viewer = createMockUser(viewerId, "viewer@example.com");
   const viewed = createMockUser(viewedId, "daniel@example.com");
-  patchUsers(t, [viewer, viewed]);
-  const findMock = patchTransactionFind(t, [
+  patchUsers([viewer, viewed]);
+  const findMock = patchTransactionFind([
     {
       _id: "tx-9",
       amount: 55.25,
@@ -387,7 +385,7 @@ test("relationship transactions only query the viewer's shared ledger", async (t
       createdAt: new Date("2026-05-20T08:00:00.000Z")
     }
   ]);
-  patchCount(t, 12);
+  patchCount(12);
 
   await withServer(async (baseUrl) => {
     const cookie = await issueAuthCookie(baseUrl);
@@ -395,23 +393,23 @@ test("relationship transactions only query the viewer's shared ledger", async (t
       `${baseUrl}/api/users/${encodeURIComponent("daniel@example.com")}/transactions?page=2&limit=5`,
       { headers: { Cookie: cookie } }
     );
-    assert.equal(response.status, 200);
+    expect(response.status).toBe(200);
     const body = (await response.json()) as {
       transactions: Array<Record<string, unknown>>;
       pagination: Record<string, unknown>;
     };
 
-    assert.deepEqual(findMock.calls, [
+    expect(findMock.calls).toStrictEqual([
       { ownerId: viewerId, counterpartyEmail: "daniel@example.com" }
     ]);
-    assert.deepEqual(body.pagination, {
+    expect(body.pagination).toEqual({
       page: 2,
       limit: 5,
       total: 12,
       totalPages: 3
     });
-    assert.equal(body.transactions[0].direction, "received");
-    assert.equal(body.transactions[0].amount, 55.25);
-    assert.equal(body.transactions[0].description, "Rent split");
+    expect(body.transactions[0].direction).toBe("received");
+    expect(body.transactions[0].amount).toBe(55.25);
+    expect(body.transactions[0].description).toBe("Rent split");
   });
 });

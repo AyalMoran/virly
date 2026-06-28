@@ -1,32 +1,32 @@
 
-
 // src/config.dbDriver.test.ts
-import assert from "node:assert/strict";
-import test from "node:test";
+import { jest } from "@jest/globals";
 
 async function loadConfig(env: Record<string, string | undefined>) {
   const prev = { ...process.env };
   Object.assign(process.env, env);
-  // bust the module cache so config.ts re-evaluates with new env
-  const mod = await import(`../config.js?ts=${Date.now()}`);
+  let mod: { config: typeof import("../config.js").config } | undefined;
+  // jest.isolateModulesAsync resets the module registry so config.ts
+  // re-evaluates against the patched process.env on each call.
+  await jest.isolateModulesAsync(async () => {
+    mod = (await import("../config.js")) as { config: typeof import("../config.js").config };
+  });
   process.env = prev;
-  return mod.config as typeof import("../config.js").config;
+  return mod!.config;
 }
 
 test("dbDriver defaults to mongo", async () => {
   const config = await loadConfig({ VIRLY_DB_DRIVER: undefined });
-  assert.equal(config.dbDriver, "mongo");
+  expect(config.dbDriver).toBe("mongo");
 });
 
 test("dbDriver=postgres requires VIRLY_POSTGRES_URL", async () => {
-  await assert.rejects(
-    () =>
-      loadConfig({
-        VIRLY_DB_DRIVER: "postgres",
-        VIRLY_POSTGRES_URL: undefined
-      }),
-    /VIRLY_POSTGRES_URL/
-  );
+  const err = await loadConfig({
+    VIRLY_DB_DRIVER: "postgres",
+    VIRLY_POSTGRES_URL: undefined
+  }).then(() => null, (e) => e);
+  expect(err).toBeInstanceOf(Error);
+  expect((err as Error).message).toMatch(/VIRLY_POSTGRES_URL/);
 });
 
 test("dbDriver=postgres accepts a postgres url", async () => {
@@ -34,6 +34,6 @@ test("dbDriver=postgres accepts a postgres url", async () => {
     VIRLY_DB_DRIVER: "postgres",
     VIRLY_POSTGRES_URL: "postgres://localhost:5432/virly"
   });
-  assert.equal(config.dbDriver, "postgres");
-  assert.equal(config.postgresUrl, "postgres://localhost:5432/virly");
+  expect(config.dbDriver).toBe("postgres");
+  expect(config.postgresUrl).toBe("postgres://localhost:5432/virly");
 });

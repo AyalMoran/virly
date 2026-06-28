@@ -1,20 +1,18 @@
-import assert from "node:assert/strict";
-import test from "node:test";
 import { userIdFromCookieHeader, signAuthCookieValue, AUTH_COOKIE_NAME } from "../handshakeAuth.js";
 import { userRoom } from "../rooms.js";
 
 test("extracts the userId from a valid auth cookie", () => {
   const cookie = `${AUTH_COOKIE_NAME}=${signAuthCookieValue("u1")}`;
-  assert.equal(userIdFromCookieHeader(cookie), "u1");
+  expect(userIdFromCookieHeader(cookie)).toBe("u1");
 });
 
 test("returns null when the cookie is missing or invalid", () => {
-  assert.equal(userIdFromCookieHeader(undefined), null);
-  assert.equal(userIdFromCookieHeader(`${AUTH_COOKIE_NAME}=garbage`), null);
-  assert.equal(userIdFromCookieHeader("other=1"), null);
-  assert.equal(userIdFromCookieHeader("virly_auth=%GG"), null);
+  expect(userIdFromCookieHeader(undefined)).toBeNull();
+  expect(userIdFromCookieHeader(`${AUTH_COOKIE_NAME}=garbage`)).toBeNull();
+  expect(userIdFromCookieHeader("other=1")).toBeNull();
+  expect(userIdFromCookieHeader("virly_auth=%GG")).toBeNull();
 });
 
 test("room name is namespaced per user", () => {
-  assert.equal(userRoom("u1"), "user:u1");
+  expect(userRoom("u1")).toBe("user:u1");
 });
