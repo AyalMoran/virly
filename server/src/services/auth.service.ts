@@ -101,9 +101,7 @@ export const authService = {
     return {
       user: {
         ...user,
-        isVerified: true,
-        verificationTokenHash: null,
-        verificationTokenExpiresAt: null
+        isVerified: true
       },
       alreadyVerified: false
     };

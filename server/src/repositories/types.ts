@@ -57,14 +57,12 @@ export type UserRecord = {
   phone: string;
   isVerified: boolean;
   personalDetails: string | null;
-  verificationTokenHash: string | null;
-  verificationTokenExpiresAt: Date | null;
   balance: number;
   role: UserRole;
   createdAt: Date;
   updatedAt: Date;
 };
-export type PublicUserRecord = Omit<UserRecord, "passwordHash" | "verificationTokenHash">;
+export type PublicUserRecord = Omit<UserRecord, "passwordHash">;
 
 export type TransactionRecord = {
   id: string;
@@ -222,7 +220,6 @@ export interface UserRepository {
     balance: number;
   }, tx?: TxContext): Promise<UserRecord>;
   setBalance(id: string, balance: number, tx?: TxContext): Promise<void>;
-  setVerificationToken(id: string, hash: string | null, expiresAt: Date | null, tx?: TxContext): Promise<void>;
   markVerified(id: string, tx?: TxContext): Promise<void>;
   setPersonalDetails(id: string, personalDetailsId: string, tx?: TxContext): Promise<void>;
 }

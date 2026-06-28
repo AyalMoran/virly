@@ -31,8 +31,6 @@ function createUserRecord(overrides: Partial<UserRecord> = {}): UserRecord {
     balance: 500,
     role: "user",
     personalDetails: "507f191e810c19729de860ea",
-    verificationTokenHash: null,
-    verificationTokenExpiresAt: null,
     createdAt: new Date("2026-01-15T10:00:00.000Z"),
     updatedAt: new Date("2026-01-15T10:00:00.000Z"),
     ...overrides
@@ -346,9 +344,7 @@ test("login: unknown email throws AppError(401) with the SAME message (no enumer
 test("verifyEmail: valid unexpired matching token flips an unverified account", async (t) => {
   const token = createVerificationToken("507f1f77bcf86cd799439011");
   const user = createUserRecord({
-    isVerified: false,
-    verificationTokenHash: hashToken(token),
-    verificationTokenExpiresAt: verificationTokenExpiry()
+    isVerified: false
   });
   const markVerifiedCalls: string[] = [];
   const deleteForUserCalls: string[] = [];
@@ -384,8 +380,6 @@ test("verifyEmail: valid unexpired matching token flips an unverified account", 
   assert.equal(result.alreadyVerified, false);
   assert.equal(result.user.id, user.id);
   assert.equal(result.user.isVerified, true);
-  assert.equal(result.user.verificationTokenHash, null);
-  assert.equal(result.user.verificationTokenExpiresAt, null);
   assert.equal(markVerifiedCalls.length, 1);
   assert.equal(markVerifiedCalls[0], user.id);
   // Verify the store was cleared after success
@@ -396,9 +390,7 @@ test("verifyEmail: valid unexpired matching token flips an unverified account", 
 test("verifyEmail: already-verified account short-circuits without state change", async (t) => {
   const token = createVerificationToken("507f1f77bcf86cd799439011");
   const user = createUserRecord({
-    isVerified: true,
-    verificationTokenHash: "stale-hash",
-    verificationTokenExpiresAt: verificationTokenExpiry()
+    isVerified: true
   });
   const markVerifiedCalls: string[] = [];
   // Short-circuit happens before the store is read; stub returns null to confirm
@@ -421,16 +413,13 @@ test("verifyEmail: already-verified account short-circuits without state change"
   assert.equal(result.user, user);
   // No state mutation, no persistence call.
   assert.equal(result.user.isVerified, true);
-  assert.equal(result.user.verificationTokenHash, "stale-hash");
   assert.equal(markVerifiedCalls.length, 0);
 });
 
 test("verifyEmail: expired stored token throws AppError(400)", async (t) => {
   const token = createVerificationToken("507f1f77bcf86cd799439011");
   const user = createUserRecord({
-    isVerified: false,
-    verificationTokenHash: hashToken(token),
-    verificationTokenExpiresAt: new Date(Date.now() - 1000) // already expired
+    isVerified: false
   });
   const markVerifiedCalls: string[] = [];
   const vt = makeVerificationTokenStub({
@@ -468,9 +457,7 @@ test("verifyEmail: expired stored token throws AppError(400)", async (t) => {
 test("verifyEmail: token hash mismatch throws AppError(400)", async (t) => {
   const token = createVerificationToken("507f1f77bcf86cd799439011");
   const user = createUserRecord({
-    isVerified: false,
-    verificationTokenHash: hashToken("a-different-token"),
-    verificationTokenExpiresAt: verificationTokenExpiry()
+    isVerified: false
   });
   const markVerifiedCalls: string[] = [];
   const vt = makeVerificationTokenStub({
@@ -506,7 +493,7 @@ test("verifyEmail: token hash mismatch throws AppError(400)", async (t) => {
 
 test("verifyEmail: absent token record (null from store) throws AppError(400)", async (t) => {
   const token = createVerificationToken("507f1f77bcf86cd799439011");
-  const user = createUserRecord({ isVerified: false, verificationTokenHash: null, verificationTokenExpiresAt: null });
+  const user = createUserRecord({ isVerified: false });
   const markVerifiedCalls: string[] = [];
   const vt = makeVerificationTokenStub(null); // no token in the store
   withRepos(

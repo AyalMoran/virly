@@ -49,8 +49,6 @@ function createUserRecord(overrides: Partial<UserRecord> = {}): UserRecord {
     balance: 0,
     role: "user",
     personalDetails: null,
-    verificationTokenHash: null,
-    verificationTokenExpiresAt: null,
     createdAt: new Date("2026-01-01T00:00:00.000Z"),
     updatedAt: new Date("2026-01-01T00:00:00.000Z"),
     ...overrides

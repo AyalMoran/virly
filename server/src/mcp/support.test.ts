@@ -13,8 +13,6 @@ function user(overrides: Partial<UserRecord> = {}): UserRecord {
     phone: "+1",
     isVerified: true,
     personalDetails: null,
-    verificationTokenHash: null,
-    verificationTokenExpiresAt: null,
     balance: 1840.5,
     role: "user",
     createdAt: new Date("2026-01-01T00:00:00.000Z"),

@@ -37,14 +37,6 @@ const userSchema = new Schema(
       ref: "PersonalDetails",
       default: null
     },
-    verificationTokenHash: {
-      type: String,
-      default: null
-    },
-    verificationTokenExpiresAt: {
-      type: Date,
-      default: null
-    },
     balance: {
       type: Number,
       required: true
