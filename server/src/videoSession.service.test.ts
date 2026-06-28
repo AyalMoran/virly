@@ -33,7 +33,6 @@ function createMockUser(id: string, role = "user", email = "user@example.com"): 
     phone: "+972000000000",
     isVerified: true,
     personalDetails: null,
-    verificationTokenExpiresAt: null,
     balance: 0,
     role: role as MockUser["role"],
     createdAt: new Date("2026-06-09T00:00:00.000Z"),
@@ -53,7 +52,6 @@ function makeUserRepo(users: MockUser[] = []): UserRepository {
     async findManyByIds(ids) { return users.filter((u) => ids.includes(u.id)) as never; },
     async create() { throw new Error("not implemented"); },
     async setBalance() {},
-    async setVerificationToken() {},
     async markVerified() {},
     async setPersonalDetails() {}
   };

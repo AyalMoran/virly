@@ -57,14 +57,12 @@ export type UserRecord = {
   phone: string;
   isVerified: boolean;
   personalDetails: string | null;
-  verificationTokenHash: string | null;
-  verificationTokenExpiresAt: Date | null;
   balance: number;
   role: UserRole;
   createdAt: Date;
   updatedAt: Date;
 };
-export type PublicUserRecord = Omit<UserRecord, "passwordHash" | "verificationTokenHash">;
+export type PublicUserRecord = Omit<UserRecord, "passwordHash">;
 
 export type TransactionRecord = {
   id: string;
@@ -191,6 +189,15 @@ export type VideoAuditLogRecord = {
   updatedAt: Date;
 };
 
+export type VerificationTokenRecord = {
+  id: string;
+  userId: string;
+  tokenHash: string;
+  expiresAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
 // ---- Repository interfaces ----------------------------------------------------
 // NOTE to implementer: each interface below lists ONLY the methods used by a
 // current call site. When refactoring a consumer (Stage B), if you find a usage
@@ -213,7 +220,6 @@ export interface UserRepository {
     balance: number;
   }, tx?: TxContext): Promise<UserRecord>;
   setBalance(id: string, balance: number, tx?: TxContext): Promise<void>;
-  setVerificationToken(id: string, hash: string | null, expiresAt: Date | null, tx?: TxContext): Promise<void>;
   markVerified(id: string, tx?: TxContext): Promise<void>;
   setPersonalDetails(id: string, personalDetailsId: string, tx?: TxContext): Promise<void>;
 }
@@ -340,6 +346,15 @@ export interface VideoAuditLogRepository {
   create(input: Omit<VideoAuditLogRecord, "id" | "createdAt" | "updatedAt">, tx?: TxContext): Promise<VideoAuditLogRecord>;
 }
 
+export interface VerificationTokenRepository {
+  /** Replace the user's active token (one per user). */
+  upsertForUser(userId: string, tokenHash: string, expiresAt: Date, tx?: TxContext): Promise<VerificationTokenRecord>;
+  findByUserId(userId: string, tx?: TxContext): Promise<VerificationTokenRecord | null>;
+  deleteForUser(userId: string, tx?: TxContext): Promise<void>;
+  /** Delete all tokens with expiresAt < now; returns the count removed. */
+  deleteExpired(now: Date, tx?: TxContext): Promise<number>;
+}
+
 export interface Repositories {
   users: UserRepository;
   transactions: TransactionRepository;
@@ -350,5 +365,6 @@ export interface Repositories {
   aiAuditLogs: AiAuditLogRepository;
   videoSessions: VideoSessionRepository;
   videoAuditLogs: VideoAuditLogRepository;
+  verificationTokens: VerificationTokenRepository;
   runInTransaction<T>(fn: (tx: TxContext) => Promise<T>): Promise<T>;
 }

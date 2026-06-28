@@ -88,8 +88,6 @@ function toUserRecord(user: MockUser): UserRecord {
     phone: user.phone,
     isVerified: user.isVerified,
     personalDetails: null,
-    verificationTokenHash: null,
-    verificationTokenExpiresAt: null,
     balance: user.balance,
     role: user.role as UserRecord["role"],
     createdAt: user.createdAt,

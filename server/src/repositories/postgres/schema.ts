@@ -15,8 +15,6 @@ export const users = pgTable("users", {
   phone: text("phone").notNull(),
   isVerified: boolean("is_verified").notNull().default(false),
   personalDetails: char("personal_details", { length: 24 }),
-  verificationTokenHash: text("verification_token_hash"),
-  verificationTokenExpiresAt: timestamp("verification_token_expires_at", { withTimezone: true }),
   balance: doublePrecision("balance").notNull(),
   role: text("role").notNull().default("user"),
   createdAt: createdAt(),
@@ -170,6 +168,17 @@ export const videoSessions = pgTable("video_sessions", {
   index("video_sessions_status_idx").on(t.status),
   check("video_sessions_type_ck", sql`${t.type} in ('support','sales')`),
   check("video_sessions_status_ck", sql`${t.status} in ('requested','waiting_for_agent','active','ended','missed','cancelled','failed')`)
+]);
+
+export const verificationTokens = pgTable("verification_tokens", {
+  id: id(),
+  userId: char("user_id", { length: 24 }).notNull(),
+  tokenHash: text("token_hash").notNull(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt()
+}, (t) => [
+  uniqueIndex("verification_tokens_user_id_uq").on(t.userId)
 ]);
 
 export const videoAuditLogs = pgTable("video_audit_logs", {
