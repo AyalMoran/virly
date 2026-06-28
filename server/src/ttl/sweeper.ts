@@ -10,6 +10,7 @@ import { aiConversations, aiPendingTransfers, verificationTokens } from "../repo
 import { getPgDb, type PgDatabase } from "../db/postgres.js";
 
 export async function sweepExpired(db: PgDatabase = getPgDb(), now: Date = new Date()): Promise<void> {
+  // TODO: instead ofd hardcoding the rows we delete, we could introspect the schema for all tables with an `expires_at` column and sweep them all.
   await db.delete(aiConversations).where(lt(aiConversations.expiresAt, now));
   await db.delete(aiPendingTransfers).where(lt(aiPendingTransfers.expiresAt, now));
   await db.delete(verificationTokens).where(lt(verificationTokens.expiresAt, now));

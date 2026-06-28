@@ -299,8 +299,8 @@ function createChatModel(temperature: number)
         apiKey : config.ai.openAIApiKey,
         model : config.ai.model,
         temperature,
-        maxRetries : 1,
-        timeout : 10000
+        maxRetries : 2,
+        timeout : 10_000
     });
 }
 
