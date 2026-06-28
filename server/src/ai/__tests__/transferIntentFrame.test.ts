@@ -1,6 +1,4 @@
 
-import assert from "node:assert/strict";
-import test from "node:test";
 import {
   createEmptyCounterpartyMemory,
   createEmptyTransferIntentFrame,
@@ -158,11 +156,10 @@ test("normalizeCounterpartyMemory deserializes an absent frame as idle (additive
 
   const normalized = normalizeCounterpartyMemory(legacy);
 
-  assert.deepEqual(
-    normalized.transferIntentFrame,
+  expect(normalized.transferIntentFrame).toStrictEqual(
     createEmptyTransferIntentFrame()
   );
-  assert.equal(normalized.transferIntentFrame?.status, "idle");
+  expect(normalized.transferIntentFrame?.status).toBe("idle");
 });
 
 test("normalizeCounterpartyMemory round-trips a populated frame", () => {
@@ -179,10 +176,10 @@ test("normalizeCounterpartyMemory round-trips a populated frame", () => {
     transferIntentFrame: frame
   });
 
-  assert.equal(normalized.transferIntentFrame?.status, "pending_confirmation");
-  assert.equal(normalized.transferIntentFrame?.recipient?.email, "sga@thunder.com");
-  assert.equal(normalized.transferIntentFrame?.amount?.value, 62.41);
-  assert.equal(normalized.transferIntentFrame?.lastUpdatedTurn, 1);
+  expect(normalized.transferIntentFrame?.status).toBe("pending_confirmation");
+  expect(normalized.transferIntentFrame?.recipient?.email).toBe("sga@thunder.com");
+  expect(normalized.transferIntentFrame?.amount?.value).toBe(62.41);
+  expect(normalized.transferIntentFrame?.lastUpdatedTurn).toBe(1);
 });
 
 test("a transfer-intent slot set on turn 1 survives to turn 2", async () => {
@@ -214,9 +211,9 @@ test("a transfer-intent slot set on turn 1 survives to turn 2", async () => {
   );
 
   const frameAfterTurn1 = store.saved.at(-1)?.memory.transferIntentFrame;
-  assert.equal(frameAfterTurn1?.status, "pending_confirmation");
-  assert.equal(frameAfterTurn1?.recipient?.email, "alex@example.com");
-  assert.equal(frameAfterTurn1?.amount?.value, 25);
+  expect(frameAfterTurn1?.status).toBe("pending_confirmation");
+  expect(frameAfterTurn1?.recipient?.email).toBe("alex@example.com");
+  expect(frameAfterTurn1?.amount?.value).toBe(25);
 
   // Turn 2: an unrelated non-transfer turn must not erase the frame.
   await runAssistantGraph(
@@ -229,8 +226,8 @@ test("a transfer-intent slot set on turn 1 survives to turn 2", async () => {
   );
 
   const frameAfterTurn2 = store.saved.at(-1)?.memory.transferIntentFrame;
-  assert.equal(frameAfterTurn2?.recipient?.email, "alex@example.com");
-  assert.equal(frameAfterTurn2?.amount?.value, 25);
+  expect(frameAfterTurn2?.recipient?.email).toBe("alex@example.com");
+  expect(frameAfterTurn2?.amount?.value).toBe(25);
 });
 
 test('changing the recipient keeps the established amount from the frame', async () => {
@@ -262,8 +259,8 @@ test('changing the recipient keeps the established amount from the frame', async
       transferPreparationService: echoPreparationService()
     }
   );
-  assert.equal(first.confirmation?.recipientEmail, "alex@example.com");
-  assert.equal(first.confirmation?.amount, 25);
+  expect(first.confirmation?.recipientEmail).toBe("alex@example.com");
+  expect(first.confirmation?.amount).toBe(25);
 
   // Turn 2: change only the recipient — the amount is inherited from the frame.
   const second = await runAssistantGraph(
@@ -276,6 +273,6 @@ test('changing the recipient keeps the established amount from the frame', async
     }
   );
 
-  assert.equal(second.confirmation?.recipientEmail, "rani@example.com");
-  assert.equal(second.confirmation?.amount, 25);
+  expect(second.confirmation?.recipientEmail).toBe("rani@example.com");
+  expect(second.confirmation?.amount).toBe(25);
 });

@@ -1,20 +1,18 @@
-import assert from "node:assert/strict";
-import test from "node:test";
 import {
   buildVideoSessionCtaBlock,
   detectVideoSessionRequest
 } from "../videoSessionCta.js";
 
 test("video session detection only handles explicit support or sales call requests", () => {
-  assert.deepEqual(detectVideoSessionRequest("I need a video call with support"), {
+  expect(detectVideoSessionRequest("I need a video call with support")).toStrictEqual({
     type: "support",
     topic: "Support video request from AI assistant"
   });
-  assert.deepEqual(detectVideoSessionRequest("Can I talk to sales on a call?"), {
+  expect(detectVideoSessionRequest("Can I talk to sales on a call?")).toStrictEqual({
     type: "sales",
     topic: "Sales video request from AI assistant"
   });
-  assert.equal(detectVideoSessionRequest("I need help with a transfer"), null);
+  expect(detectVideoSessionRequest("I need help with a transfer")).toBeNull();
 });
 
 test("video CTA block returns an app reference without a raw meeting link", () => {
@@ -27,10 +25,10 @@ test("video CTA block returns an app reference without a raw meeting link", () =
     false
   );
 
-  assert.equal(block.type, "video_session_cta");
-  assert.equal(block.sessionId, "507f1f77bcf86cd799439099");
-  assert.equal(block.appPath, "/video?sessionId=507f1f77bcf86cd799439099");
-  assert.equal(block.appPath.includes("meet.jit.si"), false);
-  assert.equal(block.appPath.includes("room"), false);
-  assert.equal(JSON.stringify(block).includes("external_api.js"), false);
+  expect(block.type).toBe("video_session_cta");
+  expect(block.sessionId).toBe("507f1f77bcf86cd799439099");
+  expect(block.appPath).toBe("/video?sessionId=507f1f77bcf86cd799439099");
+  expect(block.appPath.includes("meet.jit.si")).toBe(false);
+  expect(block.appPath.includes("room")).toBe(false);
+  expect(JSON.stringify(block).includes("external_api.js")).toBe(false);
 });
