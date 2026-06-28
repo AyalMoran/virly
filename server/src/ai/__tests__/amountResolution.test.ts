@@ -1,7 +1,5 @@
 
 
-import assert from "node:assert/strict";
-import test from "node:test";
 import {
   classifyAmountReference,
   parseAmountExpression,
@@ -36,42 +34,42 @@ function memoryWithPending(amount: number): CounterpartyMemory {
 }
 
 test("parseAmountExpression recognizes arithmetic and discourse references", () => {
-  assert.deepEqual(parseAmountExpression("double it"), {
+  expect(parseAmountExpression("double it")).toStrictEqual({
     base: "pending_amount",
     op: "mul",
     operand: 2
   });
-  assert.deepEqual(parseAmountExpression("כפול שתיים"), {
+  expect(parseAmountExpression("כפול שתיים")).toStrictEqual({
     base: "pending_amount",
     op: "mul",
     operand: 2
   });
-  assert.deepEqual(parseAmountExpression("half of it"), {
+  expect(parseAmountExpression("half of it")).toStrictEqual({
     base: "pending_amount",
     op: "div",
     operand: 2
   });
-  assert.deepEqual(parseAmountExpression("×3"), {
+  expect(parseAmountExpression("×3")).toStrictEqual({
     base: "pending_amount",
     op: "mul",
     operand: 3
   });
-  assert.deepEqual(parseAmountExpression("the amount we discussed"), {
+  expect(parseAmountExpression("the amount we discussed")).toStrictEqual({
     base: "discussed_amount"
   });
-  assert.deepEqual(parseAmountExpression("את הסכום שדיברנו עליו"), {
+  expect(parseAmountExpression("את הסכום שדיברנו עליו")).toStrictEqual({
     base: "discussed_amount"
   });
 });
 
 test("parseAmountExpression leaves the legacy contextual vocabulary alone", () => {
   // These remain owned by classifyAmountReference.
-  assert.equal(parseAmountExpression("same amount"), null);
-  assert.equal(parseAmountExpression("that amount"), null);
-  assert.equal(parseAmountExpression("what he sent me"), null);
-  assert.equal(parseAmountExpression("אותו סכום"), null);
-  assert.equal(classifyAmountReference("same amount"), "last_pending_transfer");
-  assert.equal(classifyAmountReference("that amount"), "last_answer_total");
+  expect(parseAmountExpression("same amount")).toBeNull();
+  expect(parseAmountExpression("that amount")).toBeNull();
+  expect(parseAmountExpression("what he sent me")).toBeNull();
+  expect(parseAmountExpression("אותו סכום")).toBeNull();
+  expect(classifyAmountReference("same amount")).toBe("last_pending_transfer");
+  expect(classifyAmountReference("that amount")).toBe("last_answer_total");
 });
 
 test("resolveContextualAmount doubles the active pending amount", async () => {
@@ -82,12 +80,11 @@ test("resolveContextualAmount doubles the active pending amount", async () => {
     counterpartyMemory: memoryWithPending(62.41)
   });
 
-  assert.equal(result.status, "resolved");
-  assert.equal(result.status === "resolved" ? result.amount.amount : 0, 124.82);
-  assert.equal(
-    result.status === "resolved" ? result.amount.source : undefined,
-    "pending_confirmation"
-  );
+  expect(result.status).toBe("resolved");
+  expect(result.status === "resolved" ? result.amount.amount : 0).toBe(124.82);
+  expect(
+    result.status === "resolved" ? result.amount.source : undefined
+  ).toBe("pending_confirmation");
 });
 
 test("resolveContextualAmount halves the active pending amount", async () => {
@@ -98,8 +95,8 @@ test("resolveContextualAmount halves the active pending amount", async () => {
     counterpartyMemory: memoryWithPending(62.41)
   });
 
-  assert.equal(result.status, "resolved");
-  assert.equal(result.status === "resolved" ? result.amount.amount : 0, 31.21);
+  expect(result.status).toBe("resolved");
+  expect(result.status === "resolved" ? result.amount.amount : 0).toBe(31.21);
 });
 
 test("resolveContextualAmount resolves the discussed amount from the salient total", async () => {
@@ -129,12 +126,11 @@ test("resolveContextualAmount resolves the discussed amount from the salient tot
     counterpartyMemory: memory
   });
 
-  assert.equal(result.status, "resolved");
-  assert.equal(result.status === "resolved" ? result.amount.amount : 0, 62.41);
-  assert.equal(
-    result.status === "resolved" ? result.amount.source : undefined,
-    "discussed_amount"
-  );
+  expect(result.status).toBe("resolved");
+  expect(result.status === "resolved" ? result.amount.amount : 0).toBe(62.41);
+  expect(
+    result.status === "resolved" ? result.amount.source : undefined
+  ).toBe("discussed_amount");
 });
 
 test("resolveContextualAmount cannot double a pending amount that is absent", async () => {
@@ -145,9 +141,8 @@ test("resolveContextualAmount cannot double a pending amount that is absent", as
     counterpartyMemory: createEmptyCounterpartyMemory()
   });
 
-  assert.equal(result.status, "unresolved");
-  assert.equal(
-    result.status === "unresolved" ? result.reason : undefined,
-    "no_pending_amount"
-  );
+  expect(result.status).toBe("unresolved");
+  expect(
+    result.status === "unresolved" ? result.reason : undefined
+  ).toBe("no_pending_amount");
 });

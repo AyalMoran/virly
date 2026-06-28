@@ -1,5 +1,3 @@
-import assert from "node:assert/strict";
-import test from "node:test";
 import { DEFAULT_ASSISTANT_ID } from "../assistants.js";
 import { createEmptyCounterpartyMemory } from "../counterpartyMemory.js";
 import { runAssistantGraph } from "../graph.js";
@@ -66,6 +64,21 @@ function fakeLlmProvider(
   };
 }
 
+type ResponseBlock = ReturnType<typeof buildAssistantResponseBlocks>[number];
+
+/**
+ * Assert a block's discriminant and return it narrowed to that variant.
+ * Restores the union narrowing node:assert.equal provided implicitly but
+ * Jest's expect(...).toBe(...) does not.
+ */
+function expectBlock<T extends ResponseBlock["type"]>(
+  block: ResponseBlock | undefined,
+  type: T
+): Extract<ResponseBlock, { type: T }> {
+  expect(block?.type).toBe(type);
+  return block as Extract<ResponseBlock, { type: T }>;
+}
+
 test("response block builder maps account balance tool results into an account summary block", () => {
   const blocks = buildAssistantResponseBlocks(
     hebrewState({
@@ -93,12 +106,11 @@ test("response block builder maps account balance tool results into an account s
     })
   );
 
-  assert.equal(blocks.length, 1);
-  const [block] = blocks;
-  assert.equal(block?.type, "account_summary");
-  assert.equal(block.title?.dir, "rtl");
-  assert.equal(block.availableBalance.amount, 1234.56);
-  assert.equal(block.availableBalance.currency, "ILS");
+  expect(blocks.length).toBe(1);
+  const block = expectBlock(blocks[0], "account_summary");
+  expect(block.title?.dir).toBe("rtl");
+  expect(block.availableBalance.amount).toBe(1234.56);
+  expect(block.availableBalance.currency).toBe("ILS");
 });
 
 test("response block builder uses transaction row data instead of Markdown summaries", () => {
@@ -132,15 +144,13 @@ test("response block builder uses transaction row data instead of Markdown summa
     })
   );
 
-  assert.equal(blocks.length, 1);
-  const [block] = blocks;
-  assert.equal(block?.type, "transaction_list");
-  assert.equal(block.transactions[0]?.amount.amount, 23364.07);
-  assert.equal(
-    block.transactions[0]?.counterpartyEmail,
-    "very.long.email.address@example.com"
-  );
-  assert.equal(block.transactions[0]?.description, "בדיקת RTL");
+  expect(blocks.length).toBe(1);
+  const block = expectBlock(blocks[0], "transaction_list");
+  expect(block.transactions[0]?.amount.amount).toBe(23364.07);
+  expect(
+    block.transactions[0]?.counterpartyEmail
+  ).toBe("very.long.email.address@example.com");
+  expect(block.transactions[0]?.description).toBe("בדיקת RTL");
 });
 
 test("response block builder returns an empty state for empty transaction results", () => {
@@ -159,9 +169,9 @@ test("response block builder returns an empty state for empty transaction result
     })
   );
 
-  assert.equal(blocks.length, 1);
-  assert.equal(blocks[0]?.type, "empty_state");
-  assert.equal(blocks[0]?.message.dir, "rtl");
+  expect(blocks.length).toBe(1);
+  const block = expectBlock(blocks[0], "empty_state");
+  expect(block.message.dir).toBe("rtl");
 });
 
 test("response block builder exposes transfer confirmation blocks without executing transfer actions", () => {
@@ -209,10 +219,10 @@ test("response block builder exposes transfer confirmation blocks without execut
     })
   );
 
-  assert.equal(blocks.length, 1);
-  assert.equal(blocks[0]?.type, "transfer_confirmation");
-  assert.equal(blocks[0]?.confirmation.id, confirmation.id);
-  assert.equal(blocks[0]?.confirmation.confirmAction.body.action, "confirm");
+  expect(blocks.length).toBe(1);
+  const block = expectBlock(blocks[0], "transfer_confirmation");
+  expect(block.confirmation.id).toBe(confirmation.id);
+  expect(block.confirmation.confirmAction.body.action).toBe("confirm");
 });
 
 test("response block builder exposes pending transfer status without implying completion", () => {
@@ -240,12 +250,11 @@ test("response block builder exposes pending transfer status without implying co
     })
   );
 
-  assert.equal(blocks.length, 1);
-  const [block] = blocks;
-  assert.equal(block?.type, "transfer_status");
-  assert.equal(block.status, "pending");
-  assert.equal(block.amount?.amount, 75);
-  assert.match(block.message?.text ?? "", /שום כסף לא הועבר/);
+  expect(blocks.length).toBe(1);
+  const block = expectBlock(blocks[0], "transfer_status");
+  expect(block.status).toBe("pending");
+  expect(block.amount?.amount).toBe(75);
+  expect(block.message?.text ?? "").toMatch(/שום כסף לא הועבר/);
 });
 
 test("response block builder combines transfer limit, usage, and eligibility tool payloads", () => {
@@ -293,29 +302,27 @@ test("response block builder combines transfer limit, usage, and eligibility too
     })
   );
 
-  assert.equal(blocks.length, 1);
-  const [block] = blocks;
-  assert.equal(block?.type, "transfer_limits");
-  assert.equal(block.eligible, false);
-  assert.equal(block.amount?.amount, 3000);
-  assert.equal(block.perTransferLimit?.amount, 1000);
-  assert.equal(block.dailyRemaining?.amount, 2100);
-  assert.equal(block.maxSendableNow?.amount, 900);
-  assert.equal(block.transferCountToday, 2);
-  assert.equal(block.resetAt, "2026-06-09T00:00:00.000Z");
-  assert.deepEqual(block.reasons, ["INSUFFICIENT_BALANCE"]);
+  expect(blocks.length).toBe(1);
+  const block = expectBlock(blocks[0], "transfer_limits");
+  expect(block.eligible).toBe(false);
+  expect(block.amount?.amount).toBe(3000);
+  expect(block.perTransferLimit?.amount).toBe(1000);
+  expect(block.dailyRemaining?.amount).toBe(2100);
+  expect(block.maxSendableNow?.amount).toBe(900);
+  expect(block.transferCountToday).toBe(2);
+  expect(block.resetAt).toBe("2026-06-09T00:00:00.000Z");
+  expect(block.reasons).toStrictEqual(["INSUFFICIENT_BALANCE"]);
 });
 
 test("response block builder returns no blocks for unsupported unstructured intents", () => {
-  assert.deepEqual(
+  expect(
     buildAssistantResponseBlocks(
       baseState({
         detectedIntent: "general_help",
         toolResults: []
       })
-    ),
-    []
-  );
+    )
+  ).toStrictEqual([]);
 });
 
 test("assistant graph returns responseBlocks and tells the LLM to keep structured replies short", async () => {
@@ -364,15 +371,15 @@ test("assistant graph returns responseBlocks and tells the LLM to keep structure
     }
   );
 
-  assert.equal(result.responseFormatVersion, assistantResponseFormatVersion);
-  assert.equal(result.responseBlocks?.[0]?.type, "account_summary");
-  assert.deepEqual(structuredResponse, {
+  expect(result.responseFormatVersion).toBe(assistantResponseFormatVersion);
+  expect(result.responseBlocks?.[0]?.type).toBe("account_summary");
+  expect(structuredResponse).toStrictEqual({
     responseFormatVersion: 1,
     blockTypes: ["account_summary"],
     blockCount: 1,
     introFallbackMessage: "מצאתי את הנתונים הרלוונטיים:"
   });
-  assert.equal(result.message, "מצאתי את הפרטים:");
+  expect(result.message).toBe("מצאתי את הפרטים:");
 });
 
 test("assistant graph regenerates once when personality linter rejects an out-of-context phrase", async () => {
@@ -403,7 +410,7 @@ test("assistant graph regenerates once when personality linter rejects an out-of
     },
     async composeResponse(input) {
       composeCalls += 1;
-      assert.equal(input.responseStyleContext.situation, "balance_inquiry_success");
+      expect(input.responseStyleContext.situation).toBe("balance_inquiry_success");
       return composeCalls === 1
         ? "היתרה מוצגת בכרטיס. הכסף כבר בדרך."
         : "בדקתי לך. היתרה מוצגת בכרטיס.";
@@ -422,9 +429,9 @@ test("assistant graph regenerates once when personality linter rejects an out-of
     }
   );
 
-  assert.equal(composeCalls, 2);
-  assert.equal(result.message, "בדקתי לך. היתרה מוצגת בכרטיס.");
-  assert.doesNotMatch(result.message, /הכסף כבר בדרך/);
+  expect(composeCalls).toBe(2);
+  expect(result.message).toBe("בדקתי לך. היתרה מוצגת בכרטיס.");
+  expect(result.message).not.toMatch(/הכסף כבר בדרך/);
 });
 
 test("assistant graph falls back deterministically when personality linter rejects the retry", async () => {
@@ -471,7 +478,7 @@ test("assistant graph falls back deterministically when personality linter rejec
     }
   );
 
-  assert.equal(composeCalls, 2);
-  assert.equal(result.message, "מצאתי: Virly account Balance 125.00 ILS");
-  assert.doesNotMatch(result.message, /הכסף כבר בדרך/);
+  expect(composeCalls).toBe(2);
+  expect(result.message).toBe("מצאתי: Virly account Balance 125.00 ILS");
+  expect(result.message).not.toMatch(/הכסף כבר בדרך/);
 });

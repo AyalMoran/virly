@@ -1,5 +1,3 @@
-import assert from "node:assert/strict";
-import test from "node:test";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 import { createEmptyCounterpartyMemory } from "../counterpartyMemory.js";
 import { runAssistantGraph } from "../graph.js";
@@ -206,8 +204,8 @@ test('"double it" doubles the pending amount and keeps the recipient', async () 
     }
   );
 
-  assert.equal(result.confirmation?.recipientEmail, SGA_EMAIL);
-  assert.equal(result.confirmation?.amount, 124.82);
+  expect(result.confirmation?.recipientEmail).toBe(SGA_EMAIL);
+  expect(result.confirmation?.amount).toBe(124.82);
 });
 
 test('"send this to deni" reuses the pending amount for the new recipient', async () => {
@@ -233,8 +231,8 @@ test('"send this to deni" reuses the pending amount for the new recipient', asyn
     }
   );
 
-  assert.equal(result.confirmation?.recipientEmail, DENI_EMAIL);
-  assert.equal(result.confirmation?.amount, ANCHOR_AMOUNT);
+  expect(result.confirmation?.recipientEmail).toBe(DENI_EMAIL);
+  expect(result.confirmation?.amount).toBe(ANCHOR_AMOUNT);
 });
 
 test('"the same amount sga sent me" keeps the active recipient deni (F2)', async () => {
@@ -266,8 +264,8 @@ test('"the same amount sga sent me" keeps the active recipient deni (F2)', async
     }
   );
 
-  assert.equal(result.confirmation?.recipientEmail, DENI_EMAIL);
-  assert.equal(result.confirmation?.amount, ANCHOR_AMOUNT);
+  expect(result.confirmation?.recipientEmail).toBe(DENI_EMAIL);
+  expect(result.confirmation?.amount).toBe(ANCHOR_AMOUNT);
 });
 
 test('"the amount we discussed" resolves to the anchor amount', async () => {
@@ -292,7 +290,7 @@ test('"the amount we discussed" resolves to the anchor amount', async () => {
     }
   );
 
-  assert.equal(result.confirmation?.amount, ANCHOR_AMOUNT);
+  expect(result.confirmation?.amount).toBe(ANCHOR_AMOUNT);
 });
 
 test("an unresolvable amount reference self-corrects in one repair pass", async () => {
@@ -357,9 +355,9 @@ test("an unresolvable amount reference self-corrects in one repair pass", async 
     }
   );
 
-  assert.equal(resolveCalls, 2);
-  assert.equal(result.confirmation?.recipientEmail, DENI_EMAIL);
-  assert.equal(result.confirmation?.amount, ANCHOR_AMOUNT);
+  expect(resolveCalls).toBe(2);
+  expect(result.confirmation?.recipientEmail).toBe(DENI_EMAIL);
+  expect(result.confirmation?.amount).toBe(ANCHOR_AMOUNT);
 });
 
 test("a failing resolveTurnContext falls back to deterministic extraction", async () => {
@@ -402,6 +400,6 @@ test("a failing resolveTurnContext falls back to deterministic extraction", asyn
   );
 
   // The deterministic extraction stands when the resolver fails.
-  assert.equal(result.confirmation?.recipientEmail, "alex@example.com");
-  assert.equal(result.confirmation?.amount, 10);
+  expect(result.confirmation?.recipientEmail).toBe("alex@example.com");
+  expect(result.confirmation?.amount).toBe(10);
 });

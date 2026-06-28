@@ -1,8 +1,6 @@
-import assert from "node:assert/strict";
 import { promises as fs } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, describe, test } from "node:test";
 
 import { createLocalSource } from "../local.js";
 
@@ -51,19 +49,19 @@ describe("createLocalSource (with PDF support)", () => {
   test("lists markdown and PDF files, extracting PDF text", async () => {
     const files = await createLocalSource(dir).list();
     const byRef = new Map(files.map((f) => [f.sourceRef, f]));
-    assert.equal(files.length, 2);
+    expect(files.length).toBe(2);
 
     const md = byRef.get(path.join("policies", "fees.md"));
-    assert.ok(md);
-    assert.equal(md.mimeType, "text/markdown");
-    assert.equal(md.category, "policy");
-    assert.match(md.content, /Transfers are free/);
+    expect(md).toBeTruthy();
+    expect(md!.mimeType).toBe("text/markdown");
+    expect(md!.category).toBe("policy");
+    expect(md!.content).toMatch(/Transfers are free/);
 
     const pdf = byRef.get(path.join("loans", "terms.pdf"));
-    assert.ok(pdf);
-    assert.equal(pdf.mimeType, "application/pdf");
-    assert.equal(pdf.category, "loan_package");
-    assert.equal(pdf.title, "terms");
-    assert.match(pdf.content, /Premium loan APR is 5\.9 percent/);
+    expect(pdf).toBeTruthy();
+    expect(pdf!.mimeType).toBe("application/pdf");
+    expect(pdf!.category).toBe("loan_package");
+    expect(pdf!.title).toBe("terms");
+    expect(pdf!.content).toMatch(/Premium loan APR is 5\.9 percent/);
   });
 });

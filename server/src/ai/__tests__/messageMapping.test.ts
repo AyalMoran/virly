@@ -1,8 +1,5 @@
 
 
-import assert from "node:assert/strict";
-import test from "node:test";
-
 import {
   AIMessage,
   HumanMessage,
@@ -19,11 +16,11 @@ test("fromStored maps user to HumanMessage and assistant to AIMessage", () => {
     { role: "assistant", content: "b" }
   ]);
 
-  assert.equal(messages.length, 2);
-  assert.equal(messages[0].getType(), "human");
-  assert.equal(messages[1].getType(), "ai");
-  assert.equal(String(messages[0].content), "a");
-  assert.equal(String(messages[1].content), "b");
+  expect(messages.length).toBe(2);
+  expect(messages[0].getType()).toBe("human");
+  expect(messages[1].getType()).toBe("ai");
+  expect(String(messages[0].content)).toBe("a");
+  expect(String(messages[1].content)).toBe("b");
 });
 
 test("toStored(fromStored(...)) round-trips role and content", () => {
@@ -35,8 +32,7 @@ test("toStored(fromStored(...)) round-trips role and content", () => {
 
   const roundTripped = toStored(fromStored(input));
 
-  assert.deepEqual(
-    roundTripped,
+  expect(roundTripped).toStrictEqual(
     input.map((message) => ({ role: message.role, content: message.content }))
   );
 });
@@ -49,7 +45,7 @@ test("toStored drops system and tool messages (not persisted)", () => {
     new AIMessage("hi there")
   ]);
 
-  assert.deepEqual(stored, [
+  expect(stored).toStrictEqual([
     { role: "user", content: "hello" },
     { role: "assistant", content: "hi there" }
   ]);
@@ -58,8 +54,8 @@ test("toStored drops system and tool messages (not persisted)", () => {
 test("toProviderMessages produces the same {role,content} projection as toStored", () => {
   const messages = [new HumanMessage("question"), new AIMessage("answer")];
 
-  assert.deepEqual(toProviderMessages(messages), toStored(messages));
-  assert.deepEqual(toProviderMessages(messages), [
+  expect(toProviderMessages(messages)).toStrictEqual(toStored(messages));
+  expect(toProviderMessages(messages)).toStrictEqual([
     { role: "user", content: "question" },
     { role: "assistant", content: "answer" }
   ]);
@@ -70,7 +66,7 @@ test("toStored coerces non-string content to a safe string (R4 guard)", () => {
     new AIMessage({ content: [{ type: "text", text: "block" }] as never })
   ]);
 
-  assert.equal(stored.length, 1);
-  assert.equal(stored[0].role, "assistant");
-  assert.equal(typeof stored[0].content, "string");
+  expect(stored.length).toBe(1);
+  expect(stored[0].role).toBe("assistant");
+  expect(typeof stored[0].content).toBe("string");
 });

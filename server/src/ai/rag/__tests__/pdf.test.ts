@@ -1,6 +1,3 @@
-import assert from "node:assert/strict";
-import { describe, test } from "node:test";
-
 import { extractPdfText } from "../pdf.js";
 
 /** Build a tiny but valid single-page PDF containing `text` (computed xref offsets). */
@@ -32,12 +29,12 @@ function makeMinimalPdf(text: string): Uint8Array {
 describe("extractPdfText", () => {
   test("extracts the document text from a PDF", async () => {
     const text = await extractPdfText(makeMinimalPdf("Premium loan APR is 5.9 percent"));
-    assert.match(text, /Premium loan APR is 5\.9 percent/);
+    expect(text).toMatch(/Premium loan APR is 5\.9 percent/);
   });
 
   test("strips pdf-parse page-separator markers", async () => {
     const text = await extractPdfText(makeMinimalPdf("Eligibility policy"));
-    assert.doesNotMatch(text, /--\s*\d+\s*of\s*\d+\s*--/);
-    assert.match(text, /Eligibility policy/);
+    expect(text).not.toMatch(/--\s*\d+\s*of\s*\d+\s*--/);
+    expect(text).toMatch(/Eligibility policy/);
   });
 });
