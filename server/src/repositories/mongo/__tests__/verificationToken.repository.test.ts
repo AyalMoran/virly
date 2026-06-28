@@ -1,6 +1,4 @@
 // src/repositories/mongo/verificationToken.repository.test.ts
-import assert from "node:assert/strict";
-import test from "node:test";
 import { toVerificationTokenRecord } from "../verificationToken.repository.js";
 
 test("maps a Mongo doc to a plain VerificationTokenRecord", () => {
@@ -13,7 +11,7 @@ test("maps a Mongo doc to a plain VerificationTokenRecord", () => {
     createdAt: now,
     updatedAt: now
   });
-  assert.equal(rec.id, "abc");
-  assert.equal(rec.userId, "u1");
-  assert.equal(rec.tokenHash, "h");
+  expect(rec.id).toBe("abc");
+  expect(rec.userId).toBe("u1");
+  expect(rec.tokenHash).toBe("h");
 });

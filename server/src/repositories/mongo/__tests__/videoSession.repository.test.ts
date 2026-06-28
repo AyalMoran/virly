@@ -1,15 +1,16 @@
 
 
 // src/repositories/mongo/videoSession.repository.test.ts
-import assert from "node:assert/strict";
-import test from "node:test";
 import { VideoSession } from "../../../models/VideoSession.js";
 import { mongoVideoSessionRepository } from "../videoSession.repository.js";
 
-function patch<T extends object, K extends keyof T>(o: T, k: K, v: T[K], t: test.TestContext) {
+const cleanups: Array<() => void | Promise<void>> = [];
+afterEach(async () => { for (const c of cleanups.splice(0).reverse()) await c(); });
+
+function patch<T extends object, K extends keyof T>(o: T, k: K, v: T[K]) {
   const orig = o[k];
   o[k] = v;
-  t.after(() => { o[k] = orig; });
+  cleanups.push(() => { o[k] = orig; });
 }
 
 const SESSION_OID = "507f1f77bcf86cd799439099";
@@ -39,77 +40,77 @@ const leanSession = {
 // findById
 // ---------------------------------------------------------------------------
 
-test("findById: maps lean doc to record — id is string, no _id leaked", async (t) => {
+test("findById: maps lean doc to record — id is string, no _id leaked", async () => {
   const chain = { session: () => chain, lean: async () => leanSession };
-  patch(VideoSession, "findOne", ((_f: unknown) => chain) as unknown as typeof VideoSession.findOne, t);
+  patch(VideoSession, "findOne", ((_f: unknown) => chain) as unknown as typeof VideoSession.findOne);
 
   const rec = await mongoVideoSessionRepository.findById(SESSION_OID);
-  assert.ok(rec);
-  assert.equal(rec.id, SESSION_OID);
-  assert.equal((rec as Record<string, unknown>)._id, undefined, "must not leak _id");
-  assert.equal(rec.userId, USER_OID);
-  assert.equal(rec.assignedAgentId, null);
-  assert.equal(rec.status, "waiting_for_agent");
+  expect(rec).toBeTruthy();
+  expect(rec!.id).toBe(SESSION_OID);
+  expect((rec as Record<string, unknown>)._id).toBeUndefined();
+  expect(rec!.userId).toBe(USER_OID);
+  expect(rec!.assignedAgentId).toBeNull();
+  expect(rec!.status).toBe("waiting_for_agent");
 });
 
-test("findById: queries by _id", async (t) => {
+test("findById: queries by _id", async () => {
   let captured: unknown;
   const chain = { session: () => chain, lean: async () => null };
-  patch(VideoSession, "findOne", ((f: unknown) => { captured = f; return chain; }) as unknown as typeof VideoSession.findOne, t);
+  patch(VideoSession, "findOne", ((f: unknown) => { captured = f; return chain; }) as unknown as typeof VideoSession.findOne);
 
   await mongoVideoSessionRepository.findById(SESSION_OID);
-  assert.deepEqual(captured, { _id: SESSION_OID });
+  expect(captured).toStrictEqual({ _id: SESSION_OID });
 });
 
-test("findById: returns null for malformed id without touching model", async (t) => {
+test("findById: returns null for malformed id without touching model", async () => {
   let called = false;
-  patch(VideoSession, "findOne", (() => { called = true; return { session: () => ({}), lean: async () => null }; }) as unknown as typeof VideoSession.findOne, t);
+  patch(VideoSession, "findOne", (() => { called = true; return { session: () => ({}), lean: async () => null }; }) as unknown as typeof VideoSession.findOne);
 
   const rec = await mongoVideoSessionRepository.findById("not-an-oid");
-  assert.equal(rec, null);
-  assert.equal(called, false, "must short-circuit invalid ids");
+  expect(rec).toBeNull();
+  expect(called).toBe(false);
 });
 
-test("findById: passes session when tx provided", async (t) => {
+test("findById: passes session when tx provided", async () => {
   let captured: unknown;
   const fakeSession = { id: "s1" };
   const chain = { session(s: unknown) { captured = s; return chain; }, lean: async () => leanSession };
-  patch(VideoSession, "findOne", ((_f: unknown) => chain) as unknown as typeof VideoSession.findOne, t);
+  patch(VideoSession, "findOne", ((_f: unknown) => chain) as unknown as typeof VideoSession.findOne);
 
   await mongoVideoSessionRepository.findById(SESSION_OID, fakeSession);
-  assert.equal(captured, fakeSession);
+  expect(captured).toBe(fakeSession);
 });
 
-test("findById: stringifies non-null assignedAgentId", async (t) => {
+test("findById: stringifies non-null assignedAgentId", async () => {
   const withAgent = { ...leanSession, assignedAgentId: { toString: () => AGENT_OID } };
   const chain = { session: () => chain, lean: async () => withAgent };
-  patch(VideoSession, "findOne", ((_f: unknown) => chain) as unknown as typeof VideoSession.findOne, t);
+  patch(VideoSession, "findOne", ((_f: unknown) => chain) as unknown as typeof VideoSession.findOne);
 
   const rec = await mongoVideoSessionRepository.findById(SESSION_OID);
-  assert.ok(rec);
-  assert.equal(rec.assignedAgentId, AGENT_OID);
+  expect(rec).toBeTruthy();
+  expect(rec!.assignedAgentId).toBe(AGENT_OID);
 });
 
 // ---------------------------------------------------------------------------
 // findByRoomName
 // ---------------------------------------------------------------------------
 
-test("findByRoomName: queries by roomName and maps record", async (t) => {
+test("findByRoomName: queries by roomName and maps record", async () => {
   let captured: unknown;
   const chain = { session: () => chain, lean: async () => leanSession };
-  patch(VideoSession, "findOne", ((f: unknown) => { captured = f; return chain; }) as unknown as typeof VideoSession.findOne, t);
+  patch(VideoSession, "findOne", ((f: unknown) => { captured = f; return chain; }) as unknown as typeof VideoSession.findOne);
 
   const rec = await mongoVideoSessionRepository.findByRoomName("virly-support-abc123");
-  assert.ok(rec);
-  assert.equal(rec.roomName, "virly-support-abc123");
-  assert.deepEqual(captured, { roomName: "virly-support-abc123" });
+  expect(rec).toBeTruthy();
+  expect(rec!.roomName).toBe("virly-support-abc123");
+  expect(captured).toStrictEqual({ roomName: "virly-support-abc123" });
 });
 
 // ---------------------------------------------------------------------------
 // create
 // ---------------------------------------------------------------------------
 
-test("create: inserts and returns a record (toObject path)", async (t) => {
+test("create: inserts and returns a record (toObject path)", async () => {
   let capturedDocs: unknown;
   patch(
     VideoSession,
@@ -117,8 +118,7 @@ test("create: inserts and returns a record (toObject path)", async (t) => {
     (async (docs: unknown, _opts: unknown) => {
       capturedDocs = docs;
       return [{ ...leanSession, toObject: () => leanSession }];
-    }) as unknown as typeof VideoSession.create,
-    t
+    }) as unknown as typeof VideoSession.create
   );
 
   const rec = await mongoVideoSessionRepository.create({
@@ -137,13 +137,13 @@ test("create: inserts and returns a record (toObject path)", async (t) => {
     metadata: { userAgent: null, locale: null, source: "dashboard" }
   });
 
-  assert.ok(rec);
-  assert.equal(rec.id, SESSION_OID);
-  assert.equal((rec as Record<string, unknown>)._id, undefined);
-  assert.ok(Array.isArray(capturedDocs), "create receives an array (ordered insert)");
+  expect(rec).toBeTruthy();
+  expect(rec.id).toBe(SESSION_OID);
+  expect((rec as Record<string, unknown>)._id).toBeUndefined();
+  expect(Array.isArray(capturedDocs)).toBeTruthy();
 });
 
-test("create: passes session in options when tx provided", async (t) => {
+test("create: passes session in options when tx provided", async () => {
   let capturedOpts: Record<string, unknown> = {};
   const fakeSession = { id: "s1" };
   patch(
@@ -152,8 +152,7 @@ test("create: passes session in options when tx provided", async (t) => {
     (async (_docs: unknown, opts: Record<string, unknown>) => {
       capturedOpts = opts;
       return [{ ...leanSession, toObject: () => leanSession }];
-    }) as unknown as typeof VideoSession.create,
-    t
+    }) as unknown as typeof VideoSession.create
   );
 
   await mongoVideoSessionRepository.create(
@@ -166,14 +165,14 @@ test("create: passes session in options when tx provided", async (t) => {
     },
     fakeSession
   );
-  assert.equal(capturedOpts.session, fakeSession);
+  expect(capturedOpts.session).toBe(fakeSession);
 });
 
 // ---------------------------------------------------------------------------
 // update
 // ---------------------------------------------------------------------------
 
-test("update: calls findOneAndUpdate with $set patch and { new: true }", async (t) => {
+test("update: calls findOneAndUpdate with $set patch and { new: true }", async () => {
   let capturedFilter: unknown;
   let capturedUpdate: unknown;
   let capturedOpts: Record<string, unknown> = {};
@@ -183,39 +182,38 @@ test("update: calls findOneAndUpdate with $set patch and { new: true }", async (
     (async (f: unknown, u: unknown, o: Record<string, unknown>) => {
       capturedFilter = f; capturedUpdate = u; capturedOpts = o;
       return { ...leanSession, status: "active", toObject: () => ({ ...leanSession, status: "active" }) };
-    }) as unknown as typeof VideoSession.findOneAndUpdate,
-    t
+    }) as unknown as typeof VideoSession.findOneAndUpdate
   );
 
   const rec = await mongoVideoSessionRepository.update(SESSION_OID, { status: "active" });
-  assert.ok(rec);
-  assert.equal(rec.status, "active");
-  assert.deepEqual(capturedFilter, { _id: SESSION_OID });
-  assert.deepEqual((capturedUpdate as Record<string, unknown>).$set, { status: "active" });
-  assert.equal(capturedOpts.new, true);
+  expect(rec).toBeTruthy();
+  expect(rec!.status).toBe("active");
+  expect(capturedFilter).toStrictEqual({ _id: SESSION_OID });
+  expect((capturedUpdate as Record<string, unknown>).$set).toStrictEqual({ status: "active" });
+  expect(capturedOpts.new).toBe(true);
 });
 
-test("update: returns null for malformed id", async (t) => {
+test("update: returns null for malformed id", async () => {
   let called = false;
-  patch(VideoSession, "findOneAndUpdate", (async () => { called = true; return null; }) as unknown as typeof VideoSession.findOneAndUpdate, t);
+  patch(VideoSession, "findOneAndUpdate", (async () => { called = true; return null; }) as unknown as typeof VideoSession.findOneAndUpdate);
 
   const rec = await mongoVideoSessionRepository.update("bad-id", { status: "active" });
-  assert.equal(rec, null);
-  assert.equal(called, false);
+  expect(rec).toBeNull();
+  expect(called).toBe(false);
 });
 
-test("update: returns null when no doc matches", async (t) => {
-  patch(VideoSession, "findOneAndUpdate", (async () => null) as unknown as typeof VideoSession.findOneAndUpdate, t);
+test("update: returns null when no doc matches", async () => {
+  patch(VideoSession, "findOneAndUpdate", (async () => null) as unknown as typeof VideoSession.findOneAndUpdate);
 
   const rec = await mongoVideoSessionRepository.update(SESSION_OID, { status: "active" });
-  assert.equal(rec, null);
+  expect(rec).toBeNull();
 });
 
 // ---------------------------------------------------------------------------
 // listForUser
 // ---------------------------------------------------------------------------
 
-test("listForUser: filters by userId and sorts newest-first", async (t) => {
+test("listForUser: filters by userId and sorts newest-first", async () => {
   let capturedFilter: unknown;
   let sortSpec: unknown;
   const chain = {
@@ -223,14 +221,14 @@ test("listForUser: filters by userId and sorts newest-first", async (t) => {
     session: () => chain,
     lean: async () => [leanSession]
   };
-  patch(VideoSession, "find", ((f: unknown) => { capturedFilter = f; return chain; }) as unknown as typeof VideoSession.find, t);
+  patch(VideoSession, "find", ((f: unknown) => { capturedFilter = f; return chain; }) as unknown as typeof VideoSession.find);
 
   const recs = await mongoVideoSessionRepository.listForUser(USER_OID);
-  assert.equal(recs.length, 1);
-  assert.equal(recs[0].id, SESSION_OID);
-  assert.equal((recs[0] as Record<string, unknown>)._id, undefined);
-  assert.deepEqual(capturedFilter, { userId: USER_OID });
-  assert.deepEqual(sortSpec, { createdAt: -1 });
+  expect(recs.length).toBe(1);
+  expect(recs[0].id).toBe(SESSION_OID);
+  expect((recs[0] as Record<string, unknown>)._id).toBeUndefined();
+  expect(capturedFilter).toStrictEqual({ userId: USER_OID });
+  expect(sortSpec).toStrictEqual({ createdAt: -1 });
 });
 
 // ---------------------------------------------------------------------------
@@ -247,39 +245,39 @@ function agentQueueChain(captured: { filter?: Record<string, unknown>; sort?: un
   return chain;
 }
 
-test("listForAgentQueue: single type → exact type filter, no status, newest-first, limited", async (t) => {
+test("listForAgentQueue: single type -> exact type filter, no status, newest-first, limited", async () => {
   const captured: { filter?: Record<string, unknown>; sort?: unknown; limit?: number } = {};
-  patch(VideoSession, "find", ((f: Record<string, unknown>) => { captured.filter = f; return agentQueueChain(captured); }) as unknown as typeof VideoSession.find, t);
+  patch(VideoSession, "find", ((f: Record<string, unknown>) => { captured.filter = f; return agentQueueChain(captured); }) as unknown as typeof VideoSession.find);
 
   const recs = await mongoVideoSessionRepository.listForAgentQueue({ types: ["support"], limit: 50 });
-  assert.equal(recs.length, 1);
-  assert.equal(captured.filter?.type, "support");
-  assert.equal(captured.filter?.status, undefined, "no status filter when none provided (any status)");
-  assert.deepEqual(captured.sort, { createdAt: -1 });
-  assert.equal(captured.limit, 50);
+  expect(recs.length).toBe(1);
+  expect(captured.filter?.type).toBe("support");
+  expect(captured.filter?.status).toBeUndefined();
+  expect(captured.sort).toStrictEqual({ createdAt: -1 });
+  expect(captured.limit).toBe(50);
 });
 
-test("listForAgentQueue: multiple types → $in filter", async (t) => {
+test("listForAgentQueue: multiple types -> $in filter", async () => {
   const captured: { filter?: Record<string, unknown> } = {};
-  patch(VideoSession, "find", ((f: Record<string, unknown>) => { captured.filter = f; return agentQueueChain(captured); }) as unknown as typeof VideoSession.find, t);
+  patch(VideoSession, "find", ((f: Record<string, unknown>) => { captured.filter = f; return agentQueueChain(captured); }) as unknown as typeof VideoSession.find);
 
   await mongoVideoSessionRepository.listForAgentQueue({ types: ["support", "sales"], limit: 50 });
-  assert.deepEqual(captured.filter?.type, { $in: ["support", "sales"] });
+  expect(captured.filter?.type).toStrictEqual({ $in: ["support", "sales"] });
 });
 
-test("listForAgentQueue: applies exact status filter when provided (incl. terminal)", async (t) => {
+test("listForAgentQueue: applies exact status filter when provided (incl. terminal)", async () => {
   const captured: { filter?: Record<string, unknown> } = {};
-  patch(VideoSession, "find", ((f: Record<string, unknown>) => { captured.filter = f; return agentQueueChain(captured); }) as unknown as typeof VideoSession.find, t);
+  patch(VideoSession, "find", ((f: Record<string, unknown>) => { captured.filter = f; return agentQueueChain(captured); }) as unknown as typeof VideoSession.find);
 
   await mongoVideoSessionRepository.listForAgentQueue({ types: ["support"], status: "ended", limit: 50 });
-  assert.equal(captured.filter?.status, "ended", "terminal status passes through as an exact filter");
+  expect(captured.filter?.status).toBe("ended");
 });
 
-test("listForAgentQueue: forwards session when tx provided", async (t) => {
+test("listForAgentQueue: forwards session when tx provided", async () => {
   const captured: { session?: unknown } = {};
-  patch(VideoSession, "find", (() => agentQueueChain(captured)) as unknown as typeof VideoSession.find, t);
+  patch(VideoSession, "find", (() => agentQueueChain(captured)) as unknown as typeof VideoSession.find);
 
   const fakeSession = { id: "tx-1" };
   await mongoVideoSessionRepository.listForAgentQueue({ types: ["support"], limit: 10 }, fakeSession);
-  assert.equal(captured.session, fakeSession);
+  expect(captured.session).toBe(fakeSession);
 });

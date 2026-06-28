@@ -1,13 +1,14 @@
 
 
 // src/repositories/mongo/exchangeRate.repository.test.ts
-import assert from "node:assert/strict";
-import test from "node:test";
 import { ExchangeRate } from "../../../models/ExchangeRate.js";
 import { mongoExchangeRateRepository } from "../exchangeRate.repository.js";
 
-function patch<T extends object, K extends keyof T>(o: T, k: K, v: T[K], t: test.TestContext) {
-  const orig = o[k]; o[k] = v; t.after(() => { o[k] = orig; });
+const cleanups: Array<() => void | Promise<void>> = [];
+afterEach(async () => { for (const c of cleanups.splice(0).reverse()) await c(); });
+
+function patch<T extends object, K extends keyof T>(o: T, k: K, v: T[K]) {
+  const orig = o[k]; o[k] = v; cleanups.push(() => { o[k] = orig; });
 }
 
 const RATE_OID = "60d5ec49f1b2c8a1f8e4e1a1";
@@ -29,46 +30,41 @@ const leanRate = {
 // latestForBase
 // ---------------------------------------------------------------------------
 
-test("latestForBase: maps lean doc to ExchangeRateRecord with string id", async (t) => {
-  const fakeChain = {
-    sort: () => fakeChain,
-    lean: async () => leanRate
-  };
+test("latestForBase: maps lean doc to ExchangeRateRecord with string id", async () => {
+  const fakeChain = { sort: () => fakeChain, lean: async () => leanRate };
   patch(
     ExchangeRate,
     "findOne",
-    ((_filter: unknown) => fakeChain) as unknown as typeof ExchangeRate.findOne,
-    t
+    ((_filter: unknown) => fakeChain) as unknown as typeof ExchangeRate.findOne
   );
 
   const rec = await mongoExchangeRateRepository.latestForBase("ILS");
 
-  assert.ok(rec);
-  assert.equal(rec.id, RATE_OID);
-  assert.equal((rec as Record<string, unknown>)._id, undefined, "must not expose _id");
-  assert.equal(rec.baseCurrency, "ILS");
-  assert.deepEqual(rec.rates, { ILS: 1, USD: 0.27, EUR: 0.25 });
-  assert.equal(rec.provider, "exchangerate-api");
-  assert.equal(rec.validForDate, "2026-06-22");
-  assert.ok(rec.sourceResponseHash === "abc123");
-  assert.ok(rec.createdAt instanceof Date);
-  assert.ok(rec.updatedAt instanceof Date);
+  expect(rec).toBeTruthy();
+  expect(rec!.id).toBe(RATE_OID);
+  expect((rec as Record<string, unknown>)._id).toBeUndefined();
+  expect(rec!.baseCurrency).toBe("ILS");
+  expect(rec!.rates).toStrictEqual({ ILS: 1, USD: 0.27, EUR: 0.25 });
+  expect(rec!.provider).toBe("exchangerate-api");
+  expect(rec!.validForDate).toBe("2026-06-22");
+  expect(rec!.sourceResponseHash === "abc123").toBeTruthy();
+  expect(rec!.createdAt).toBeInstanceOf(Date);
+  expect(rec!.updatedAt).toBeInstanceOf(Date);
 });
 
-test("latestForBase: returns null when no document found", async (t) => {
+test("latestForBase: returns null when no document found", async () => {
   const fakeChain = { sort: () => fakeChain, lean: async () => null };
   patch(
     ExchangeRate,
     "findOne",
-    ((_filter: unknown) => fakeChain) as unknown as typeof ExchangeRate.findOne,
-    t
+    ((_filter: unknown) => fakeChain) as unknown as typeof ExchangeRate.findOne
   );
 
   const rec = await mongoExchangeRateRepository.latestForBase("ILS");
-  assert.equal(rec, null);
+  expect(rec).toBeNull();
 });
 
-test("latestForBase: queries by baseCurrency and sorts by fetchedAt desc", async (t) => {
+test("latestForBase: queries by baseCurrency and sorts by fetchedAt desc", async () => {
   let capturedFilter: unknown;
   let capturedSort: unknown;
   const fakeChain = {
@@ -78,16 +74,15 @@ test("latestForBase: queries by baseCurrency and sorts by fetchedAt desc", async
   patch(
     ExchangeRate,
     "findOne",
-    ((filter: unknown) => { capturedFilter = filter; return fakeChain; }) as unknown as typeof ExchangeRate.findOne,
-    t
+    ((filter: unknown) => { capturedFilter = filter; return fakeChain; }) as unknown as typeof ExchangeRate.findOne
   );
 
   await mongoExchangeRateRepository.latestForBase("ILS");
-  assert.deepEqual(capturedFilter, { baseCurrency: "ILS" });
-  assert.deepEqual(capturedSort, { fetchedAt: -1 });
+  expect(capturedFilter).toStrictEqual({ baseCurrency: "ILS" });
+  expect(capturedSort).toStrictEqual({ fetchedAt: -1 });
 });
 
-test("latestForBase: passes session when tx context is provided", async (t) => {
+test("latestForBase: passes session when tx context is provided", async () => {
   const fakeSession = { id: "fake-session" };
   let capturedSession: unknown;
   const fakeChain = {
@@ -98,19 +93,18 @@ test("latestForBase: passes session when tx context is provided", async (t) => {
   patch(
     ExchangeRate,
     "findOne",
-    ((_filter: unknown) => fakeChain) as unknown as typeof ExchangeRate.findOne,
-    t
+    ((_filter: unknown) => fakeChain) as unknown as typeof ExchangeRate.findOne
   );
 
   await mongoExchangeRateRepository.latestForBase("ILS", fakeSession);
-  assert.equal(capturedSession, fakeSession);
+  expect(capturedSession).toBe(fakeSession);
 });
 
 // ---------------------------------------------------------------------------
 // findForDate
 // ---------------------------------------------------------------------------
 
-test("findForDate: queries by baseCurrency and validForDate, sorts by fetchedAt desc", async (t) => {
+test("findForDate: queries by baseCurrency and validForDate, sorts by fetchedAt desc", async () => {
   let capturedFilter: unknown;
   let capturedSort: unknown;
   const fakeChain = {
@@ -120,33 +114,31 @@ test("findForDate: queries by baseCurrency and validForDate, sorts by fetchedAt 
   patch(
     ExchangeRate,
     "findOne",
-    ((filter: unknown) => { capturedFilter = filter; return fakeChain; }) as unknown as typeof ExchangeRate.findOne,
-    t
+    ((filter: unknown) => { capturedFilter = filter; return fakeChain; }) as unknown as typeof ExchangeRate.findOne
   );
 
   const rec = await mongoExchangeRateRepository.findForDate("ILS", "2026-06-22");
 
-  assert.ok(rec);
-  assert.equal(rec.id, RATE_OID);
-  assert.equal((rec as Record<string, unknown>)._id, undefined);
-  assert.deepEqual(capturedFilter, { baseCurrency: "ILS", validForDate: "2026-06-22" });
-  assert.deepEqual(capturedSort, { fetchedAt: -1 });
+  expect(rec).toBeTruthy();
+  expect(rec!.id).toBe(RATE_OID);
+  expect((rec as Record<string, unknown>)._id).toBeUndefined();
+  expect(capturedFilter).toStrictEqual({ baseCurrency: "ILS", validForDate: "2026-06-22" });
+  expect(capturedSort).toStrictEqual({ fetchedAt: -1 });
 });
 
-test("findForDate: returns null when no document found", async (t) => {
+test("findForDate: returns null when no document found", async () => {
   const fakeChain = { sort: () => fakeChain, lean: async () => null };
   patch(
     ExchangeRate,
     "findOne",
-    ((_filter: unknown) => fakeChain) as unknown as typeof ExchangeRate.findOne,
-    t
+    ((_filter: unknown) => fakeChain) as unknown as typeof ExchangeRate.findOne
   );
 
   const rec = await mongoExchangeRateRepository.findForDate("ILS", "2026-06-22");
-  assert.equal(rec, null);
+  expect(rec).toBeNull();
 });
 
-test("findForDate: passes session when tx context is provided", async (t) => {
+test("findForDate: passes session when tx context is provided", async () => {
   const fakeSession = { id: "fake-session" };
   let capturedSession: unknown;
   const fakeChain = {
@@ -157,19 +149,18 @@ test("findForDate: passes session when tx context is provided", async (t) => {
   patch(
     ExchangeRate,
     "findOne",
-    ((_filter: unknown) => fakeChain) as unknown as typeof ExchangeRate.findOne,
-    t
+    ((_filter: unknown) => fakeChain) as unknown as typeof ExchangeRate.findOne
   );
 
   await mongoExchangeRateRepository.findForDate("ILS", "2026-06-22", fakeSession);
-  assert.equal(capturedSession, fakeSession);
+  expect(capturedSession).toBe(fakeSession);
 });
 
 // ---------------------------------------------------------------------------
 // upsertForDate
 // ---------------------------------------------------------------------------
 
-test("upsertForDate: calls updateOne with correct filter, $set, and upsert option", async (t) => {
+test("upsertForDate: calls updateOne with correct filter, $set, and upsert option", async () => {
   let capturedFilter: unknown;
   let capturedUpdate: unknown;
   let capturedOpts: unknown;
@@ -183,8 +174,7 @@ test("upsertForDate: calls updateOne with correct filter, $set, and upsert optio
       capturedUpdate = update;
       capturedOpts = opts;
       return returnedDoc;
-    }) as unknown as typeof ExchangeRate.findOneAndUpdate,
-    t
+    }) as unknown as typeof ExchangeRate.findOneAndUpdate
   );
 
   const input = {
@@ -199,16 +189,16 @@ test("upsertForDate: calls updateOne with correct filter, $set, and upsert optio
 
   const rec = await mongoExchangeRateRepository.upsertForDate(input);
 
-  assert.ok(rec);
-  assert.equal(rec.id, RATE_OID);
-  assert.equal((rec as Record<string, unknown>)._id, undefined);
-  assert.deepEqual(capturedFilter, { baseCurrency: "ILS", validForDate: "2026-06-22" });
-  assert.ok((capturedUpdate as Record<string, unknown>).$set, "update must use $set");
-  assert.ok((capturedOpts as Record<string, unknown>).upsert === true, "must use upsert: true");
-  assert.ok((capturedOpts as Record<string, unknown>).new === true, "must use new: true");
+  expect(rec).toBeTruthy();
+  expect(rec.id).toBe(RATE_OID);
+  expect((rec as Record<string, unknown>)._id).toBeUndefined();
+  expect(capturedFilter).toStrictEqual({ baseCurrency: "ILS", validForDate: "2026-06-22" });
+  expect((capturedUpdate as Record<string, unknown>).$set).toBeTruthy();
+  expect((capturedOpts as Record<string, unknown>).upsert).toBe(true);
+  expect((capturedOpts as Record<string, unknown>).new).toBe(true);
 });
 
-test("upsertForDate: passes session when tx context is provided", async (t) => {
+test("upsertForDate: passes session when tx context is provided", async () => {
   const fakeSession = { id: "fake-session" };
   let capturedOpts: unknown;
   const returnedDoc = { ...leanRate, toObject: () => leanRate };
@@ -218,8 +208,7 @@ test("upsertForDate: passes session when tx context is provided", async (t) => {
     (async (_f: unknown, _u: unknown, opts: unknown) => {
       capturedOpts = opts;
       return returnedDoc;
-    }) as unknown as typeof ExchangeRate.findOneAndUpdate,
-    t
+    }) as unknown as typeof ExchangeRate.findOneAndUpdate
   );
 
   await mongoExchangeRateRepository.upsertForDate(
@@ -235,10 +224,10 @@ test("upsertForDate: passes session when tx context is provided", async (t) => {
     fakeSession
   );
 
-  assert.equal((capturedOpts as Record<string, unknown>).session, fakeSession);
+  expect((capturedOpts as Record<string, unknown>).session).toBe(fakeSession);
 });
 
-test("upsertForDate: sourceResponseHash is preserved as null", async (t) => {
+test("upsertForDate: sourceResponseHash is preserved as null", async () => {
   let capturedUpdate: unknown;
   const nullHashLean = { ...leanRate, sourceResponseHash: null };
   const returnedDoc = { ...nullHashLean, toObject: () => nullHashLean };
@@ -249,8 +238,7 @@ test("upsertForDate: sourceResponseHash is preserved as null", async (t) => {
     (async (_f: unknown, update: unknown) => {
       capturedUpdate = update;
       return returnedDoc;
-    }) as unknown as typeof ExchangeRate.findOneAndUpdate,
-    t
+    }) as unknown as typeof ExchangeRate.findOneAndUpdate
   );
 
   const rec = await mongoExchangeRateRepository.upsertForDate({
@@ -263,7 +251,7 @@ test("upsertForDate: sourceResponseHash is preserved as null", async (t) => {
     sourceResponseHash: null
   });
 
-  assert.equal(rec.sourceResponseHash, null);
+  expect(rec.sourceResponseHash).toBeNull();
   const setClause = (capturedUpdate as { $set?: Record<string, unknown> }).$set ?? {};
-  assert.equal(setClause.sourceResponseHash, null);
+  expect(setClause.sourceResponseHash).toBeNull();
 });
