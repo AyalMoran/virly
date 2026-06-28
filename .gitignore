@@ -9,7 +9,10 @@ server/artifacts/
 
 *.sh
 
-docs
+# docs/ is tracked, but keep transient agent run-logs and scratch playgrounds out
+docs/**/*.log
+docs/feat--boot-splash-loader/
+
 .agents
 .claude
 .instance
