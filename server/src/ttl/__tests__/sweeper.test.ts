@@ -1,6 +1,4 @@
 // src/ttl/sweeper.test.ts
-import assert from "node:assert/strict";
-import test from "node:test";
 import { sweepExpired } from "../sweeper.js";
 import { aiConversations, aiPendingTransfers, verificationTokens } from "../../repositories/postgres/schema.js";
 import type { PgDatabase } from "../../db/postgres.js";
@@ -21,13 +19,13 @@ test("sweepExpired deletes expired ai_conversations then ai_pending_transfers th
   const now = new Date("2024-01-01T00:00:00.000Z");
   await sweepExpired(fakeDb, now);
 
-  assert.equal(calls.length, 3);
+  expect(calls.length).toBe(3);
   // FK-irrelevant here, but the order is deterministic: conversations then pending transfers then verification tokens.
-  assert.equal(calls[0].table, aiConversations);
-  assert.equal(calls[1].table, aiPendingTransfers);
-  assert.equal(calls[2].table, verificationTokens);
+  expect(calls[0].table).toBe(aiConversations);
+  expect(calls[1].table).toBe(aiPendingTransfers);
+  expect(calls[2].table).toBe(verificationTokens);
   // Each delete is constrained by a where clause (expires_at < now).
-  assert.ok(calls[0].cond != null);
-  assert.ok(calls[1].cond != null);
-  assert.ok(calls[2].cond != null);
+  expect(calls[0].cond).not.toBeNull();
+  expect(calls[1].cond).not.toBeNull();
+  expect(calls[2].cond).not.toBeNull();
 });

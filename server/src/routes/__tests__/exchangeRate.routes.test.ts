@@ -1,6 +1,4 @@
-import assert from "node:assert/strict";
 import http from "node:http";
-import test from "node:test";
 import express from "express";
 import { parseCookies } from "../../middleware/cookies.js";
 import { errorHandler } from "../../middleware/error-handler.js";
@@ -18,20 +16,24 @@ setRepositories(createMongoRepositories());
 
 const userId = "507f1f77bcf86cd799439011";
 
+const cleanups: Array<() => void | Promise<void>> = [];
+afterEach(async () => {
+  for (const c of cleanups.splice(0).reverse()) await c();
+});
+
 function patchModel<T extends object, K extends keyof T>(
   model: T,
   key: K,
-  value: T[K],
-  t: test.TestContext
+  value: T[K]
 ) {
   const original = model[key];
   model[key] = value;
-  t.after(() => {
+  cleanups.push(() => {
     model[key] = original;
   });
 }
 
-function patchExchangeRateFindOne(t: test.TestContext, doc: unknown) {
+function patchExchangeRateFindOne(doc: unknown) {
   patchModel(
     ExchangeRate,
     "findOne",
@@ -41,12 +43,11 @@ function patchExchangeRateFindOne(t: test.TestContext, doc: unknown) {
         lean: async () => doc
       };
       return chain;
-    }) as unknown as typeof ExchangeRate.findOne,
-    t
+    }) as unknown as typeof ExchangeRate.findOne
   );
 }
 
-function blockProviderFetch(t: test.TestContext) {
+function blockProviderFetch() {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     const url = String(input);
@@ -55,7 +56,7 @@ function blockProviderFetch(t: test.TestContext) {
     }
     return originalFetch(input, init);
   }) as typeof fetch;
-  t.after(() => {
+  cleanups.push(() => {
     globalThis.fetch = originalFetch;
   });
 }
@@ -112,13 +113,13 @@ async function issueAuthCookie(baseUrl: string) {
 test("exchange rates endpoint requires authentication", async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/exchange-rates/current`);
-    assert.equal(response.status, 401);
+    expect(response.status).toBe(401);
   });
 });
 
-test("exchange rates endpoint returns the cached daily ILS snapshot", async (t) => {
+test("exchange rates endpoint returns the cached daily ILS snapshot", async () => {
   const today = utcDateKey(new Date());
-  patchExchangeRateFindOne(t, {
+  patchExchangeRateFindOne({
     baseCurrency: "ILS",
     rates: { ILS: 1, USD: 0.27, EUR: 0.25, GBP: 0.21 },
     provider: "exchangerate-api",
@@ -133,32 +134,32 @@ test("exchange rates endpoint returns the cached daily ILS snapshot", async (t) 
     const response = await fetch(`${baseUrl}/api/exchange-rates/current`, {
       headers: { Cookie: cookie }
     });
-    assert.equal(response.status, 200);
+    expect(response.status).toBe(200);
 
     const body = (await response.json()) as Record<string, unknown>;
-    assert.equal(body.baseCurrency, "ILS");
-    assert.deepEqual(body.supportedCurrencies, ["ILS", "USD", "EUR"]);
+    expect(body.baseCurrency).toBe("ILS");
+    expect(body.supportedCurrencies).toStrictEqual(["ILS", "USD", "EUR"]);
     // Only the supported currencies are exposed, even if more were cached.
-    assert.deepEqual(body.rates, { ILS: 1, USD: 0.27, EUR: 0.25 });
-    assert.equal(body.provider, "exchangerate-api");
-    assert.equal(typeof body.fetchedAt, "string");
-    assert.equal(typeof body.expiresAt, "string");
-    assert.equal(body.isStale, false);
+    expect(body.rates).toEqual({ ILS: 1, USD: 0.27, EUR: 0.25 });
+    expect(body.provider).toBe("exchangerate-api");
+    expect(typeof body.fetchedAt).toBe("string");
+    expect(typeof body.expiresAt).toBe("string");
+    expect(body.isStale).toBe(false);
   });
 });
 
-test("exchange rates endpoint degrades with 503 when no usable rates exist", async (t) => {
-  patchExchangeRateFindOne(t, null);
-  blockProviderFetch(t);
+test("exchange rates endpoint degrades with 503 when no usable rates exist", async () => {
+  patchExchangeRateFindOne(null);
+  blockProviderFetch();
 
   await withServer(async (baseUrl) => {
     const cookie = await issueAuthCookie(baseUrl);
     const response = await fetch(`${baseUrl}/api/exchange-rates/current`, {
       headers: { Cookie: cookie }
     });
-    assert.equal(response.status, 503);
+    expect(response.status).toBe(503);
 
     const body = (await response.json()) as { message?: string };
-    assert.match(body.message ?? "", /unavailable/i);
+    expect(body.message ?? "").toMatch(/unavailable/i);
   });
 });

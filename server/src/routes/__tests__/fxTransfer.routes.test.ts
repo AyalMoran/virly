@@ -1,6 +1,4 @@
-import assert from "node:assert/strict";
 import http from "node:http";
-import test from "node:test";
 import express from "express";
 import { parseCookies } from "../../middleware/cookies.js";
 import { errorHandler } from "../../middleware/error-handler.js";
@@ -35,20 +33,24 @@ const snapshotDoc = {
 };
 const usdToIlsRate = 3.703704;
 
+const cleanups: Array<() => void | Promise<void>> = [];
+afterEach(async () => {
+  for (const c of cleanups.splice(0).reverse()) await c();
+});
+
 function patchModel<T extends object, K extends keyof T>(
   model: T,
   key: K,
-  value: T[K],
-  t: test.TestContext
+  value: T[K]
 ) {
   const original = model[key];
   model[key] = value;
-  t.after(() => {
+  cleanups.push(() => {
     model[key] = original;
   });
 }
 
-function patchExchangeRateFindOne(t: test.TestContext, doc: unknown) {
+function patchExchangeRateFindOne(doc: unknown) {
   patchModel(
     ExchangeRate,
     "findOne",
@@ -58,8 +60,7 @@ function patchExchangeRateFindOne(t: test.TestContext, doc: unknown) {
         lean: async () => doc
       };
       return chain;
-    }) as unknown as typeof ExchangeRate.findOne,
-    t
+    }) as unknown as typeof ExchangeRate.findOne
   );
 }
 
@@ -86,12 +87,11 @@ function createMockUserDoc(id: string, email: string, balance: number): MockUser
  * `TransactionRecord`s. Restores the previous repositories on teardown.
  */
 function patchTransferModels(
-  t: test.TestContext,
   sender: MockUserDoc,
   recipient: MockUserDoc
 ) {
   const previous = getRepositories();
-  t.after(() => setRepositories(previous));
+  cleanups.push(() => setRepositories(previous));
 
   const base = createMongoRepositories();
   const createdDocs: Array<Record<string, unknown>> = [];
@@ -125,7 +125,12 @@ function patchTransferModels(
         }));
         createdDocs.push(...created);
         return created as never;
-      }
+      },
+      // Stub out fraud-scoring reads so the post-commit recordTransferRiskFlag
+      // does not fall through to MongoDB (which would add ~10 s per test).
+      hasDebitToCounterparty: async () => true,
+      getDailyDebitUsage: async () => ({ total: 0, count: 0 }),
+      recentForOwner: async () => []
     }
   } as Repositories);
 
@@ -208,12 +213,12 @@ test("quote endpoint requires authentication", async () => {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ amount: 50, currency: "USD" })
     });
-    assert.equal(response.status, 401);
+    expect(response.status).toBe(401);
   });
 });
 
-test("USD quote converts server-side into the authoritative ILS amount", async (t) => {
-  patchExchangeRateFindOne(t, snapshotDoc);
+test("USD quote converts server-side into the authoritative ILS amount", async () => {
+  patchExchangeRateFindOne(snapshotDoc);
 
   await withServer(async (baseUrl) => {
     const auth = await issueAuth(baseUrl);
@@ -221,20 +226,20 @@ test("USD quote converts server-side into the authoritative ILS amount", async (
       amount: 50,
       currency: "USD"
     });
-    assert.equal(response.status, 200);
+    expect(response.status).toBe(200);
 
     const { quote } = (await response.json()) as { quote: Record<string, unknown> };
-    assert.equal(quote.enteredAmount, 50);
-    assert.equal(quote.enteredCurrency, "USD");
-    assert.equal(quote.amountIls, 185.19);
-    assert.equal(quote.rate, usdToIlsRate);
-    assert.equal(quote.rateFetchedAt, fetchedAt.toISOString());
-    assert.equal(quote.baseCurrency, "ILS");
+    expect(quote.enteredAmount).toBe(50);
+    expect(quote.enteredCurrency).toBe("USD");
+    expect(quote.amountIls).toBe(185.19);
+    expect(quote.rate).toBe(usdToIlsRate);
+    expect(quote.rateFetchedAt).toBe(fetchedAt.toISOString());
+    expect(quote.baseCurrency).toBe("ILS");
   });
 });
 
-test("ILS quote is an identity quote with no conversion", async (t) => {
-  patchExchangeRateFindOne(t, snapshotDoc);
+test("ILS quote is an identity quote with no conversion", async () => {
+  patchExchangeRateFindOne(snapshotDoc);
 
   await withServer(async (baseUrl) => {
     const auth = await issueAuth(baseUrl);
@@ -242,17 +247,17 @@ test("ILS quote is an identity quote with no conversion", async (t) => {
       amount: 120,
       currency: "ILS"
     });
-    assert.equal(response.status, 200);
+    expect(response.status).toBe(200);
 
     const { quote } = (await response.json()) as { quote: Record<string, unknown> };
-    assert.equal(quote.amountIls, 120);
-    assert.equal(quote.rate, 1);
-    assert.equal(quote.rateFetchedAt, null);
+    expect(quote.amountIls).toBe(120);
+    expect(quote.rate).toBe(1);
+    expect(quote.rateFetchedAt).toBeNull();
   });
 });
 
-test("quote rejects unsupported currencies with 400", async (t) => {
-  patchExchangeRateFindOne(t, snapshotDoc);
+test("quote rejects unsupported currencies with 400", async () => {
+  patchExchangeRateFindOne(snapshotDoc);
 
   await withServer(async (baseUrl) => {
     const auth = await issueAuth(baseUrl);
@@ -260,20 +265,20 @@ test("quote rejects unsupported currencies with 400", async (t) => {
       amount: 50,
       currency: "GBP"
     });
-    assert.equal(response.status, 400);
+    expect(response.status).toBe(400);
 
     const body = (await response.json()) as { message?: string };
-    assert.match(body.message ?? "", /Unsupported currency "GBP"/);
+    expect(body.message ?? "").toMatch(/Unsupported currency "GBP"/);
   });
 });
 //#endregion
 
 //#region Transfer execution with currency
-test("USD transfer converts server-side, validates and stores ILS", async (t) => {
-  patchExchangeRateFindOne(t, snapshotDoc);
+test("USD transfer converts server-side, validates and stores ILS", async () => {
+  patchExchangeRateFindOne(snapshotDoc);
   const sender = createMockUserDoc(senderId, "sender@example.com", 200);
   const recipient = createMockUserDoc(recipientId, "recipient@example.com", 10);
-  const createdDocs = patchTransferModels(t, sender, recipient);
+  const createdDocs = patchTransferModels(sender, recipient);
 
   await withServer(async (baseUrl) => {
     const auth = await issueAuth(baseUrl);
@@ -283,7 +288,7 @@ test("USD transfer converts server-side, validates and stores ILS", async (t) =>
       currency: "USD",
       quote: { rate: usdToIlsRate, fetchedAt: fetchedAt.toISOString() }
     });
-    assert.equal(response.status, 201);
+    expect(response.status).toBe(201);
 
     const body = (await response.json()) as {
       newBalance: number;
@@ -291,11 +296,11 @@ test("USD transfer converts server-side, validates and stores ILS", async (t) =>
     };
 
     // 50 USD at 0.27 USD/ILS => 185.19 ILS moved on the ledger.
-    assert.equal(body.newBalance, 14.81);
-    assert.equal(sender.balance, 14.81);
-    assert.equal(recipient.balance, 195.19);
-    assert.equal(body.transaction.amount, -185.19);
-    assert.deepEqual(body.transaction.fx, {
+    expect(body.newBalance).toBe(14.81);
+    expect(sender.balance).toBe(14.81);
+    expect(recipient.balance).toBe(195.19);
+    expect(body.transaction.amount).toBe(-185.19);
+    expect(body.transaction.fx).toEqual({
       enteredCurrency: "USD",
       enteredAmount: 50,
       exchangeRateUsed: usdToIlsRate,
@@ -303,21 +308,21 @@ test("USD transfer converts server-side, validates and stores ILS", async (t) =>
     });
 
     // Both ledger rows store the ILS amount as the source of truth.
-    assert.equal(createdDocs.length, 2);
+    expect(createdDocs.length).toBe(2);
     for (const doc of createdDocs) {
-      assert.equal(doc.amount, 185.19);
-      assert.equal(doc.enteredCurrency, "USD");
-      assert.equal(doc.enteredAmount, 50);
-      assert.equal(doc.exchangeRateUsed, usdToIlsRate);
+      expect(doc.amount).toBe(185.19);
+      expect(doc.enteredCurrency).toBe("USD");
+      expect(doc.enteredAmount).toBe(50);
+      expect(doc.exchangeRateUsed).toBe(usdToIlsRate);
     }
   });
 });
 
-test("USD transfer is rejected when the ILS balance is insufficient", async (t) => {
-  patchExchangeRateFindOne(t, snapshotDoc);
+test("USD transfer is rejected when the ILS balance is insufficient", async () => {
+  patchExchangeRateFindOne(snapshotDoc);
   const sender = createMockUserDoc(senderId, "sender@example.com", 100);
   const recipient = createMockUserDoc(recipientId, "recipient@example.com", 10);
-  patchTransferModels(t, sender, recipient);
+  patchTransferModels(sender, recipient);
 
   await withServer(async (baseUrl) => {
     const auth = await issueAuth(baseUrl);
@@ -329,17 +334,17 @@ test("USD transfer is rejected when the ILS balance is insufficient", async (t) 
     });
 
     // 50 USD => 185.19 ILS > 100 ILS balance.
-    assert.equal(response.status, 400);
+    expect(response.status).toBe(400);
     const body = (await response.json()) as { message?: string };
-    assert.match(body.message ?? "", /Insufficient balance/);
-    assert.equal(sender.balance, 100);
+    expect(body.message ?? "").toMatch(/Insufficient balance/);
+    expect(sender.balance).toBe(100);
   });
 });
 
-test("ILS transfer keeps the legacy contract and stores no fx metadata", async (t) => {
+test("ILS transfer keeps the legacy contract and stores no fx metadata", async () => {
   const sender = createMockUserDoc(senderId, "sender@example.com", 200);
   const recipient = createMockUserDoc(recipientId, "recipient@example.com", 0);
-  const createdDocs = patchTransferModels(t, sender, recipient);
+  const createdDocs = patchTransferModels(sender, recipient);
 
   await withServer(async (baseUrl) => {
     const auth = await issueAuth(baseUrl);
@@ -347,21 +352,21 @@ test("ILS transfer keeps the legacy contract and stores no fx metadata", async (
       recipientEmail: "recipient@example.com",
       amount: 75.5
     });
-    assert.equal(response.status, 201);
+    expect(response.status).toBe(201);
 
     const body = (await response.json()) as {
       newBalance: number;
       transaction: { amount: number; fx?: unknown };
     };
-    assert.equal(body.newBalance, 124.5);
-    assert.equal(body.transaction.amount, -75.5);
-    assert.equal(body.transaction.fx, undefined);
-    assert.equal(createdDocs[0]?.enteredCurrency, undefined);
+    expect(body.newBalance).toBe(124.5);
+    expect(body.transaction.amount).toBe(-75.5);
+    expect(body.transaction.fx).toBeUndefined();
+    expect(createdDocs[0]?.enteredCurrency).toBeUndefined();
   });
 });
 
-test("transfer rejects unsupported currencies with 400", async (t) => {
-  patchExchangeRateFindOne(t, snapshotDoc);
+test("transfer rejects unsupported currencies with 400", async () => {
+  patchExchangeRateFindOne(snapshotDoc);
 
   await withServer(async (baseUrl) => {
     const auth = await issueAuth(baseUrl);
@@ -370,15 +375,15 @@ test("transfer rejects unsupported currencies with 400", async (t) => {
       amount: 50,
       currency: "BTC"
     });
-    assert.equal(response.status, 400);
+    expect(response.status).toBe(400);
 
     const body = (await response.json()) as { message?: string };
-    assert.match(body.message ?? "", /Unsupported currency "BTC"/);
+    expect(body.message ?? "").toMatch(/Unsupported currency "BTC"/);
   });
 });
 
-test("non-ILS transfer without a quote is rejected with 400", async (t) => {
-  patchExchangeRateFindOne(t, snapshotDoc);
+test("non-ILS transfer without a quote is rejected with 400", async () => {
+  patchExchangeRateFindOne(snapshotDoc);
 
   await withServer(async (baseUrl) => {
     const auth = await issueAuth(baseUrl);
@@ -387,15 +392,15 @@ test("non-ILS transfer without a quote is rejected with 400", async (t) => {
       amount: 50,
       currency: "USD"
     });
-    assert.equal(response.status, 400);
+    expect(response.status).toBe(400);
 
     const body = (await response.json()) as { message?: string; code?: string };
-    assert.equal(body.code, "QUOTE_REQUIRED");
+    expect(body.code).toBe("QUOTE_REQUIRED");
   });
 });
 
-test("transfer quoted against an older rate is rejected with 409", async (t) => {
-  patchExchangeRateFindOne(t, snapshotDoc);
+test("transfer quoted against an older rate is rejected with 409", async () => {
+  patchExchangeRateFindOne(snapshotDoc);
 
   await withServer(async (baseUrl) => {
     const auth = await issueAuth(baseUrl);
@@ -405,16 +410,16 @@ test("transfer quoted against an older rate is rejected with 409", async (t) => 
       currency: "USD",
       quote: { rate: 3.6, fetchedAt: "2026-06-10T06:00:00.000Z" }
     });
-    assert.equal(response.status, 409);
+    expect(response.status).toBe(409);
 
     const body = (await response.json()) as { message?: string; code?: string };
-    assert.equal(body.code, "QUOTE_RATE_CHANGED");
-    assert.match(body.message ?? "", /exchange rate has changed/i);
+    expect(body.code).toBe("QUOTE_RATE_CHANGED");
+    expect(body.message ?? "").toMatch(/exchange rate has changed/i);
   });
 });
 
-test("non-ILS transfer degrades with 503 when no rates are available", async (t) => {
-  patchExchangeRateFindOne(t, null);
+test("non-ILS transfer degrades with 503 when no rates are available", async () => {
+  patchExchangeRateFindOne(null);
   const originalFetch = globalThis.fetch;
   globalThis.fetch = ((input: Parameters<typeof fetch>[0], init?: Parameters<typeof fetch>[1]) => {
     const url = String(input);
@@ -423,7 +428,7 @@ test("non-ILS transfer degrades with 503 when no rates are available", async (t)
     }
     return originalFetch(input, init);
   }) as typeof fetch;
-  t.after(() => {
+  cleanups.push(() => {
     globalThis.fetch = originalFetch;
   });
 
@@ -435,15 +440,15 @@ test("non-ILS transfer degrades with 503 when no rates are available", async (t)
       currency: "EUR",
       quote: { rate: 4, fetchedAt: fetchedAt.toISOString() }
     });
-    assert.equal(response.status, 503);
+    expect(response.status).toBe(503);
   });
 });
 //#endregion
 
 //#region executeTransfer settlement on runInTransaction
-test("executeTransfer rejects on insufficient balance without writing", async (t) => {
+test("executeTransfer rejects on insufficient balance without writing", async () => {
   const original = getRepositories();
-  t.after(() => setRepositories(original));
+  cleanups.push(() => setRepositories(original));
 
   const base = createMongoRepositories();
   let setBalanceCalls = 0;
@@ -468,15 +473,13 @@ test("executeTransfer rejects on insufficient balance without writing", async (t
     }
   } as Repositories);
 
-  await assert.rejects(
-    () => executeTransfer({ senderId: "s", recipientEmail: "r@x.com", amount: 100 }),
-    (err: unknown) => {
-      assert.ok(err instanceof AppError);
-      assert.equal(err.status, 400);
-      assert.match(err.message, /Insufficient balance/);
-      return true;
-    }
+  const err = await executeTransfer({ senderId: "s", recipientEmail: "r@x.com", amount: 100 }).then(
+    () => null,
+    (e) => e
   );
-  assert.equal(setBalanceCalls, 0);
+  expect(err).toBeInstanceOf(AppError);
+  expect((err as AppError).status).toBe(400);
+  expect((err as AppError).message).toMatch(/Insufficient balance/);
+  expect(setBalanceCalls).toBe(0);
 });
 //#endregion
