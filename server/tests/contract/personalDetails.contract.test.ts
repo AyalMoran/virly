@@ -1,5 +1,4 @@
 // server/tests/contract/personalDetails.contract.test.ts
-import assert from "node:assert/strict";
 import { describeContract } from "./harness.js";
 
 // Helper: create a minimal user to own the personal-details row. Both drivers
@@ -20,16 +19,16 @@ describeContract("PersonalDetailsRepository", {
   "ensureForUser creates a not_provided row with 24-hex id": async ({ repos }) => {
     const user = await createUser(repos);
     const pd = await repos.personalDetails.ensureForUser(user.id);
-    assert.match(pd.id, /^[0-9a-fA-F]{24}$/);
-    assert.equal(pd.userId, user.id);
-    assert.equal(pd.status, "not_provided");
-    assert.equal(pd.firstName, null);
-    assert.equal(pd.lastName, null);
-    assert.equal(pd.dateOfBirth, null);
-    assert.deepEqual(pd.address, {});
-    assert.equal(pd.lastSkippedAt, null);
-    assert.ok(pd.createdAt instanceof Date);
-    assert.ok(pd.updatedAt instanceof Date);
+    expect(pd.id).toMatch(/^[0-9a-fA-F]{24}$/);
+    expect(pd.userId).toBe(user.id);
+    expect(pd.status).toBe("not_provided");
+    expect(pd.firstName).toBeNull();
+    expect(pd.lastName).toBeNull();
+    expect(pd.dateOfBirth).toBeNull();
+    expect(pd.address).toStrictEqual({});
+    expect(pd.lastSkippedAt).toBeNull();
+    expect(pd.createdAt).toBeInstanceOf(Date);
+    expect(pd.updatedAt).toBeInstanceOf(Date);
   },
 
   "ensureForUser is idempotent (second call returns same row, no duplicate)": async ({ repos }) => {
@@ -37,13 +36,13 @@ describeContract("PersonalDetailsRepository", {
     const first = await repos.personalDetails.ensureForUser(user.id);
     const second = await repos.personalDetails.ensureForUser(user.id);
     // Same identity
-    assert.equal(second.id, first.id);
-    assert.equal(second.userId, first.userId);
-    assert.equal(second.status, "not_provided");
+    expect(second.id).toBe(first.id);
+    expect(second.userId).toBe(first.userId);
+    expect(second.status).toBe("not_provided");
     // Only one row should exist
     const found = await repos.personalDetails.findByUserId(user.id);
-    assert.ok(found);
-    assert.equal(found.id, first.id);
+    expect(found).toBeTruthy();
+    expect(found!.id).toBe(first.id);
   },
 
   // ---- findByUserId ----
@@ -51,16 +50,16 @@ describeContract("PersonalDetailsRepository", {
   "findByUserId returns null when no row exists": async ({ repos }) => {
     const user = await createUser(repos);
     const result = await repos.personalDetails.findByUserId(user.id);
-    assert.equal(result, null);
+    expect(result).toBeNull();
   },
 
   "findByUserId returns the row after ensureForUser": async ({ repos }) => {
     const user = await createUser(repos);
     const created = await repos.personalDetails.ensureForUser(user.id);
     const found = await repos.personalDetails.findByUserId(user.id);
-    assert.ok(found);
-    assert.equal(found.id, created.id);
-    assert.equal(found.status, "not_provided");
+    expect(found).toBeTruthy();
+    expect(found!.id).toBe(created.id);
+    expect(found!.status).toBe("not_provided");
   },
 
   // ---- update ----
@@ -76,20 +75,20 @@ describeContract("PersonalDetailsRepository", {
       dateOfBirth: dob,
       address: { city: "Tel Aviv", country: "IL" }
     });
-    assert.ok(updated);
-    assert.equal(updated.status, "provided");
-    assert.equal(updated.firstName, "Alice");
-    assert.equal(updated.lastName, "Smith");
-    assert.ok(updated.dateOfBirth instanceof Date);
-    assert.equal(updated.dateOfBirth.toISOString(), dob.toISOString());
-    assert.deepEqual(updated.address, { city: "Tel Aviv", country: "IL" });
+    expect(updated).toBeTruthy();
+    expect(updated!.status).toBe("provided");
+    expect(updated!.firstName).toBe("Alice");
+    expect(updated!.lastName).toBe("Smith");
+    expect(updated!.dateOfBirth).toBeInstanceOf(Date);
+    expect(updated!.dateOfBirth!.toISOString()).toBe(dob.toISOString());
+    expect(updated!.address).toStrictEqual({ city: "Tel Aviv", country: "IL" });
   },
 
   "update returns null when no row exists for the user": async ({ repos }) => {
     const user = await createUser(repos);
     // Don't call ensureForUser — no row exists
     const result = await repos.personalDetails.update(user.id, { status: "provided" });
-    assert.equal(result, null);
+    expect(result).toBeNull();
   },
 
   "update only touches specified patch fields (partial update)": async ({ repos }) => {
@@ -97,13 +96,13 @@ describeContract("PersonalDetailsRepository", {
     await repos.personalDetails.ensureForUser(user.id);
     await repos.personalDetails.update(user.id, { firstName: "Bob" });
     const afterFirst = await repos.personalDetails.findByUserId(user.id);
-    assert.equal(afterFirst?.firstName, "Bob");
-    assert.equal(afterFirst?.status, "not_provided"); // untouched
+    expect(afterFirst?.firstName).toBe("Bob");
+    expect(afterFirst?.status).toBe("not_provided"); // untouched
 
     await repos.personalDetails.update(user.id, { status: "provided" });
     const afterSecond = await repos.personalDetails.findByUserId(user.id);
-    assert.equal(afterSecond?.status, "provided");
-    assert.equal(afterSecond?.firstName, "Bob"); // still set
+    expect(afterSecond?.status).toBe("provided");
+    expect(afterSecond?.firstName).toBe("Bob"); // still set
   },
 
   // ---- findProvidedByUserIds ----
@@ -123,13 +122,13 @@ describeContract("PersonalDetailsRepository", {
 
     const results = await repos.personalDetails.findProvidedByUserIds([u1.id, u2.id, u3.id]);
     const ids = results.map((r) => r.userId).sort();
-    assert.deepEqual(ids, [u1.id, u2.id].sort());
-    assert.ok(results.every((r) => r.status === "provided"));
+    expect(ids).toStrictEqual([u1.id, u2.id].sort());
+    expect(results.every((r) => r.status === "provided")).toBeTruthy();
   },
 
   "findProvidedByUserIds returns empty array for empty input": async ({ repos }) => {
     const results = await repos.personalDetails.findProvidedByUserIds([]);
-    assert.deepEqual(results, []);
+    expect(results).toStrictEqual([]);
   },
 
   "findProvidedByUserIds excludes user ids not in the set": async ({ repos }) => {
@@ -142,8 +141,8 @@ describeContract("PersonalDetailsRepository", {
     await repos.personalDetails.update(u2.id, { status: "provided", firstName: "Excluded", lastName: "Two" });
 
     const results = await repos.personalDetails.findProvidedByUserIds([u1.id]);
-    assert.equal(results.length, 1);
-    assert.equal(results[0].userId, u1.id);
+    expect(results.length).toBe(1);
+    expect(results[0].userId).toBe(u1.id);
   },
 
   // ---- findProvidedByName ----
@@ -158,8 +157,8 @@ describeContract("PersonalDetailsRepository", {
     await repos.personalDetails.update(u2.id, { status: "provided", firstName: "Bob", lastName: "Smith" });
 
     const results = await repos.personalDetails.findProvidedByName({ firstName: "ALICE", limit: 10 });
-    assert.equal(results.length, 1);
-    assert.equal(results[0].userId, u1.id);
+    expect(results.length).toBe(1);
+    expect(results[0].userId).toBe(u1.id);
   },
 
   "findProvidedByName filters by lastName when provided": async ({ repos }) => {
@@ -172,8 +171,8 @@ describeContract("PersonalDetailsRepository", {
     await repos.personalDetails.update(u2.id, { status: "provided", firstName: "Alice", lastName: "Jones" });
 
     const results = await repos.personalDetails.findProvidedByName({ firstName: "alice", lastName: "SMITH", limit: 10 });
-    assert.equal(results.length, 1);
-    assert.equal(results[0].userId, u1.id);
+    expect(results.length).toBe(1);
+    expect(results[0].userId).toBe(u1.id);
   },
 
   "findProvidedByName respects limit": async ({ repos }) => {
@@ -185,7 +184,7 @@ describeContract("PersonalDetailsRepository", {
       await repos.personalDetails.update(u.id, { status: "provided", firstName: "Common", lastName: "Name" });
     }
     const results = await repos.personalDetails.findProvidedByName({ firstName: "Common", lastName: "Name", limit: 2 });
-    assert.equal(results.length, 2);
+    expect(results.length).toBe(2);
   },
 
   "findProvidedByName returns empty when no provided rows match": async ({ repos }) => {
@@ -193,7 +192,7 @@ describeContract("PersonalDetailsRepository", {
     await repos.personalDetails.ensureForUser(user.id);
     // not_provided — should not appear
     const results = await repos.personalDetails.findProvidedByName({ firstName: "Ghost", limit: 10 });
-    assert.equal(results.length, 0);
+    expect(results.length).toBe(0);
   },
 
   // ---- address jsonb round-trip ----
@@ -204,7 +203,7 @@ describeContract("PersonalDetailsRepository", {
     const addr = { street: "123 Main St", city: "Haifa", zip: null };
     await repos.personalDetails.update(user.id, { address: addr });
     const found = await repos.personalDetails.findByUserId(user.id);
-    assert.ok(found);
-    assert.deepEqual(found.address, addr);
+    expect(found).toBeTruthy();
+    expect(found!.address).toStrictEqual(addr);
   }
 });

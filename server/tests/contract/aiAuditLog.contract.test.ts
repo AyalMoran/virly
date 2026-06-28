@@ -1,5 +1,4 @@
 // server/tests/contract/aiAuditLog.contract.test.ts
-import assert from "node:assert/strict";
 import { describeContract } from "./harness.js";
 import type { AiAuditLogRecord } from "../../src/repositories/types.js";
 
@@ -23,42 +22,42 @@ function makeLog(
 describeContract("AiAuditLogRepository", {
   "create returns a record with a 24-hex id and round-trips all fields": async ({ repos }) => {
     const created = await repos.aiAuditLogs.create(makeLog());
-    assert.match(created.id, /^[0-9a-fA-F]{24}$/);
-    assert.equal(created.userId, "a".repeat(24));
-    assert.equal(created.conversationId, "conv-001");
-    assert.equal(created.requestId, "req-001");
-    assert.equal(created.assistantId, "oshri");
-    assert.equal(created.intent, "transfer");
-    assert.deepEqual(created.toolsRequested, ["lookupCounterparty", "createTransfer"]);
-    assert.deepEqual(created.toolsExecuted, ["lookupCounterparty"]);
-    assert.equal(created.refusalReason, null);
-    assert.deepEqual(created.diagnostics, [{ step: "classify", ok: true }]);
-    assert.ok(created.createdAt instanceof Date);
-    assert.ok(created.updatedAt instanceof Date);
+    expect(created.id).toMatch(/^[0-9a-fA-F]{24}$/);
+    expect(created.userId).toBe("a".repeat(24));
+    expect(created.conversationId).toBe("conv-001");
+    expect(created.requestId).toBe("req-001");
+    expect(created.assistantId).toBe("oshri");
+    expect(created.intent).toBe("transfer");
+    expect(created.toolsRequested).toStrictEqual(["lookupCounterparty", "createTransfer"]);
+    expect(created.toolsExecuted).toStrictEqual(["lookupCounterparty"]);
+    expect(created.refusalReason).toBeNull();
+    expect(created.diagnostics).toStrictEqual([{ step: "classify", ok: true }]);
+    expect(created.createdAt).toBeInstanceOf(Date);
+    expect(created.updatedAt).toBeInstanceOf(Date);
   },
 
   "create persists a null requestId and a refusalReason": async ({ repos }) => {
     const created = await repos.aiAuditLogs.create(
       makeLog({ requestId: null, refusalReason: "policy_violation", toolsExecuted: [] })
     );
-    assert.equal(created.requestId, null);
-    assert.equal(created.refusalReason, "policy_violation");
-    assert.deepEqual(created.toolsExecuted, []);
+    expect(created.requestId).toBeNull();
+    expect(created.refusalReason).toBe("policy_violation");
+    expect(created.toolsExecuted).toStrictEqual([]);
   },
 
   "empty toolsRequested/toolsExecuted arrays and empty diagnostics round-trip": async ({ repos }) => {
     const created = await repos.aiAuditLogs.create(
       makeLog({ toolsRequested: [], toolsExecuted: [], diagnostics: [] })
     );
-    assert.deepEqual(created.toolsRequested, []);
-    assert.deepEqual(created.toolsExecuted, []);
-    assert.deepEqual(created.diagnostics, []);
+    expect(created.toolsRequested).toStrictEqual([]);
+    expect(created.toolsExecuted).toStrictEqual([]);
+    expect(created.diagnostics).toStrictEqual([]);
   },
 
   "toolsRequested (text[]) preserves order and duplicates": async ({ repos }) => {
     const tools = ["b", "a", "a", "c", "b"];
     const created = await repos.aiAuditLogs.create(makeLog({ toolsRequested: tools }));
-    assert.deepEqual(created.toolsRequested, tools);
+    expect(created.toolsRequested).toStrictEqual(tools);
   },
 
   "diagnostics (jsonb array) round-trips a heterogeneous nested structure exactly": async ({ repos }) => {
@@ -69,6 +68,6 @@ describeContract("AiAuditLogRepository", {
       42
     ];
     const created = await repos.aiAuditLogs.create(makeLog({ diagnostics }));
-    assert.deepEqual(created.diagnostics, diagnostics);
+    expect(created.diagnostics).toStrictEqual(diagnostics);
   }
 });
