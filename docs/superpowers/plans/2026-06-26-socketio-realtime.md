@@ -35,6 +35,38 @@ existing `jsonwebtoken` cookie auth, Express, React, `node:test` + `tsx`.
   SSE/WebSocket over polling). AI streaming keeps using its existing SSE — untouched.
 - TDD for pure logic; live socket wiring is integration/smoke, not unit.
 
+## Implementation Notes (verified deltas, resolved during execution 2026-06-28)
+
+These resolve the plan's flagged verify-and-match placeholders against the real code:
+
+- **Auth verify:** there is **no** `verifyAuthToken` util. The REST middleware
+  (`server/src/middleware/auth.ts`) verifies the cookie inline via
+  `jwt.verify(token, config.jwtSecret)` and reads `payload.userId`. So
+  `handshakeAuth.ts` verifies the JWT directly with `jsonwebtoken` + `config.jwtSecret`.
+- **Cookie name + signer source:** `AUTH_COOKIE_NAME = "virly_auth"` and
+  `createToken(userId, csrfTokenHash, options?)` are exported from
+  **`server/src/utils/auth.ts`** (not `middleware/cookies.ts`). The test mints a
+  cookie via `createToken(userId, "<any-csrf-hash>")`; the handshake checks only the
+  JWT signature + `userId` (no CSRF on the socket handshake).
+- **Client env var:** the client reads **`VITE_API_BASE_URL`** (fallback
+  `http://localhost:3000`) in `client/src/lib/api.ts` — not `VITE_API_URL`.
+  `realtimeUrl()` reuses `VITE_API_BASE_URL`.
+- **Client data surface:** `client/src/features/dashboard/DashboardPage.tsx` loads
+  data with a manual `api.accountSummary(...)` fetch (no React Query). Wire
+  `connectRealtime` there; on `transfer:received` re-run the page's load function.
+- **Test locations:** server unit tests are co-located `server/src/**/*.test.ts` and
+  run via `cd server && npm test`. Client tests live in `client/tests/**/*.test.tsx`
+  and run via `npm run test:client` (root). There is **no** existing
+  `transfer.service.test.ts`; build fakes using the `account.service.test.ts`
+  `withUsers`/`setRepositories` pattern and read `executeTransferWithSession`
+  (`transfer.service.ts`) for which repo methods to stub.
+- **Registry seam:** the module-level `getRealtime()`/`setRealtime()` deliberately
+  mirrors the existing `getRepositories()`/`setRepositories()` registry — DI at boot,
+  not ambient global state (the project's documented seam pattern).
+- **docs/env:** `docs/` is tracked in git (so `docs/realtime.md` is committable).
+  There are three `.env.example` files (root, `client/`, `server/`);
+  `VITE_API_BASE_URL` already exists in the client env.
+
 ## Approach & rationale
 
 What real-time event to ship first? Options: (a) incoming-transfer notification, (b)
@@ -221,11 +253,14 @@ export function userRoom(userId: string): string {
 
 ```ts
 // src/realtime/handshakeAuth.ts
-// Reuse the SAME cookie name + JWT verification the REST auth middleware uses.
-import { verifyAuthToken } from "../utils/auth.js"; // adjust to the real verify fn
-// import the cookie name constant the app uses; re-export for tests:
-export { AUTH_COOKIE_NAME } from "../middleware/cookies.js"; // adjust to the real source
-import { AUTH_COOKIE_NAME } from "../middleware/cookies.js";
+// VERIFIED: there is no verifyAuthToken util; the REST middleware verifies the
+// cookie inline. Mirror it here. AUTH_COOKIE_NAME + createToken come from utils/auth.js.
+import jwt from "jsonwebtoken";
+import { config } from "../config.js";
+import { AUTH_COOKIE_NAME, createToken } from "../utils/auth.js";
+
+// Re-export so the test can import the real cookie name + a signer from one place:
+export { AUTH_COOKIE_NAME };
 
 function parseCookies(header: string): Record<string, string> {
   return header.split(";").reduce<Record<string, string>>((acc, part) => {
@@ -246,14 +281,19 @@ export function userIdFromCookieHeader(cookieHeader: string | undefined): string
     return null;
   }
   try {
-    return verifyAuthToken(token).userId ?? null; // match the real payload shape
+    const payload = jwt.verify(token, config.jwtSecret) as jwt.JwtPayload;
+    const userId = payload.userId;
+    return typeof userId === "string" ? userId : null;
   } catch {
     return null;
   }
 }
 
-// Test helper (only if the app doesn't already export a signer to import in the test):
-// export function signAuthCookieValue(userId: string): string { return signAuthToken({ userId }); }
+// Test signer: the auth cookie value IS the JWT; mint one the way the app does.
+// (Handshake validates only the JWT signature + userId, no CSRF.)
+export function signAuthCookieValue(userId: string): string {
+  return createToken(userId, "handshake-test-csrf-hash");
+}
 ```
 
 - [ ] **Step 4: Run test to verify it passes**
@@ -600,7 +640,8 @@ export function dispatchRealtimeEvent(
 
 export function realtimeUrl(): string {
   // Same origin as the API; the JWT cookie rides along with withCredentials.
-  return import.meta.env.VITE_API_URL ?? "";
+  // VERIFIED: client reads VITE_API_BASE_URL (see client/src/lib/api.ts).
+  return import.meta.env.VITE_API_BASE_URL ?? "http://localhost:3000";
 }
 
 export function connectRealtime(handlers: RealtimeHandlers): () => void {
