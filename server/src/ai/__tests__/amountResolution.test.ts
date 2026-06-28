@@ -1,0 +1,153 @@
+
+
+import assert from "node:assert/strict";
+import test from "node:test";
+import {
+  classifyAmountReference,
+  parseAmountExpression,
+  resolveContextualAmount
+} from "../amountResolution.js";
+import { createEmptyCounterpartyMemory } from "../counterpartyMemory.js";
+import type {
+  CounterpartyMemory,
+  PendingConfirmationMemory
+} from "../state.js";
+
+function pending(amount: number): PendingConfirmationMemory {
+  return {
+    confirmationId: "pending-1",
+    type: "transfer",
+    status: "pending",
+    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + 600000).toISOString(),
+    recipientEmail: "sga@thunder.com",
+    amount,
+    currency: "ILS",
+    turnCreated: 2,
+    version: 1
+  };
+}
+
+function memoryWithPending(amount: number): CounterpartyMemory {
+  return {
+    ...createEmptyCounterpartyMemory(),
+    pendingConfirmation: pending(amount)
+  };
+}
+
+test("parseAmountExpression recognizes arithmetic and discourse references", () => {
+  assert.deepEqual(parseAmountExpression("double it"), {
+    base: "pending_amount",
+    op: "mul",
+    operand: 2
+  });
+  assert.deepEqual(parseAmountExpression("כפול שתיים"), {
+    base: "pending_amount",
+    op: "mul",
+    operand: 2
+  });
+  assert.deepEqual(parseAmountExpression("half of it"), {
+    base: "pending_amount",
+    op: "div",
+    operand: 2
+  });
+  assert.deepEqual(parseAmountExpression("×3"), {
+    base: "pending_amount",
+    op: "mul",
+    operand: 3
+  });
+  assert.deepEqual(parseAmountExpression("the amount we discussed"), {
+    base: "discussed_amount"
+  });
+  assert.deepEqual(parseAmountExpression("את הסכום שדיברנו עליו"), {
+    base: "discussed_amount"
+  });
+});
+
+test("parseAmountExpression leaves the legacy contextual vocabulary alone", () => {
+  // These remain owned by classifyAmountReference.
+  assert.equal(parseAmountExpression("same amount"), null);
+  assert.equal(parseAmountExpression("that amount"), null);
+  assert.equal(parseAmountExpression("what he sent me"), null);
+  assert.equal(parseAmountExpression("אותו סכום"), null);
+  assert.equal(classifyAmountReference("same amount"), "last_pending_transfer");
+  assert.equal(classifyAmountReference("that amount"), "last_answer_total");
+});
+
+test("resolveContextualAmount doubles the active pending amount", async () => {
+  const result = await resolveContextualAmount({
+    userId: "507f1f77bcf86cd799439011",
+    conversationId: "double-pending",
+    transferDraft: { amountReferenceText: "double it" },
+    counterpartyMemory: memoryWithPending(62.41)
+  });
+
+  assert.equal(result.status, "resolved");
+  assert.equal(result.status === "resolved" ? result.amount.amount : 0, 124.82);
+  assert.equal(
+    result.status === "resolved" ? result.amount.source : undefined,
+    "pending_confirmation"
+  );
+});
+
+test("resolveContextualAmount halves the active pending amount", async () => {
+  const result = await resolveContextualAmount({
+    userId: "507f1f77bcf86cd799439011",
+    conversationId: "half-pending",
+    transferDraft: { amountReferenceText: "half" },
+    counterpartyMemory: memoryWithPending(62.41)
+  });
+
+  assert.equal(result.status, "resolved");
+  assert.equal(result.status === "resolved" ? result.amount.amount : 0, 31.21);
+});
+
+test("resolveContextualAmount resolves the discussed amount from the salient total", async () => {
+  const memory: CounterpartyMemory = {
+    ...createEmptyCounterpartyMemory(),
+    entities: [
+      {
+        id: "total:received:sga@thunder.com",
+        type: "total",
+        turnIntroduced: 1,
+        turnLastReferenced: 1,
+        source: "tool_result",
+        confidence: "high",
+        counterpartyEmail: "sga@thunder.com",
+        direction: "received",
+        amount: 62.41,
+        currency: "ILS",
+        aliases: []
+      }
+    ]
+  };
+
+  const result = await resolveContextualAmount({
+    userId: "507f1f77bcf86cd799439011",
+    conversationId: "discussed-amount",
+    transferDraft: { amountReferenceText: "the amount we discussed" },
+    counterpartyMemory: memory
+  });
+
+  assert.equal(result.status, "resolved");
+  assert.equal(result.status === "resolved" ? result.amount.amount : 0, 62.41);
+  assert.equal(
+    result.status === "resolved" ? result.amount.source : undefined,
+    "discussed_amount"
+  );
+});
+
+test("resolveContextualAmount cannot double a pending amount that is absent", async () => {
+  const result = await resolveContextualAmount({
+    userId: "507f1f77bcf86cd799439011",
+    conversationId: "double-no-pending",
+    transferDraft: { amountReferenceText: "double it" },
+    counterpartyMemory: createEmptyCounterpartyMemory()
+  });
+
+  assert.equal(result.status, "unresolved");
+  assert.equal(
+    result.status === "unresolved" ? result.reason : undefined,
+    "no_pending_amount"
+  );
+});
