@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Virly Realtime Playground - Socket.IO transfer:received</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        padding: 48px 16px;
+        display: flex;
+        justify-content: center;
+        background: #f6f7f9;
+        color: #16181d;
+        font-family: "Hanken Grotesk", system-ui, sans-serif;
+        line-height: 1.5;
+      }
+      main { width: 100%; max-width: 760px; }
+      h1 { font-size: 24px; margin: 0 0 4px; }
+      p.lede { color: #5b616e; margin: 0 0 28px; }
+      section { background: #fff; border: 1px solid #e4e7ec; border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+      h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.04em; color: #6b7280; margin: 0 0 10px; }
+      ul { margin: 0; padding-left: 18px; }
+      li { margin: 4px 0; }
+      code { background: #f0f1f4; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+      a { color: #2255cc; text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      .flow { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; font-size: 13px; }
+      .flow span { background: #f0f1f4; border: 1px solid #e4e7ec; border-radius: 8px; padding: 6px 10px; }
+      .flow .arrow { background: none; border: none; color: #9099a6; padding: 0 2px; }
+      footer { color: #9099a6; font-size: 13px; margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Virly Realtime - Playground</h1>
+      <p class="lede">
+        A static index for the Socket.IO real-time channel added on this branch. The
+        channel is authenticated with the existing <code>virly_auth</code> JWT cookie,
+        uses per-user rooms, and is proven end-to-end with one event: when a transfer
+        commits, the recipient's client receives <code>transfer:received</code> and
+        silently refreshes its balance and transactions instead of polling.
+      </p>
+
+      <section>
+        <h2>End-to-end flow</h2>
+        <div class="flow">
+          <span>transfer commits</span>
+          <span class="arrow">-&gt;</span>
+          <span><code>executeTransfer</code> emits (post-commit, best-effort)</span>
+          <span class="arrow">-&gt;</span>
+          <span>recipient room <code>user:&lt;id&gt;</code></span>
+          <span class="arrow">-&gt;</span>
+          <span>client <code>dispatchRealtimeEvent</code></span>
+          <span class="arrow">-&gt;</span>
+          <span>dashboard silent refetch</span>
+        </div>
+      </section>
+
+      <section>
+        <h2>The channel at a glance</h2>
+        <ul>
+          <li><strong>Auth</strong> - the handshake verifies the same <code>virly_auth</code> httpOnly cookie as the REST API (<code>jwt.verify(token, config.jwtSecret)</code>); unauthenticated sockets are rejected.</li>
+          <li><strong>Rooms</strong> - each socket joins <code>user:&lt;userId&gt;</code>, derived server-side from the verified id, so a user only receives its own events.</li>
+          <li><strong>Gateway seam</strong> - services emit via <code>getRealtime().emitToUser(userId, event, payload)</code>; the default is a no-op so services and the test suite run without a socket server (DI at boot, mirroring <code>getRepositories()</code>).</li>
+          <li><strong>Event contract</strong> - <code>transfer:received</code> with payload <code>{ amount: number; reason: string | null }</code>.</li>
+          <li><strong>Best-effort</strong> - the emit is post-commit and wrapped in <code>try/catch</code>; a realtime failure never breaks a transfer.</li>
+          <li><strong>Scope</strong> - single instance; horizontal scaling needs the Socket.IO Redis adapter (deferred).</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Source map</h2>
+        <ul>
+          <li><a href="../realtime.md">docs/realtime.md</a> - the channel reference (auth, rooms, gateway seam, event contract, how to add the next event)</li>
+          <li><code>server/src/realtime/</code> - <code>types.ts</code>, <code>registry.ts</code>, <code>handshakeAuth.ts</code>, <code>rooms.ts</code>, <code>server.ts</code></li>
+          <li><code>server/src/index.ts</code> - HTTP server + <code>attachSocketServer</code> + <code>setRealtime</code> at boot</li>
+          <li><code>server/src/services/transfer.service.ts</code> - the post-commit <code>transfer:received</code> emit</li>
+          <li><code>client/src/lib/realtime.ts</code> - <code>connectRealtime</code> + <code>dispatchRealtimeEvent</code></li>
+          <li><code>client/src/features/dashboard/DashboardPage.tsx</code> - silent refetch on <code>transfer:received</code></li>
+        </ul>
+      </section>
+
+      <footer>Generated for branch <code>feat/socketio-realtime</code>.</footer>
+    </main>
+  </body>
+</html>
