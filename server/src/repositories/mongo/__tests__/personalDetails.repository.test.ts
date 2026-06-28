@@ -1,12 +1,13 @@
 
 // src/repositories/mongo/personalDetails.repository.test.ts
-import assert from "node:assert/strict";
-import test from "node:test";
 import { PersonalDetails } from "../../../models/PersonalDetails.js";
 import { mongoPersonalDetailsRepository } from "../personalDetails.repository.js";
 
-function patch<T extends object, K extends keyof T>(o: T, k: K, v: T[K], t: test.TestContext) {
-  const orig = o[k]; o[k] = v; t.after(() => { o[k] = orig; });
+const cleanups: Array<() => void | Promise<void>> = [];
+afterEach(async () => { for (const c of cleanups.splice(0).reverse()) await c(); });
+
+function patch<T extends object, K extends keyof T>(o: T, k: K, v: T[K]) {
+  const orig = o[k]; o[k] = v; cleanups.push(() => { o[k] = orig; });
 }
 
 const USER_OID = "507f1f77bcf86cd799439011";
@@ -29,59 +30,53 @@ const leanPd = {
 // findByUserId
 // ---------------------------------------------------------------------------
 
-test("findByUserId: maps lean doc to PersonalDetailsRecord with string id", async (t) => {
+test("findByUserId: maps lean doc to PersonalDetailsRecord with string id", async () => {
   const fakeChain = { session: () => fakeChain, lean: async () => leanPd };
   patch(
     PersonalDetails,
     "findOne",
-    ((_filter: unknown) => fakeChain) as unknown as typeof PersonalDetails.findOne,
-    t
+    ((_filter: unknown) => fakeChain) as unknown as typeof PersonalDetails.findOne
   );
 
   const rec = await mongoPersonalDetailsRepository.findByUserId(USER_OID);
 
-  assert.ok(rec);
-  assert.equal(rec.id, PD_OID);
-  assert.equal((rec as Record<string, unknown>)._id, undefined, "must not expose _id");
-  assert.equal(rec.userId, USER_OID);
-  assert.equal(rec.status, "not_provided");
+  expect(rec).toBeTruthy();
+  expect(rec!.id).toBe(PD_OID);
+  expect((rec as Record<string, unknown>)._id).toBeUndefined();
+  expect(rec!.userId).toBe(USER_OID);
+  expect(rec!.status).toBe("not_provided");
 });
 
-test("findByUserId: returns null when not found", async (t) => {
+test("findByUserId: returns null when not found", async () => {
   const fakeChain = { session: () => fakeChain, lean: async () => null };
   patch(
     PersonalDetails,
     "findOne",
-    ((_filter: unknown) => fakeChain) as unknown as typeof PersonalDetails.findOne,
-    t
+    ((_filter: unknown) => fakeChain) as unknown as typeof PersonalDetails.findOne
   );
 
   const rec = await mongoPersonalDetailsRepository.findByUserId(USER_OID);
-  assert.equal(rec, null);
+  expect(rec).toBeNull();
 });
 
-test("findByUserId: queries by userId field", async (t) => {
+test("findByUserId: queries by userId field", async () => {
   let capturedFilter: unknown;
-  const fakeChain = {
-    session: () => fakeChain,
-    lean: async () => null
-  };
+  const fakeChain = { session: () => fakeChain, lean: async () => null };
   patch(
     PersonalDetails,
     "findOne",
-    ((filter: unknown) => { capturedFilter = filter; return fakeChain; }) as unknown as typeof PersonalDetails.findOne,
-    t
+    ((filter: unknown) => { capturedFilter = filter; return fakeChain; }) as unknown as typeof PersonalDetails.findOne
   );
 
   await mongoPersonalDetailsRepository.findByUserId(USER_OID);
-  assert.deepEqual(capturedFilter, { userId: USER_OID });
+  expect(capturedFilter).toStrictEqual({ userId: USER_OID });
 });
 
 // ---------------------------------------------------------------------------
 // ensureForUser
 // ---------------------------------------------------------------------------
 
-test("ensureForUser: calls findOneAndUpdate with upsert and returns record", async (t) => {
+test("ensureForUser: calls findOneAndUpdate with upsert and returns record", async () => {
   let capturedFilter: unknown;
   let capturedUpdate: unknown;
   let capturedOpts: unknown;
@@ -94,50 +89,42 @@ test("ensureForUser: calls findOneAndUpdate with upsert and returns record", asy
       capturedUpdate = update;
       capturedOpts = opts;
       return { ...leanPd, toObject: () => leanPd };
-    }) as unknown as typeof PersonalDetails.findOneAndUpdate,
-    t
+    }) as unknown as typeof PersonalDetails.findOneAndUpdate
   );
 
   const rec = await mongoPersonalDetailsRepository.ensureForUser(USER_OID);
 
-  assert.ok(rec);
-  assert.equal(rec.id, PD_OID);
-  assert.equal((rec as Record<string, unknown>)._id, undefined);
-  assert.equal(rec.userId, USER_OID);
-  assert.deepEqual(capturedFilter, { userId: USER_OID });
-  assert.ok(
-    (capturedOpts as Record<string, unknown>).upsert === true,
-    "must use upsert: true"
-  );
-  assert.ok(
-    (capturedOpts as Record<string, unknown>).new === true,
-    "must use new: true to return updated doc"
-  );
+  expect(rec).toBeTruthy();
+  expect(rec.id).toBe(PD_OID);
+  expect((rec as Record<string, unknown>)._id).toBeUndefined();
+  expect(rec.userId).toBe(USER_OID);
+  expect(capturedFilter).toStrictEqual({ userId: USER_OID });
+  expect((capturedOpts as Record<string, unknown>).upsert).toBe(true);
+  expect((capturedOpts as Record<string, unknown>).new).toBe(true);
   // Must seed userId on insert
   const setOnInsert = (capturedUpdate as { $setOnInsert?: Record<string, unknown> }).$setOnInsert;
-  assert.ok(setOnInsert, "$setOnInsert must be present");
-  assert.equal(setOnInsert.userId, USER_OID);
-  assert.equal(setOnInsert.status, "not_provided", "new records seed status not_provided");
+  expect(setOnInsert).toBeTruthy();
+  expect(setOnInsert!.userId).toBe(USER_OID);
+  expect(setOnInsert!.status).toBe("not_provided");
 });
 
-test("ensureForUser: returns a record without _id when existing doc found", async (t) => {
+test("ensureForUser: returns a record without _id when existing doc found", async () => {
   patch(
     PersonalDetails,
     "findOneAndUpdate",
-    (async () => ({ ...leanPd, toObject: () => leanPd })) as unknown as typeof PersonalDetails.findOneAndUpdate,
-    t
+    (async () => ({ ...leanPd, toObject: () => leanPd })) as unknown as typeof PersonalDetails.findOneAndUpdate
   );
 
   const rec = await mongoPersonalDetailsRepository.ensureForUser(USER_OID);
-  assert.equal(rec.id, PD_OID);
-  assert.equal((rec as Record<string, unknown>)._id, undefined);
+  expect(rec.id).toBe(PD_OID);
+  expect((rec as Record<string, unknown>)._id).toBeUndefined();
 });
 
 // ---------------------------------------------------------------------------
 // update
 // ---------------------------------------------------------------------------
 
-test("update: calls findOneAndUpdate with $set patch and returns updated record", async (t) => {
+test("update: calls findOneAndUpdate with $set patch and returns updated record", async () => {
   let capturedFilter: unknown;
   let capturedUpdate: unknown;
   let capturedOpts: unknown;
@@ -158,8 +145,7 @@ test("update: calls findOneAndUpdate with $set patch and returns updated record"
       capturedUpdate = update;
       capturedOpts = opts;
       return { ...updatedLean, toObject: () => updatedLean };
-    }) as unknown as typeof PersonalDetails.findOneAndUpdate,
-    t
+    }) as unknown as typeof PersonalDetails.findOneAndUpdate
   );
 
   const rec = await mongoPersonalDetailsRepository.update(USER_OID, {
@@ -169,20 +155,17 @@ test("update: calls findOneAndUpdate with $set patch and returns updated record"
     dateOfBirth: new Date("1990-05-15T00:00:00.000Z")
   });
 
-  assert.ok(rec);
-  assert.equal(rec.id, PD_OID);
-  assert.equal((rec as Record<string, unknown>)._id, undefined);
-  assert.equal(rec.status, "provided");
-  assert.equal(rec.firstName, "Alice");
-  assert.deepEqual(capturedFilter, { userId: USER_OID });
-  assert.ok((capturedUpdate as Record<string, unknown>).$set, "update must use $set");
-  assert.ok(
-    (capturedOpts as Record<string, unknown>).new === true,
-    "must use new: true"
-  );
+  expect(rec).toBeTruthy();
+  expect(rec!.id).toBe(PD_OID);
+  expect((rec as Record<string, unknown>)._id).toBeUndefined();
+  expect(rec!.status).toBe("provided");
+  expect(rec!.firstName).toBe("Alice");
+  expect(capturedFilter).toStrictEqual({ userId: USER_OID });
+  expect((capturedUpdate as Record<string, unknown>).$set).toBeTruthy();
+  expect((capturedOpts as Record<string, unknown>).new).toBe(true);
 });
 
-test("update: spreads patch fields into $set (address stays a plain object)", async (t) => {
+test("update: spreads patch fields into $set (address stays a plain object)", async () => {
   let capturedUpdate: unknown;
 
   const updatedLean = {
@@ -196,8 +179,7 @@ test("update: spreads patch fields into $set (address stays a plain object)", as
     (async (_f: unknown, update: unknown) => {
       capturedUpdate = update;
       return { ...updatedLean, toObject: () => updatedLean };
-    }) as unknown as typeof PersonalDetails.findOneAndUpdate,
-    t
+    }) as unknown as typeof PersonalDetails.findOneAndUpdate
   );
 
   await mongoPersonalDetailsRepository.update(USER_OID, {
@@ -205,12 +187,12 @@ test("update: spreads patch fields into $set (address stays a plain object)", as
   });
 
   const setClause = (capturedUpdate as { $set?: Record<string, unknown> }).$set ?? {};
-  assert.deepEqual(setClause.address, {
+  expect(setClause.address).toStrictEqual({
     country: "US", city: "NY", street: "5th Ave", postalCode: "10001", stateRegion: null, addressLine2: null
   });
 });
 
-test("update: passes session when tx context is provided", async (t) => {
+test("update: passes session when tx context is provided", async () => {
   let capturedOpts: unknown;
   const fakeSession = { id: "fake-session" };
 
@@ -220,31 +202,29 @@ test("update: passes session when tx context is provided", async (t) => {
     (async (_f: unknown, _u: unknown, opts: unknown) => {
       capturedOpts = opts;
       return { ...leanPd, toObject: () => leanPd };
-    }) as unknown as typeof PersonalDetails.findOneAndUpdate,
-    t
+    }) as unknown as typeof PersonalDetails.findOneAndUpdate
   );
 
   await mongoPersonalDetailsRepository.update(USER_OID, { status: "provided" }, fakeSession);
-  assert.equal((capturedOpts as Record<string, unknown>).session, fakeSession);
+  expect((capturedOpts as Record<string, unknown>).session).toBe(fakeSession);
 });
 
-test("update: returns null when no doc exists for the user", async (t) => {
+test("update: returns null when no doc exists for the user", async () => {
   patch(
     PersonalDetails,
     "findOneAndUpdate",
-    (async () => null) as unknown as typeof PersonalDetails.findOneAndUpdate,
-    t
+    (async () => null) as unknown as typeof PersonalDetails.findOneAndUpdate
   );
 
   const rec = await mongoPersonalDetailsRepository.update(USER_OID, { status: "provided" });
-  assert.equal(rec, null);
+  expect(rec).toBeNull();
 });
 
 // ---------------------------------------------------------------------------
 // findProvidedByUserIds
 // ---------------------------------------------------------------------------
 
-test("findProvidedByUserIds: filters by $in userIds + provided, maps records", async (t) => {
+test("findProvidedByUserIds: filters by $in userIds + provided, maps records", async () => {
   let captured: Record<string, unknown> = {};
   const chain = {
     session: () => chain,
@@ -253,44 +233,33 @@ test("findProvidedByUserIds: filters by $in userIds + provided, maps records", a
   patch(
     PersonalDetails,
     "find",
-    ((f: Record<string, unknown>) => {
-      captured = f;
-      return chain;
-    }) as unknown as typeof PersonalDetails.find,
-    t
+    ((f: Record<string, unknown>) => { captured = f; return chain; }) as unknown as typeof PersonalDetails.find
   );
 
   const recs = await mongoPersonalDetailsRepository.findProvidedByUserIds([USER_OID]);
-  assert.equal(recs.length, 1);
-  assert.equal(recs[0].id, PD_OID);
-  assert.equal((recs[0] as Record<string, unknown>)._id, undefined);
-  assert.deepEqual((captured.userId as { $in: string[] }).$in, [USER_OID]);
-  assert.equal(captured.status, "provided");
+  expect(recs.length).toBe(1);
+  expect(recs[0].id).toBe(PD_OID);
+  expect((recs[0] as Record<string, unknown>)._id).toBeUndefined();
+  expect((captured.userId as { $in: string[] }).$in).toStrictEqual([USER_OID]);
+  expect(captured.status).toBe("provided");
 });
 
 // ---------------------------------------------------------------------------
 // findProvidedByName
 // ---------------------------------------------------------------------------
 
-test("findProvidedByName: case-insensitive first+last name match, provided, limited", async (t) => {
+test("findProvidedByName: case-insensitive first+last name match, provided, limited", async () => {
   let captured: Record<string, unknown> = {};
   let limitVal: unknown;
   const chain = {
-    limit(n: unknown) {
-      limitVal = n;
-      return chain;
-    },
+    limit(n: unknown) { limitVal = n; return chain; },
     session: () => chain,
     lean: async () => [{ ...leanPd, status: "provided", firstName: "Alice", lastName: "Smith" }]
   };
   patch(
     PersonalDetails,
     "find",
-    ((f: Record<string, unknown>) => {
-      captured = f;
-      return chain;
-    }) as unknown as typeof PersonalDetails.find,
-    t
+    ((f: Record<string, unknown>) => { captured = f; return chain; }) as unknown as typeof PersonalDetails.find
   );
 
   const recs = await mongoPersonalDetailsRepository.findProvidedByName({
@@ -298,16 +267,16 @@ test("findProvidedByName: case-insensitive first+last name match, provided, limi
     lastName: "smith",
     limit: 2
   });
-  assert.equal(recs.length, 1);
-  assert.equal(captured.status, "provided");
-  assert.ok(captured.firstName instanceof RegExp);
-  assert.ok((captured.firstName as RegExp).test("ALICE"), "first name match is case-insensitive");
-  assert.ok(captured.lastName instanceof RegExp);
-  assert.ok((captured.lastName as RegExp).test("SMITH"));
-  assert.equal(limitVal, 2);
+  expect(recs.length).toBe(1);
+  expect(captured.status).toBe("provided");
+  expect(captured.firstName).toBeInstanceOf(RegExp);
+  expect((captured.firstName as RegExp).test("ALICE")).toBeTruthy();
+  expect(captured.lastName).toBeInstanceOf(RegExp);
+  expect((captured.lastName as RegExp).test("SMITH")).toBeTruthy();
+  expect(limitVal).toBe(2);
 });
 
-test("findProvidedByName: omits lastName constraint when not supplied", async (t) => {
+test("findProvidedByName: omits lastName constraint when not supplied", async () => {
   let captured: Record<string, unknown> = {};
   const chain = {
     limit: () => chain,
@@ -317,13 +286,9 @@ test("findProvidedByName: omits lastName constraint when not supplied", async (t
   patch(
     PersonalDetails,
     "find",
-    ((f: Record<string, unknown>) => {
-      captured = f;
-      return chain;
-    }) as unknown as typeof PersonalDetails.find,
-    t
+    ((f: Record<string, unknown>) => { captured = f; return chain; }) as unknown as typeof PersonalDetails.find
   );
 
   await mongoPersonalDetailsRepository.findProvidedByName({ firstName: "alice", limit: 2 });
-  assert.equal("lastName" in captured, false, "first-name-only must not constrain lastName");
+  expect("lastName" in captured).toBe(false);
 });

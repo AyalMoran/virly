@@ -1,16 +1,15 @@
 
 // src/repositories/mongo/aiAuditLog.repository.test.ts
-import assert from "node:assert/strict";
-import test from "node:test";
 import { AiAuditLog } from "../../../models/AiAuditLog.js";
 import { mongoAiAuditLogRepository } from "../aiAuditLog.repository.js";
 
-function patch<T extends object, K extends keyof T>(o: T, k: K, v: T[K], t: test.TestContext) {
+const cleanups: Array<() => void | Promise<void>> = [];
+afterEach(async () => { for (const c of cleanups.splice(0).reverse()) await c(); });
+
+function patch<T extends object, K extends keyof T>(o: T, k: K, v: T[K]) {
   const orig = o[k];
   o[k] = v;
-  t.after(() => {
-    o[k] = orig;
-  });
+  cleanups.push(() => { o[k] = orig; });
 }
 
 const LOG_OID = "507f1f77bcf86cd799439011";
@@ -35,13 +34,12 @@ const leanLog = {
 // create
 // ---------------------------------------------------------------------------
 
-test("create: maps returned doc to AiAuditLogRecord with string id, no _id leaked", async (t) => {
+test("create: maps returned doc to AiAuditLogRecord with string id, no _id leaked", async () => {
   const returnedDoc = { ...leanLog, toObject: () => leanLog };
   patch(
     AiAuditLog,
     "create",
-    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof AiAuditLog.create,
-    t
+    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof AiAuditLog.create
   );
 
   const input = {
@@ -58,26 +56,25 @@ test("create: maps returned doc to AiAuditLogRecord with string id, no _id leake
 
   const rec = await mongoAiAuditLogRepository.create(input);
 
-  assert.ok(rec);
-  assert.equal(rec.id, LOG_OID);
-  assert.equal((rec as Record<string, unknown>)._id, undefined, "must not expose _id");
-  assert.equal(rec.userId, USER_OID);
-  assert.equal(rec.conversationId, "conv-abc-123");
-  assert.equal(rec.requestId, "req-001");
-  assert.equal(rec.assistantId, "oshri");
-  assert.equal(rec.intent, "balance_inquiry");
-  assert.ok(rec.createdAt instanceof Date);
-  assert.ok(rec.updatedAt instanceof Date);
+  expect(rec).toBeTruthy();
+  expect(rec.id).toBe(LOG_OID);
+  expect((rec as Record<string, unknown>)._id).toBeUndefined();
+  expect(rec.userId).toBe(USER_OID);
+  expect(rec.conversationId).toBe("conv-abc-123");
+  expect(rec.requestId).toBe("req-001");
+  expect(rec.assistantId).toBe("oshri");
+  expect(rec.intent).toBe("balance_inquiry");
+  expect(rec.createdAt).toBeInstanceOf(Date);
+  expect(rec.updatedAt).toBeInstanceOf(Date);
 });
 
-test("create: passes all fields to AiAuditLog.create", async (t) => {
+test("create: passes all fields to AiAuditLog.create", async () => {
   let capturedDocs: unknown;
   const returnedDoc = { ...leanLog, toObject: () => leanLog };
   patch(
     AiAuditLog,
     "create",
-    (async (docs: unknown) => { capturedDocs = docs; return [returnedDoc]; }) as unknown as typeof AiAuditLog.create,
-    t
+    (async (docs: unknown) => { capturedDocs = docs; return [returnedDoc]; }) as unknown as typeof AiAuditLog.create
   );
 
   const input = {
@@ -95,28 +92,27 @@ test("create: passes all fields to AiAuditLog.create", async (t) => {
   await mongoAiAuditLogRepository.create(input);
 
   const docs = capturedDocs as Array<Record<string, unknown>>;
-  assert.ok(Array.isArray(docs) && docs.length === 1, "should pass array with one item");
+  expect(Array.isArray(docs) && docs.length === 1).toBeTruthy();
   const doc = docs[0];
-  assert.equal(doc.userId, USER_OID);
-  assert.equal(doc.conversationId, "conv-abc-123");
-  assert.equal(doc.requestId, "req-001");
-  assert.equal(doc.assistantId, "oshri");
-  assert.equal(doc.intent, "balance_inquiry");
-  assert.deepEqual(doc.toolsRequested, ["getUserAccounts"]);
-  assert.deepEqual(doc.toolsExecuted, ["getUserAccounts"]);
-  assert.equal(doc.refusalReason, null);
-  assert.deepEqual(doc.diagnostics, []);
+  expect(doc.userId).toBe(USER_OID);
+  expect(doc.conversationId).toBe("conv-abc-123");
+  expect(doc.requestId).toBe("req-001");
+  expect(doc.assistantId).toBe("oshri");
+  expect(doc.intent).toBe("balance_inquiry");
+  expect(doc.toolsRequested).toStrictEqual(["getUserAccounts"]);
+  expect(doc.toolsExecuted).toStrictEqual(["getUserAccounts"]);
+  expect(doc.refusalReason).toBeNull();
+  expect(doc.diagnostics).toStrictEqual([]);
 });
 
-test("create: passes session when tx context is provided", async (t) => {
+test("create: passes session when tx context is provided", async () => {
   const fakeSession = { id: "fake-session" };
   let capturedOpts: unknown;
   const returnedDoc = { ...leanLog, toObject: () => leanLog };
   patch(
     AiAuditLog,
     "create",
-    (async (_docs: unknown, opts: unknown) => { capturedOpts = opts; return [returnedDoc]; }) as unknown as typeof AiAuditLog.create,
-    t
+    (async (_docs: unknown, opts: unknown) => { capturedOpts = opts; return [returnedDoc]; }) as unknown as typeof AiAuditLog.create
   );
 
   const input = {
@@ -133,18 +129,17 @@ test("create: passes session when tx context is provided", async (t) => {
 
   await mongoAiAuditLogRepository.create(input, fakeSession);
 
-  assert.equal((capturedOpts as Record<string, unknown>).session, fakeSession);
+  expect((capturedOpts as Record<string, unknown>).session).toBe(fakeSession);
 });
 
-test("create: toolsRequested array passes through unchanged", async (t) => {
+test("create: toolsRequested array passes through unchanged", async () => {
   const specialTools = ["getUserAccounts", "getAccountBalance", "getRecentTransactions"];
   const logWithTools = { ...leanLog, toolsRequested: specialTools };
   const returnedDoc = { ...logWithTools, toObject: () => logWithTools };
   patch(
     AiAuditLog,
     "create",
-    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof AiAuditLog.create,
-    t
+    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof AiAuditLog.create
   );
 
   const rec = await mongoAiAuditLogRepository.create({
@@ -159,18 +154,17 @@ test("create: toolsRequested array passes through unchanged", async (t) => {
     diagnostics: []
   });
 
-  assert.deepEqual(rec.toolsRequested, specialTools);
+  expect(rec.toolsRequested).toStrictEqual(specialTools);
 });
 
-test("create: toolsExecuted array passes through unchanged", async (t) => {
+test("create: toolsExecuted array passes through unchanged", async () => {
   const specialTools = ["getUserAccounts", "searchTransactions"];
   const logWithTools = { ...leanLog, toolsExecuted: specialTools };
   const returnedDoc = { ...logWithTools, toObject: () => logWithTools };
   patch(
     AiAuditLog,
     "create",
-    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof AiAuditLog.create,
-    t
+    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof AiAuditLog.create
   );
 
   const rec = await mongoAiAuditLogRepository.create({
@@ -185,10 +179,10 @@ test("create: toolsExecuted array passes through unchanged", async (t) => {
     diagnostics: []
   });
 
-  assert.deepEqual(rec.toolsExecuted, specialTools);
+  expect(rec.toolsExecuted).toStrictEqual(specialTools);
 });
 
-test("create: diagnostics array passes through unchanged", async (t) => {
+test("create: diagnostics array passes through unchanged", async () => {
   const specialDiagnostics = [
     { type: "failure", nodeName: "classifier", createdAt: "2026-01-01T00:00:00.000Z", failureClass: "classifier_failed" },
     { type: "snapshot", nodeName: "end", createdAt: "2026-01-01T00:00:01.000Z" }
@@ -198,8 +192,7 @@ test("create: diagnostics array passes through unchanged", async (t) => {
   patch(
     AiAuditLog,
     "create",
-    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof AiAuditLog.create,
-    t
+    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof AiAuditLog.create
   );
 
   const rec = await mongoAiAuditLogRepository.create({
@@ -214,17 +207,16 @@ test("create: diagnostics array passes through unchanged", async (t) => {
     diagnostics: specialDiagnostics
   });
 
-  assert.deepEqual(rec.diagnostics, specialDiagnostics);
+  expect(rec.diagnostics).toStrictEqual(specialDiagnostics);
 });
 
-test("create: requestId=null is preserved", async (t) => {
+test("create: requestId=null is preserved", async () => {
   const logNullReq = { ...leanLog, requestId: null };
   const returnedDoc = { ...logNullReq, toObject: () => logNullReq };
   patch(
     AiAuditLog,
     "create",
-    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof AiAuditLog.create,
-    t
+    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof AiAuditLog.create
   );
 
   const rec = await mongoAiAuditLogRepository.create({
@@ -239,17 +231,16 @@ test("create: requestId=null is preserved", async (t) => {
     diagnostics: []
   });
 
-  assert.equal(rec.requestId, null);
+  expect(rec.requestId).toBeNull();
 });
 
-test("create: refusalReason is preserved when set", async (t) => {
+test("create: refusalReason is preserved when set", async () => {
   const logWithRefusal = { ...leanLog, refusalReason: "unsafe_request_detected" };
   const returnedDoc = { ...logWithRefusal, toObject: () => logWithRefusal };
   patch(
     AiAuditLog,
     "create",
-    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof AiAuditLog.create,
-    t
+    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof AiAuditLog.create
   );
 
   const rec = await mongoAiAuditLogRepository.create({
@@ -264,5 +255,5 @@ test("create: refusalReason is preserved when set", async (t) => {
     diagnostics: []
   });
 
-  assert.equal(rec.refusalReason, "unsafe_request_detected");
+  expect(rec.refusalReason).toBe("unsafe_request_detected");
 });
