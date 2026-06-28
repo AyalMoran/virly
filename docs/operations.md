@@ -253,13 +253,14 @@ no TTL indexes, so in Postgres mode an in-process sweeper runs instead.
 - `sweepExpired()` — on each tick deletes:
   - rows from `ai_conversations` where `expires_at < now()`
   - rows from `ai_pending_transfers` where `expires_at < now()`
+  - rows from `verification_tokens` where `expires_at < now()`
 - Active-row queries already filter `expires_at > now()`, so the sweeper's only
   effect is storage reclamation.
 
-**Mongo mode:** native TTL indexes handle expiry on the same two collections
-(`aiConversations` and `aiPendingTransfers`) via their `expiresAt` field. No
-sweeper is started (`server/src/index.ts:11` guards the call with
-`if (config.dbDriver === "postgres")`).
+**Mongo mode:** native TTL indexes handle expiry on the same collections
+(`aiConversations`, `aiPendingTransfers`, and `verificationtokens`) via their
+`expiresAt` field. No sweeper is started (`server/src/index.ts:11` guards the call
+with `if (config.dbDriver === "postgres")`).
 
 The `exchange_rates` table/collection is **not** subject to TTL in either mode.
 
@@ -378,6 +379,34 @@ Restart the app. No code changes are required.
 curl http://localhost:3000/api/health
 # Expected: {"status":"ok"}
 ```
+
+### 3.5 Verification-token store rollout (one-time)
+
+Email-verification tokens moved off the `users` row / `User` document into a
+dedicated `verification_tokens` store. Rolling this out is a one-time data
+migration; the destructive part is automated and ordering-safe.
+
+**Postgres — automatic and atomic.** Migration `0003_omniscient_inhumans.sql`
+backfills the inline `users.verification_token_hash` rows into
+`verification_tokens` and **then** drops the two inline columns, in a single
+migration (drizzle runs each migration in a transaction). Applying migrations the
+normal way — `npm run db:migrate`, or boot-time `runPgMigrations()` in Postgres
+mode — therefore backfills before dropping; the order cannot be inverted, and a
+backfill failure rolls the drop back. No manual step is required, and it is a
+no-op on a fresh database.
+
+**Mongo — one manual, non-destructive step.** Mongo never physically drops the
+inline fields, so there is no ordering hazard, but the new collection must be
+populated once. Run it with a connection string that **includes the database
+name** (otherwise `db` targets the `test` database):
+
+```sh
+mongosh "mongodb://<host>:27017/<dbname>?replicaSet=rs0" server/scripts/migrate-verification-tokens.mongodb.js
+```
+
+Idempotent (upsert by `userId`), safe to re-run. Legacy rows with no stored expiry
+default to `now + 24h`, which is harmless because the verification JWT itself
+already expires in 10 minutes.
 
 ---
 
