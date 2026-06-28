@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Verification-Token Backfill Fix - Playground</title>
+    <style>
+      :root { color-scheme: light; }
+      * { box-sizing: border-box; }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        padding: 48px 16px;
+        display: flex;
+        justify-content: center;
+        background: #f6f7f9;
+        color: #16181d;
+        font-family: "Hanken Grotesk", system-ui, sans-serif;
+        line-height: 1.5;
+      }
+      main { width: 100%; max-width: 760px; }
+      h1 { font-size: 24px; margin: 0 0 4px; }
+      p.lede { color: #5b616e; margin: 0 0 28px; }
+      section { background: #fff; border: 1px solid #e4e7ec; border-radius: 12px; padding: 18px 20px; margin-bottom: 16px; }
+      h2 { font-size: 15px; text-transform: uppercase; letter-spacing: 0.04em; color: #6b7280; margin: 0 0 10px; }
+      ul { margin: 0; padding-left: 18px; }
+      li { margin: 4px 0; }
+      code { background: #f0f1f4; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+      a { color: #2255cc; text-decoration: none; }
+      a:hover { text-decoration: underline; }
+      footer { color: #9099a6; font-size: 13px; margin-top: 8px; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>Verification-Token Backfill Fix - Playground</h1>
+      <p class="lede">
+        Follow-up to the verification-tokens split. Migration <code>0003</code> reached
+        <code>main</code> dropping the Postgres inline-token columns with no backfill (the
+        standalone backfill script was deleted but the fold was never committed). This
+        branch restores the backfill by folding it into <code>0003</code>.
+      </p>
+
+      <section>
+        <h2>What this fixes</h2>
+        <ul>
+          <li><strong>Data-loss gap</strong> - <code>0003</code> now runs an <code>INSERT ... SELECT</code> backfill into <code>verification_tokens</code> BEFORE the two <code>DROP COLUMN</code>s.</li>
+          <li><strong>Atomic + ordered</strong> - both live in one migration, which drizzle runs in a transaction; a backfill failure rolls the drop back, and the drop can never run first.</li>
+          <li><strong>id</strong> - minted via the built-in <code>gen_random_uuid()</code> CSPRNG (24-hex, no pgcrypto).</li>
+          <li><strong>Docs</strong> - <code>operations.md</code> rollout runbook (3.5) and the TTL sweeper table list (3.2); plan as-built notes.</li>
+        </ul>
+      </section>
+
+      <section>
+        <h2>Reference</h2>
+        <ul>
+          <li><a href="../superpowers/plans/2026-06-26-verification-tokens-collection-split.md">plan (with as-built notes)</a></li>
+          <li><a href="../operations.md">operations.md - rollout runbook 3.5</a></li>
+        </ul>
+      </section>
+
+      <footer>Generated for branch <code>fix/verification-token-backfill-fold</code>.</footer>
+    </main>
+  </body>
+</html>

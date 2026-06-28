@@ -48,7 +48,7 @@
           <li><strong>Mongo store</strong> - <code>VerificationToken</code> model with a TTL index on <code>expiresAt</code> (auto-expiry).</li>
           <li><strong>Postgres store</strong> - <code>verification_tokens</code> table (unique on <code>user_id</code>), migration <code>0002</code>; swept by the Postgres TTL sweeper.</li>
           <li><strong>auth.service</strong> - issues / verifies / clears tokens via the new store instead of inline <code>User</code> fields.</li>
-          <li><strong>Inline fields removed</strong> - <code>verificationTokenHash</code> / <code>verificationTokenExpiresAt</code> dropped from <code>User</code> (migration <code>0003</code>), after backfill scripts.</li>
+          <li><strong>Inline fields removed</strong> - <code>verificationTokenHash</code> / <code>verificationTokenExpiresAt</code> dropped from <code>User</code> by migration <code>0003</code>, which backfills the Postgres data then drops the columns atomically. Mongo backfill is a separate, non-destructive script.</li>
         </ul>
       </section>
 
