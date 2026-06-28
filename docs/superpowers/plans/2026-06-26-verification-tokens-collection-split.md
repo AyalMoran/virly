@@ -721,12 +721,20 @@ cdae020 test(repos): drop stale verification-token residue; clarify sweeper test
   tests were MIGRATED to drive behavior through a stateful in-memory `verificationTokens`
   stub (new `withRepos` + `makeVerificationTokenStub` helpers); an absent-token case was
   added. Service success path calls `markVerified` then `deleteForUser`.
-- **Task 5 (backfill):** standalone scripts under `server/scripts/`
-  (`migrate-verification-tokens.mongodb.js` mongosh + `migrate-verification-tokens.postgres.sql`),
-  NOT a hand-authored drizzle migration (avoids journal fragility). Postgres mints the
-  `char(24)` id via `substr(md5(random()::text || clock_timestamp()::text || u.id),1,24)`
-  (no extension); idempotent via `ON CONFLICT (user_id) DO NOTHING`. RUN BOTH BEFORE the
-  Task 6 column-drop migration.
+- **Task 5 (backfill):** Mongo backfill is a standalone mongosh script
+  (`server/scripts/migrate-verification-tokens.mongodb.js`) — non-destructive (Mongo never
+  physically drops the inline fields), so it can run at any time. Postgres backfill was
+  initially a standalone `.sql` script too, but a post-merge review flagged a foot-gun: the
+  manual script's ordering (run between migrations `0002` and `0003`) was unenforced, and an
+  operator applying `0003` first would drop the columns the script's `SELECT` reads. **Fix:
+  the Postgres backfill `INSERT … SELECT` was folded INTO migration `0003`**, before the two
+  `DROP COLUMN`s, so drizzle's per-migration transaction runs backfill-then-drop atomically
+  and the ordering is structurally enforced. The standalone Postgres script was removed. The
+  `char(24)` id is minted via `left(replace(gen_random_uuid()::text,'-',''),24)` (built-in
+  CSPRNG, no pgcrypto, Postgres 13+); idempotent via `ON CONFLICT (user_id) DO NOTHING`; a
+  no-op on a fresh DB. (An adversarial review of the folded migration confirmed its
+  atomicity, ordering, idempotency, and snapshot/journal integrity, and flagged the original
+  truncated-md5 id — replaced here by the `gen_random_uuid` form.)
 - **Task 6 (drop fields):** compiler-guided removal; `tsc` surfaced one extra fixture
   (`mcp/support.test.ts`) beyond the grep map. Migration `0003_omniscient_inhumans.sql`
   drops both `users` columns. One stale fixture in `mongo/user.repository.test.ts` was
