@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { sendVerificationEmailWithSender } from "./services/email.service.js";
-import { config } from "./config.js";
+import { sendVerificationEmailWithSender } from "./email.service.js";
+import { config } from "../config.js";
 
 
 const email = "user@example.com";

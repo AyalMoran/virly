@@ -2,11 +2,11 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AppError } from "./utils/app-error.js";
-import { accountService } from "./services/account.service.js";
-import { setRepositories } from "./repositories/index.js";
-import { createMongoRepositories } from "./repositories/mongo/index.js";
-import type { Repositories } from "./repositories/types.js";
+import { AppError } from "../utils/app-error.js";
+import { accountService } from "./account.service.js";
+import { setRepositories } from "../repositories/index.js";
+import { createMongoRepositories } from "../repositories/mongo/index.js";
+import type { Repositories } from "../repositories/types.js";
 
 function withUsers(stub: Partial<Repositories["users"]>) {
   const base = createMongoRepositories();

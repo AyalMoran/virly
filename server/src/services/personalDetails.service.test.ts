@@ -3,15 +3,15 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AppError } from "./utils/app-error.js";
-import { personalDetailsService } from "./services/personalDetails.service.js";
-import { setRepositories } from "./repositories/index.js";
-import { createMongoRepositories } from "./repositories/mongo/index.js";
+import { AppError } from "../utils/app-error.js";
+import { personalDetailsService } from "./personalDetails.service.js";
+import { setRepositories } from "../repositories/index.js";
+import { createMongoRepositories } from "../repositories/mongo/index.js";
 import type {
   PersonalDetailsRecord,
   Repositories,
   UserRecord
-} from "./repositories/types.js";
+} from "../repositories/types.js";
 
 // ---------------------------------------------------------------------------
 // Helpers — the service now talks to the repository seam, so tests mock the

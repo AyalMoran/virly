@@ -2,18 +2,18 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
-import { createMongoRepositories } from "./repositories/mongo/index.js";
+import { createMongoRepositories } from "../repositories/mongo/index.js";
 import {
   setRepositories,
   getRepositories,
   type AiPendingTransferRecord,
   type Repositories
-} from "./repositories/index.js";
+} from "../repositories/index.js";
 import {
   getResumablePendingForUser,
   respondToAiPendingTransfer,
   modifyAiPendingTransfer
-} from "./services/aiPendingTransfer.service.js";
+} from "./aiPendingTransfer.service.js";
 
 // ---------------------------------------------------------------------------
 // Helpers
