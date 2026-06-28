@@ -5,7 +5,7 @@ import { sweepExpired } from "./sweeper.js";
 import { aiConversations, aiPendingTransfers, verificationTokens } from "../repositories/postgres/schema.js";
 import type { PgDatabase } from "../db/postgres.js";
 
-test("sweepExpired deletes expired ai_conversations then ai_pending_transfers (expires_at < now)", async () => {
+test("sweepExpired deletes expired ai_conversations then ai_pending_transfers then verification_tokens (expires_at < now)", async () => {
   const calls: Array<{ table: unknown; cond: unknown }> = [];
   const fakeDb = {
     delete(table: unknown) {

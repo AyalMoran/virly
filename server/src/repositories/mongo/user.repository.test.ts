@@ -13,7 +13,7 @@ function patch<T extends object, K extends keyof T>(o: T, k: K, v: T[K], t: test
 const ID = "507f1f77bcf86cd799439011";
 const lean = {
   _id: ID, email: "a@b.com", passwordHash: "h", phone: "+972", isVerified: true,
-  personalDetails: null, verificationTokenHash: null, verificationTokenExpiresAt: null,
+  personalDetails: null,
   balance: 100, role: "user", createdAt: new Date(0), updatedAt: new Date(0)
 };
 
@@ -29,7 +29,6 @@ test("findByIdSafe omits secret fields", async (t) => {
   patch(User, "findById", (() => ({ lean: async () => lean })) as never, t);
   const rec = await mongoUserRepository.findByIdSafe(ID);
   assert.equal((rec as Record<string, unknown>).passwordHash, undefined);
-  assert.equal((rec as Record<string, unknown>).verificationTokenHash, undefined);
   assert.equal(rec?.email, "a@b.com");
 });
 

@@ -1,4 +1,6 @@
 // Run with: mongosh "<connection-string>" server/scripts/migrate-verification-tokens.mongodb.js
+// WARNING: the connection string MUST include the database name (e.g. .../virly?authSource=admin).
+// Without it, the `db` global targets the `test` database and the backfill writes to the wrong place.
 // Copies inline User verification tokens into the new verificationtokens collection. Idempotent.
 db.users.find({ verificationTokenHash: { $ne: null } }).forEach((u) => {
   db.verificationtokens.updateOne(
