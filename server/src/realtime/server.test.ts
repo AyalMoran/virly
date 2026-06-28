@@ -6,6 +6,12 @@ import { io as ioClient } from "socket.io-client";
 import { attachSocketServer } from "./server.js";
 import { AUTH_COOKIE_NAME, signAuthCookieValue } from "./handshakeAuth.js";
 
+function timeoutReject(ms: number): Promise<never> {
+  return new Promise((_, reject) =>
+    setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms)
+  );
+}
+
 test("authenticated client joins its room and receives an emitToUser event", async () => {
   const http = createServer();
   const { gateway } = attachSocketServer(http);
@@ -16,14 +22,59 @@ test("authenticated client joins its room and receives an emitToUser event", asy
     extraHeaders: { cookie: `${AUTH_COOKIE_NAME}=${signAuthCookieValue("u1")}` }
   });
 
-  const received = new Promise<{ amount: number }>((resolve) => {
-    client.on("transfer:received", resolve);
-  });
-  await new Promise<void>((r) => client.on("connect", () => r()));
-  gateway.emitToUser("u1", "transfer:received", { amount: 42, reason: null });
+  try {
+    const received = new Promise<{ amount: number }>((resolve, reject) => {
+      client.on("transfer:received", resolve);
+      client.on("connect_error", reject);
+    });
+    await new Promise<void>((resolve, reject) => {
+      client.on("connect", () => resolve());
+      client.on("connect_error", reject);
+    });
+    gateway.emitToUser("u1", "transfer:received", { amount: 42, reason: null });
 
-  const payload = await received;
-  assert.equal(payload.amount, 42);
-  client.close();
-  http.close();
+    const payload = await Promise.race([received, timeoutReject(5000)]);
+    assert.equal(payload.amount, 42);
+  } finally {
+    client.close();
+    http.close();
+  }
+});
+
+test("rejects an unauthenticated socket (no cookie)", async () => {
+  const http = createServer();
+  attachSocketServer(http);
+  await new Promise<void>((r) => http.listen(0, r));
+  const port = (http.address() as { port: number }).port;
+
+  const client = ioClient(`http://localhost:${port}`, {
+    reconnection: false
+  });
+
+  try {
+    await Promise.race([
+      new Promise<void>((_, reject) => {
+        client.on("connect_error", (err) => {
+          assert.ok(
+            err.message.includes("unauthorized"),
+            `expected "unauthorized" but got: ${err.message}`
+          );
+          reject(Object.assign(new Error("_pass_"), { __pass: true }));
+        });
+        client.on("connect", () => {
+          reject(new Error("anonymous socket should not have connected"));
+        });
+      }),
+      timeoutReject(5000)
+    ]);
+  } catch (err: unknown) {
+    if (err instanceof Error && (err as { __pass?: boolean }).__pass === true) {
+      // connect_error fired as expected — test passes
+      return;
+    }
+    throw err;
+  } finally {
+    client.close();
+    http.close();
+  }
 });
