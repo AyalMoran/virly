@@ -1,5 +1,0 @@
-import{T as n}from"./TransactionDetailsDialog-ZcroWAeW.js";import{t as s}from"./iframe-DZ5yRNij.js";import"./TransactionReceipt-4H0SZ_UW.js";import"./index-D3pstTQV.js";import"./index-kMzSCBiS.js";import"./proxy-BzfIBfh9.js";import"./arrow-up-right-C6nhnR0P.js";import"./createLucideIcon-WwrtmSrE.js";import"./index-CKnVyPAM.js";import"./preload-helper-C1FmrZbK.js";const D={title:"Transactions/TransactionDetailsDialog",component:n,parameters:{layout:"fullscreen",docs:{description:{component:"A modal wrapper around TransactionReceipt with a focus trap. With\n `transaction = null` it renders nothing, so the only meaningful state is open."}}},args:{onClose:()=>{}}},t={args:{transaction:s[0]}};var a,r,o;t.parameters={...t.parameters,docs:{...(a=t.parameters)==null?void 0:a.docs,source:{originalSource:`{
-  args: {
-    transaction: transactionsFixture[0]
-  }
-}`,...(o=(r=t.parameters)==null?void 0:r.docs)==null?void 0:o.source}}};const T=["Default"];export{t as Default,T as __namedExportsOrder,D as default};

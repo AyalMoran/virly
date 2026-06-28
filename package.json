@@ -13,9 +13,6 @@
     "dev:client": "npm run dev --workspace client",
     "test:client": "tsx --tsconfig client/tsconfig.json --test \"client/tests/**/*.test.tsx\"",
     "test:server": "tsx --tsconfig server/tsconfig.json --test \"server/tests/**/*.test.ts\"",
-
-    "seed:personal-details": "node scripts/fill-personal-details.api.js",
-    "seed:transactions": "bash scripts/seed-transactions.sh",
     "build": "npm run build --workspace server && npm run build --workspace client"
   },
   "dependencies": {
