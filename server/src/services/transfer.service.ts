@@ -1,5 +1,6 @@
 import { config } from "../config.js";
 import { getRepositories } from "../repositories/index.js";
+import { getRealtime } from "../realtime/registry.js";
 import type { TransactionRecord, TxContext } from "../repositories/types.js";
 import { AppError } from "../utils/app-error.js";
 import { toTransactionDto } from "../utils/transaction-dto.js";
@@ -155,7 +156,24 @@ export async function executeTransferWithSession(
 export async function executeTransfer(
   input: ExecuteTransferInput
 ): Promise<ExecuteTransferResult> {
-  return getRepositories().runInTransaction(async (tx) =>
+  const result = await getRepositories().runInTransaction(async (tx) =>
     executeTransferWithSession(input, tx)
   );
+
+  // Best-effort real-time notify; a realtime failure must not affect the transfer.
+  try {
+    const recipient = await getRepositories().users.findByEmail(
+      input.recipientEmail.toLowerCase()
+    );
+    if (recipient) {
+      getRealtime().emitToUser(recipient.id, "transfer:received", {
+        amount: input.amount,
+        reason: input.reason?.trim() || null
+      });
+    }
+  } catch {
+    /* swallow — notification is non-critical */
+  }
+
+  return result;
 }

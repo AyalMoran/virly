@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import type { Variants } from "framer-motion";
 import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
@@ -8,6 +8,7 @@ import { QuickContacts } from "../../components/QuickContacts";
 import { TransactionDetailsDialog } from "../../components/TransactionDetailsDialog";
 import { AccountStatement } from "./AccountStatement";
 import { api } from "../../lib/api";
+import { connectRealtime } from "../../lib/realtime";
 import { getQuickContacts } from "../../lib/contacts";
 import { clearAuthTransition, hasAuthTransition } from "../../lib/route-transition";
 import type { AccountSummary, Transaction } from "../../lib/types";
@@ -28,6 +29,31 @@ export function DashboardPage() {
   const [error, setError] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [enteredFromAuth] = useState(() => hasAuthTransition(location.state));
+
+  // Silent refetch: refresh summary + balance without toggling the full-page skeleton.
+  const refreshSummary = async () => {
+    try {
+      const response = await api.accountSummary(1, 10);
+      setSummary(response);
+      auth.updateBalance(response.balance);
+      setError("");
+    } catch {
+      // keep the current view on a transient refresh failure
+    }
+  };
+
+  // Keep the latest refresh in a ref so the socket connects once but always calls fresh state.
+  const refreshRef = useRef(refreshSummary);
+  refreshRef.current = refreshSummary;
+
+  useEffect(() => {
+    const disconnect = connectRealtime({
+      onTransferReceived: () => {
+        void refreshRef.current();
+      }
+    });
+    return disconnect;
+  }, []);
 
   useEffect(() => {
     let active = true;
