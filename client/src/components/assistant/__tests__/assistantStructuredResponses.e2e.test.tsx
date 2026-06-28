@@ -4,16 +4,16 @@ import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
   AssistantBlocks,
-} from "../src/components/assistant/AssistantBlocks";
-import type { AssistantResponseBlock } from "../src/lib/types";
-import { runAssistantGraph } from "../../server/src/ai/graph.js";
-import { assistantResponseFormatVersion } from "../../server/src/ai/responseBlocks.js";
-import { createToolResult } from "../../server/src/ai/toolResults.js";
+} from "../../../components/assistant/AssistantBlocks";
+import type { AssistantResponseBlock } from "../../../lib/types";
+import { runAssistantGraph } from "../../../../../server/src/ai/graph.js";
+import { assistantResponseFormatVersion } from "../../../../../server/src/ai/responseBlocks.js";
+import { createToolResult } from "../../../../../server/src/ai/toolResults.js";
 import type {
   AssistantIntent,
   AssistantLlmProvider,
   AssistantToolExecutors,
-} from "../../server/src/ai/state.js";
+} from "../../../../../server/src/ai/state.js";
 
 function createStructuredLlmProvider(intent: AssistantIntent): AssistantLlmProvider {
   return {

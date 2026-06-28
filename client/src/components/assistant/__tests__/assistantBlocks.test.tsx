@@ -5,8 +5,8 @@ import { renderToStaticMarkup } from "react-dom/server";
 import {
   AssistantBlocks,
   AssistantMarkdown,
-} from "../src/components/assistant/AssistantBlocks";
-import type { AssistantResponseBlock } from "../src/lib/types";
+} from "../../../components/assistant/AssistantBlocks";
+import type { AssistantResponseBlock } from "../../../lib/types";
 
 test("fallback markdown renders sanitized bold, bullets, emails, and amounts", () => {
   const html = renderToStaticMarkup(
