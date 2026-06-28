@@ -105,3 +105,12 @@ entry in `RealtimeHandlers` today.
 
 TypeScript enforces that the payload matches `RealtimePayloads[E]` at the call site, so
 a type error will catch mismatches before runtime.
+
+## Scaling (single instance)
+
+The gateway emits through one in-process Socket.IO server (`io`), so delivery is correct
+only on a single instance: a recipient connected to instance B will not receive an event
+emitted on instance A. Horizontal scaling requires a shared backplane — the Socket.IO
+Redis adapter (`@socket.io/redis-adapter`) — so emits fan out across instances. That is
+intentionally out of scope until horizontal scaling is real; the load balancer must also
+allow the WebSocket upgrade on the Socket.IO path.
