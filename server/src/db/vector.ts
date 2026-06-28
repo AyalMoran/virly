@@ -8,6 +8,7 @@
  * (`drizzle-ai/`, applied by `npm run rag:migrate`).
  */
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
@@ -15,8 +16,13 @@ import { sql } from "drizzle-orm";
 import * as schema from "../repositories/vector/schema.js";
 import { config } from "../config.js";
 
-/** Absolute path to the AI-store migrations dir (server/drizzle-ai), CWD-independent. */
-const MIGRATIONS_FOLDER = path.resolve(import.meta.dirname, "../../drizzle-ai");
+/** Absolute path to the AI-store migrations dir (server/drizzle-ai), CWD-independent.
+ * Derived from import.meta.url (portable across Node ESM and Jest's ESM runtime,
+ * which does not populate import.meta.dirname). */
+const MIGRATIONS_FOLDER = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../../drizzle-ai"
+);
 
 export type AiDatabase = NodePgDatabase<typeof schema>;
 
