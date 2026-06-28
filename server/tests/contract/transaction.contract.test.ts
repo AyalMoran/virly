@@ -1,5 +1,4 @@
 // server/tests/contract/transaction.contract.test.ts
-import assert from "node:assert/strict";
 import { describeContract } from "./harness.js";
 
 // Valid 24-char hex ObjectId-like strings — distinct per test case
@@ -26,10 +25,10 @@ describeContract("TransactionRepository", {
   "getRelationshipStats returns zero-defaults when no transactions exist": async ({ repos }) => {
     const ownerId = OWNER["A"];
     const stats = await repos.transactions.getRelationshipStats({ ownerId, counterpartyEmail: "nobody@example.com" });
-    assert.equal(stats.totalSent, 0);
-    assert.equal(stats.totalReceived, 0);
-    assert.equal(stats.transactionCount, 0);
-    assert.equal(stats.lastTransactionAt, null);
+    expect(stats.totalSent).toBe(0);
+    expect(stats.totalReceived).toBe(0);
+    expect(stats.transactionCount).toBe(0);
+    expect(stats.lastTransactionAt).toBeNull();
   },
 
   "getRelationshipStats returns correct totals and lastTransactionAt with seeded data": async ({ repos }) => {
@@ -44,10 +43,10 @@ describeContract("TransactionRepository", {
     ]);
 
     const stats = await repos.transactions.getRelationshipStats({ ownerId, counterpartyEmail: cpEmail });
-    assert.equal(stats.totalSent, 80);
-    assert.equal(stats.totalReceived, 20);
-    assert.equal(stats.transactionCount, 3);
-    assert.ok(stats.lastTransactionAt instanceof Date, `lastTransactionAt should be a Date, got: ${typeof stats.lastTransactionAt} ${String(stats.lastTransactionAt)}`);
+    expect(stats.totalSent).toBe(80);
+    expect(stats.totalReceived).toBe(20);
+    expect(stats.transactionCount).toBe(3);
+    expect(stats.lastTransactionAt).toBeInstanceOf(Date);
   },
 
   "getDirectionalTotals returns correct credit and debit math": async ({ repos }) => {
@@ -62,10 +61,10 @@ describeContract("TransactionRepository", {
     ]);
 
     const totals = await repos.transactions.getDirectionalTotals({ ownerId, counterpartyEmail: "a@x.com" });
-    assert.equal(totals.debitTotal, 30);
-    assert.equal(totals.debitCount, 2);
-    assert.equal(totals.creditTotal, 5);
-    assert.equal(totals.creditCount, 1);
+    expect(totals.debitTotal).toBe(30);
+    expect(totals.debitCount).toBe(2);
+    expect(totals.creditTotal).toBe(5);
+    expect(totals.creditCount).toBe(1);
   },
 
   "getDailyDebitUsage counts only debits within the window (exclusive end)": async ({ repos }) => {
@@ -84,8 +83,8 @@ describeContract("TransactionRepository", {
     const usagePast = await repos.transactions.getDailyDebitUsage({
       ownerId, dayStart: pastStart, dayEnd: pastEnd
     });
-    assert.equal(usagePast.total, 0);
-    assert.equal(usagePast.count, 0);
+    expect(usagePast.total).toBe(0);
+    expect(usagePast.count).toBe(0);
 
     // Window covering now → should count the 2 debits (not the credit)
     const now = new Date();
@@ -94,8 +93,8 @@ describeContract("TransactionRepository", {
       dayStart: new Date(now.getTime() - 5000), // 5s before seeding
       dayEnd: new Date(now.getTime() + 60000)   // 1 min future
     });
-    assert.equal(usageNow.count, 2);
-    assert.equal(usageNow.total, 139);
+    expect(usageNow.count).toBe(2);
+    expect(usageNow.total).toBe(139);
   },
 
   "listForOwner paginates and returns correct total": async ({ repos }) => {
@@ -105,23 +104,23 @@ describeContract("TransactionRepository", {
       { ownerId, counterpartyEmail: "b@x.com", amount: 2, type: "debit", directionLabel: "sent", reason: null },
       { ownerId, counterpartyEmail: "c@x.com", amount: 3, type: "credit", directionLabel: "received", reason: null }
     ]);
-    assert.equal(created.length, 3, `createMany should return 3 rows, got ${created.length}`);
+    expect(created.length).toBe(3);
 
     const page1 = await repos.transactions.listForOwner({ ownerId, page: 1, limit: 2 });
-    assert.equal(page1.total, 3, `total should be 3 but got ${page1.total}; page1 has ${page1.transactions.length} rows`);
-    assert.equal(page1.transactions.length, 2);
+    expect(page1.total).toBe(3);
+    expect(page1.transactions.length).toBe(2);
 
     const page2 = await repos.transactions.listForOwner({ ownerId, page: 2, limit: 2 });
-    assert.equal(page2.total, 3);
-    assert.equal(page2.transactions.length, 1);
+    expect(page2.total).toBe(3);
+    expect(page2.transactions.length).toBe(1);
 
     // All pages together should contain all 3 rows
     const allAmounts = [...page1.transactions, ...page2.transactions].map(r => r.amount).sort((a, b) => a - b);
-    assert.deepEqual(allAmounts, [1, 2, 3]);
+    expect(allAmounts).toStrictEqual([1, 2, 3]);
 
     // All results are for this owner
-    assert.ok(page1.transactions.every(r => r.ownerId === ownerId));
-    assert.ok(page2.transactions.every(r => r.ownerId === ownerId));
+    expect(page1.transactions.every(r => r.ownerId === ownerId)).toBeTruthy();
+    expect(page2.transactions.every(r => r.ownerId === ownerId)).toBeTruthy();
   },
 
   "listForOwnerFiltered reasonContains is case-insensitive": async ({ repos }) => {
@@ -136,8 +135,8 @@ describeContract("TransactionRepository", {
       reasonContains: "hello",
       limit: 10
     });
-    assert.equal(results.length, 1);
-    assert.equal(results[0].reason, "Hello World");
+    expect(results.length).toBe(1);
+    expect(results[0].reason).toBe("Hello World");
   },
 
   "listForOwnerFiltered reasonContains treats %/_ as literals (ILIKE escaping)": async ({ repos }) => {
@@ -151,11 +150,11 @@ describeContract("TransactionRepository", {
 
     // '%' is a literal here, not a wildcard: matches only "10% discount", not "100 discount".
     const pct = await repos.transactions.listForOwnerFiltered({ ownerId, reasonContains: "10%", limit: 10 });
-    assert.deepEqual(pct.map((r) => r.reason).sort(), ["10% discount"]);
+    expect(pct.map((r) => r.reason).sort()).toStrictEqual(["10% discount"]);
 
     // '_' is a literal, not a single-char wildcard: matches only "a_b code", not "axb code".
     const und = await repos.transactions.listForOwnerFiltered({ ownerId, reasonContains: "a_b", limit: 10 });
-    assert.deepEqual(und.map((r) => r.reason).sort(), ["a_b code"]);
+    expect(und.map((r) => r.reason).sort()).toStrictEqual(["a_b code"]);
   },
 
   "listForOwnerFiltered dateFrom is inclusive, dateTo is exclusive": async ({ repos }) => {
@@ -174,7 +173,7 @@ describeContract("TransactionRepository", {
       dateFrom: past,
       limit: 10
     });
-    assert.equal(withFrom.length, 1);
+    expect(withFrom.length).toBe(1);
 
     // dateTo=far future → should include
     const withFutureTo = await repos.transactions.listForOwnerFiltered({
@@ -182,7 +181,7 @@ describeContract("TransactionRepository", {
       dateTo: future,
       limit: 10
     });
-    assert.equal(withFutureTo.length, 1);
+    expect(withFutureTo.length).toBe(1);
 
     // dateTo=past (exclusive) → record created at ~now >= past, so excluded
     const withPastTo = await repos.transactions.listForOwnerFiltered({
@@ -190,7 +189,7 @@ describeContract("TransactionRepository", {
       dateTo: past,
       limit: 10
     });
-    assert.equal(withPastTo.length, 0);
+    expect(withPastTo.length).toBe(0);
   },
 
   "listForOwnerFiltered sort orders return records in correct order": async ({ repos }) => {
@@ -203,31 +202,31 @@ describeContract("TransactionRepository", {
 
     // amount_desc and amount_asc are deterministic
     const amountDesc = await repos.transactions.listForOwnerFiltered({ ownerId, sort: "amount_desc", limit: 10 });
-    assert.equal(amountDesc.length, 3);
-    assert.equal(amountDesc[0].amount, 15);
-    assert.equal(amountDesc[1].amount, 10);
-    assert.equal(amountDesc[2].amount, 5);
+    expect(amountDesc.length).toBe(3);
+    expect(amountDesc[0].amount).toBe(15);
+    expect(amountDesc[1].amount).toBe(10);
+    expect(amountDesc[2].amount).toBe(5);
 
     const amountAsc = await repos.transactions.listForOwnerFiltered({ ownerId, sort: "amount_asc", limit: 10 });
-    assert.equal(amountAsc[0].amount, 5);
-    assert.equal(amountAsc[1].amount, 10);
-    assert.equal(amountAsc[2].amount, 15);
+    expect(amountAsc[0].amount).toBe(5);
+    expect(amountAsc[1].amount).toBe(10);
+    expect(amountAsc[2].amount).toBe(15);
 
     // newest/oldest: createMany inserts at the same time, but createdAt ordering should be consistent
     const newest = await repos.transactions.listForOwnerFiltered({ ownerId, sort: "newest", limit: 10 });
     const oldest = await repos.transactions.listForOwnerFiltered({ ownerId, sort: "oldest", limit: 10 });
-    assert.equal(newest.length, 3);
-    assert.equal(oldest.length, 3);
+    expect(newest.length).toBe(3);
+    expect(oldest.length).toBe(3);
     // newest[0] should have createdAt >= newest[2]
-    assert.ok(newest[0].createdAt >= newest[2].createdAt);
+    expect(newest[0].createdAt >= newest[2].createdAt).toBeTruthy();
     // oldest[0] should have createdAt <= oldest[2].createdAt
-    assert.ok(oldest[0].createdAt <= oldest[2].createdAt);
+    expect(oldest[0].createdAt <= oldest[2].createdAt).toBeTruthy();
     // newest and oldest should be reverse of each other (for same timestamps, both orderings work)
     // Just verify they have the same set of records
     const newestIds = new Set(newest.map(r => r.id));
     const oldestIds = new Set(oldest.map(r => r.id));
-    assert.equal(newestIds.size, 3);
-    for (const id of oldestIds) assert.ok(newestIds.has(id));
+    expect(newestIds.size).toBe(3);
+    for (const id of oldestIds) expect(newestIds.has(id)).toBeTruthy();
   },
 
   "recentForOwner returns newest-first limited by limit": async ({ repos }) => {
@@ -241,12 +240,12 @@ describeContract("TransactionRepository", {
     ]);
 
     const recent = await repos.transactions.recentForOwner({ ownerId, limit: 2 });
-    assert.equal(recent.length, 2);
+    expect(recent.length).toBe(2);
     // Verify limit works
     const all = await repos.transactions.recentForOwner({ ownerId, limit: 100 });
-    assert.equal(all.length, 4);
+    expect(all.length).toBe(4);
     // Newest-first: createdAt of first >= createdAt of last
-    assert.ok(recent[0].createdAt >= recent[1].createdAt);
+    expect(recent[0].createdAt >= recent[1].createdAt).toBeTruthy();
   },
 
   "lastForOwner returns single most recent record or null on empty": async ({ repos }) => {
@@ -254,7 +253,7 @@ describeContract("TransactionRepository", {
 
     // Empty → null
     const empty = await repos.transactions.lastForOwner({ ownerId });
-    assert.equal(empty, null);
+    expect(empty).toBeNull();
 
     await repos.transactions.createMany([
       { ownerId, counterpartyEmail: "a@x.com", amount: 7, type: "debit", directionLabel: "sent", reason: null },
@@ -262,12 +261,12 @@ describeContract("TransactionRepository", {
     ]);
 
     const last = await repos.transactions.lastForOwner({ ownerId });
-    assert.ok(last !== null);
+    expect(last).not.toBeNull();
     // Must be a single record
-    assert.ok(last!.id.length === 24);
+    expect(last!.id.length === 24).toBeTruthy();
     // Must be the most recent (newest-first limit 1)
     const allRecent = await repos.transactions.recentForOwner({ ownerId, limit: 100 });
-    assert.equal(last!.id, allRecent[0].id);
+    expect(last!.id).toBe(allRecent[0].id);
   },
 
   "recentWithCounterparty filters by counterpartyEmail": async ({ repos }) => {
@@ -279,11 +278,11 @@ describeContract("TransactionRepository", {
     ]);
 
     const results = await repos.transactions.recentWithCounterparty({ ownerId, counterpartyEmail: "alice@x.com", limit: 10 });
-    assert.equal(results.length, 2);
+    expect(results.length).toBe(2);
     // All results are for alice
-    assert.ok(results.every(r => r.counterpartyEmail === "alice@x.com"));
+    expect(results.every(r => r.counterpartyEmail === "alice@x.com")).toBeTruthy();
     // Newest first
-    assert.ok(results[0].createdAt >= results[1].createdAt);
+    expect(results[0].createdAt >= results[1].createdAt).toBeTruthy();
   },
 
   "hasDebitToCounterparty returns true for debit, false for credit-only or empty": async ({ repos }) => {
@@ -291,21 +290,21 @@ describeContract("TransactionRepository", {
 
     // Empty → false
     const noTx = await repos.transactions.hasDebitToCounterparty({ ownerId, counterpartyEmail: "x@x.com" });
-    assert.equal(noTx, false);
+    expect(noTx).toBe(false);
 
     // Credit only → false
     await repos.transactions.createMany([
       { ownerId, counterpartyEmail: "x@x.com", amount: 10, type: "credit", directionLabel: "received", reason: null }
     ]);
     const creditOnly = await repos.transactions.hasDebitToCounterparty({ ownerId, counterpartyEmail: "x@x.com" });
-    assert.equal(creditOnly, false);
+    expect(creditOnly).toBe(false);
 
     // Add debit → true
     await repos.transactions.createMany([
       { ownerId, counterpartyEmail: "x@x.com", amount: 5, type: "debit", directionLabel: "sent", reason: null }
     ]);
     const withDebit = await repos.transactions.hasDebitToCounterparty({ ownerId, counterpartyEmail: "x@x.com" });
-    assert.equal(withDebit, true);
+    expect(withDebit).toBe(true);
   },
 
   "findByIdForOwner returns null for malformed id, null for foreign owner, record for valid": async ({ repos }) => {
@@ -316,18 +315,18 @@ describeContract("TransactionRepository", {
 
     // Malformed id
     const malformed = await repos.transactions.findByIdForOwner("not-a-hex-id", ownerId);
-    assert.equal(malformed, null);
+    expect(malformed).toBeNull();
 
     // Foreign owner
     const foreignOwner = OWNER["N"];
     const notFound = await repos.transactions.findByIdForOwner(tx.id, foreignOwner);
-    assert.equal(notFound, null);
+    expect(notFound).toBeNull();
 
     // Valid
     const found = await repos.transactions.findByIdForOwner(tx.id, ownerId);
-    assert.ok(found !== null);
-    assert.equal(found!.amount, 42);
-    assert.equal(found!.ownerId, ownerId);
+    expect(found).not.toBeNull();
+    expect(found!.amount).toBe(42);
+    expect(found!.ownerId).toBe(ownerId);
   },
 
   "createMany preserves input array order in returned records": async ({ repos }) => {
@@ -338,13 +337,13 @@ describeContract("TransactionRepository", {
       { ownerId, counterpartyEmail: "c@x.com", amount: 333, type: "debit" as const, directionLabel: "sent", reason: null }
     ];
     const created = await repos.transactions.createMany(entries);
-    assert.equal(created.length, 3);
-    assert.equal(created[0].amount, 111);
-    assert.equal(created[1].amount, 222);
-    assert.equal(created[2].amount, 333);
+    expect(created.length).toBe(3);
+    expect(created[0].amount).toBe(111);
+    expect(created[1].amount).toBe(222);
+    expect(created[2].amount).toBe(333);
     // All have 24-hex ids
     for (const r of created) {
-      assert.match(r.id, /^[0-9a-fA-F]{24}$/);
+      expect(r.id).toMatch(/^[0-9a-fA-F]{24}$/);
     }
   }
 });
