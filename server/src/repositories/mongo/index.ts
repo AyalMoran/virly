@@ -12,6 +12,7 @@ import { mongoAiPendingTransferRepository } from "./aiPendingTransfer.repository
 import { mongoAiAuditLogRepository } from "./aiAuditLog.repository.js";
 import { mongoVideoSessionRepository } from "./videoSession.repository.js";
 import { mongoVideoAuditLogRepository } from "./videoAuditLog.repository.js";
+import { mongoVerificationTokenRepository } from "./verificationToken.repository.js";
 
 export function createMongoRepositories(): Repositories {
   return {
@@ -24,6 +25,7 @@ export function createMongoRepositories(): Repositories {
     aiAuditLogs: mongoAiAuditLogRepository,
     videoSessions: mongoVideoSessionRepository,
     videoAuditLogs: mongoVideoAuditLogRepository,
+    verificationTokens: mongoVerificationTokenRepository,
     runInTransaction,
   };
 }
