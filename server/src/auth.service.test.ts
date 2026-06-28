@@ -44,6 +44,58 @@ function withUsers(stub: Partial<Repositories["users"]>) {
   setRepositories({ ...base, users: { ...base.users, ...stub } as Repositories["users"] });
 }
 
+/** Minimal in-memory VerificationTokenRepository stub. */
+function makeVerificationTokenStub(
+  initial: import("./repositories/types.js").VerificationTokenRecord | null
+) {
+  let record = initial;
+  return {
+    record: () => record,
+    repo: {
+      upsertForUser: async (userId: string, tokenHash: string, expiresAt: Date) => {
+        record = {
+          id: "vtok-stub",
+          userId,
+          tokenHash,
+          expiresAt,
+          createdAt: new Date(),
+          updatedAt: new Date()
+        };
+        return record;
+      },
+      findByUserId: async (_userId: string) => record,
+      deleteForUser: async (_userId: string) => {
+        record = null;
+      },
+      deleteExpired: async (_now: Date) => 0
+    } satisfies Repositories["verificationTokens"]
+  };
+}
+
+/**
+ * Stub both users AND verificationTokens. Restores the previous registry in
+ * t.after so the stub never leaks to later tests. Safe to call even if the
+ * registry has not been initialised yet (withUsers may have been called first
+ * or this may be the first setup step in the test).
+ */
+function withRepos(
+  t: test.TestContext,
+  userStub: Partial<Repositories["users"]>,
+  vtStub: Repositories["verificationTokens"]
+) {
+  let previous: Repositories | null = null;
+  try { previous = getRepositories(); } catch { /* not yet initialised */ }
+  const base = createMongoRepositories();
+  setRepositories({
+    ...base,
+    users: { ...base.users, ...userStub } as Repositories["users"],
+    verificationTokens: vtStub
+  });
+  t.after(() => {
+    if (previous) setRepositories(previous);
+  });
+}
+
 // personalDetailsService.ensureForUser now reaches PersonalDetails through the
 // repository seam (getRepositories().personalDetails.ensureForUser), so we stub
 // the repository instead of the Mongoose model. Returning a record avoids a real
@@ -105,27 +157,49 @@ function captureVerificationLogs(t: test.TestContext) {
 test("register: new email creates a user, returns a token, and emails a link", async (t) => {
   let createdInput: Record<string, unknown> | null = null;
   let created: UserRecord | null = null;
-  const verificationTokenCalls: Array<{ id: string; hash: string | null }> = [];
+  const upsertForUserCalls: Array<{ userId: string; tokenHash: string }> = [];
 
-  withUsers({
-    findByEmail: async () => null, // no existing user
-    create: async (input) => {
-      createdInput = input;
-      created = createUserRecord({
-        email: input.email,
-        passwordHash: input.passwordHash,
-        phone: input.phone,
-        balance: input.balance,
-        isVerified: false,
-        personalDetails: null
-      });
-      return created;
-    },
-    setVerificationToken: async (id, hash) => {
-      verificationTokenCalls.push({ id, hash });
-    },
-    setPersonalDetails: async () => {}
+  const vtStub: Repositories["verificationTokens"] = {
+    ...makeVerificationTokenStub(null).repo,
+    upsertForUser: async (userId, tokenHash, expiresAt) => {
+      upsertForUserCalls.push({ userId, tokenHash });
+      return {
+        id: "vtok-reg",
+        userId,
+        tokenHash,
+        expiresAt,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      };
+    }
+  };
+
+  let previous: Repositories | null = null;
+  try { previous = getRepositories(); } catch { /* not yet initialised */ }
+  const base = createMongoRepositories();
+  setRepositories({
+    ...base,
+    users: {
+      ...base.users,
+      findByEmail: async () => null, // no existing user
+      create: async (input) => {
+        createdInput = input;
+        created = createUserRecord({
+          email: input.email,
+          passwordHash: input.passwordHash,
+          phone: input.phone,
+          balance: input.balance,
+          isVerified: false,
+          personalDetails: null
+        });
+        return created!;
+      },
+      setPersonalDetails: async () => {}
+    } as Repositories["users"],
+    verificationTokens: vtStub
   });
+  t.after(() => { if (previous) setRepositories(previous); });
+
   patchPersonalDetails(t);
   const links = captureVerificationLogs(t);
 
@@ -149,24 +223,39 @@ test("register: new email creates a user, returns a token, and emails a link", a
   );
 
   // Returns the created user + a verification token, and the token is persisted
-  // as a HASH (never stored in cleartext).
+  // in the verification_tokens store as a HASH (never in cleartext).
   assert.equal(result.user, created);
   assert.ok(result.verificationToken.length > 0);
-  assert.equal(verificationTokenCalls.length, 1);
-  assert.equal(verificationTokenCalls[0]?.hash, hashToken(result.verificationToken));
+  assert.equal(upsertForUserCalls.length, 1);
+  assert.equal(upsertForUserCalls[0]?.tokenHash, hashToken(result.verificationToken));
 
   // A verification email was triggered.
   assert.equal(links.length, 1);
 });
 
 test("register: duplicate email throws AppError(409)", async (t) => {
-  const verificationTokenCalls: number[] = [];
-  withUsers({
-    findByEmail: async () => createUserRecord({ email: "taken@example.com" }),
-    setVerificationToken: async () => {
-      verificationTokenCalls.push(1);
+  const upsertForUserCalls: number[] = [];
+  const vtStub: Repositories["verificationTokens"] = {
+    ...makeVerificationTokenStub(null).repo,
+    upsertForUser: async () => {
+      upsertForUserCalls.push(1);
+      return { id: "x", userId: "x", tokenHash: "x", expiresAt: new Date(), createdAt: new Date(), updatedAt: new Date() };
     }
+  };
+
+  let previous2: Repositories | null = null;
+  try { previous2 = getRepositories(); } catch { /* not yet initialised */ }
+  const base2 = createMongoRepositories();
+  setRepositories({
+    ...base2,
+    users: {
+      ...base2.users,
+      findByEmail: async () => createUserRecord({ email: "taken@example.com" })
+    } as Repositories["users"],
+    verificationTokens: vtStub
   });
+  t.after(() => { if (previous2) setRepositories(previous2); });
+
   const links = captureVerificationLogs(t);
 
   await assert.rejects(
@@ -185,7 +274,7 @@ test("register: duplicate email throws AppError(409)", async (t) => {
 
   // No email and no token persisted for an already-registered address.
   assert.equal(links.length, 0);
-  assert.equal(verificationTokenCalls.length, 0);
+  assert.equal(upsertForUserCalls.length, 0);
 });
 
 // ---------------------------------------------------------------------------
@@ -254,7 +343,7 @@ test("login: unknown email throws AppError(401) with the SAME message (no enumer
 // verifyEmail
 // ---------------------------------------------------------------------------
 
-test("verifyEmail: valid unexpired matching token flips an unverified account", async () => {
+test("verifyEmail: valid unexpired matching token flips an unverified account", async (t) => {
   const token = createVerificationToken("507f1f77bcf86cd799439011");
   const user = createUserRecord({
     isVerified: false,
@@ -262,12 +351,33 @@ test("verifyEmail: valid unexpired matching token flips an unverified account", 
     verificationTokenExpiresAt: verificationTokenExpiry()
   });
   const markVerifiedCalls: string[] = [];
-  withUsers({
-    findById: async () => user,
-    markVerified: async (id) => {
-      markVerifiedCalls.push(id);
-    }
+  const deleteForUserCalls: string[] = [];
+  const vt = makeVerificationTokenStub({
+    id: "vtok-1",
+    userId: user.id,
+    tokenHash: hashToken(token),
+    expiresAt: verificationTokenExpiry(),
+    createdAt: new Date(),
+    updatedAt: new Date()
   });
+  // Wrap deleteForUser to record calls
+  const vtRepo: Repositories["verificationTokens"] = {
+    ...vt.repo,
+    deleteForUser: async (id: string) => {
+      deleteForUserCalls.push(id);
+      await vt.repo.deleteForUser(id);
+    }
+  };
+  withRepos(
+    t,
+    {
+      findById: async () => user,
+      markVerified: async (id) => {
+        markVerifiedCalls.push(id);
+      }
+    },
+    vtRepo
+  );
 
   const result = await authService.verifyEmail(token);
 
@@ -278,9 +388,12 @@ test("verifyEmail: valid unexpired matching token flips an unverified account", 
   assert.equal(result.user.verificationTokenExpiresAt, null);
   assert.equal(markVerifiedCalls.length, 1);
   assert.equal(markVerifiedCalls[0], user.id);
+  // Verify the store was cleared after success
+  assert.equal(deleteForUserCalls.length, 1);
+  assert.equal(deleteForUserCalls[0], user.id);
 });
 
-test("verifyEmail: already-verified account short-circuits without state change", async () => {
+test("verifyEmail: already-verified account short-circuits without state change", async (t) => {
   const token = createVerificationToken("507f1f77bcf86cd799439011");
   const user = createUserRecord({
     isVerified: true,
@@ -288,12 +401,19 @@ test("verifyEmail: already-verified account short-circuits without state change"
     verificationTokenExpiresAt: verificationTokenExpiry()
   });
   const markVerifiedCalls: string[] = [];
-  withUsers({
-    findById: async () => user,
-    markVerified: async (id) => {
-      markVerifiedCalls.push(id);
-    }
-  });
+  // Short-circuit happens before the store is read; stub returns null to confirm
+  // the store is never consulted for already-verified accounts.
+  const vt = makeVerificationTokenStub(null);
+  withRepos(
+    t,
+    {
+      findById: async () => user,
+      markVerified: async (id) => {
+        markVerifiedCalls.push(id);
+      }
+    },
+    vt.repo
+  );
 
   const result = await authService.verifyEmail(token);
 
@@ -305,7 +425,7 @@ test("verifyEmail: already-verified account short-circuits without state change"
   assert.equal(markVerifiedCalls.length, 0);
 });
 
-test("verifyEmail: expired stored token throws AppError(400)", async () => {
+test("verifyEmail: expired stored token throws AppError(400)", async (t) => {
   const token = createVerificationToken("507f1f77bcf86cd799439011");
   const user = createUserRecord({
     isVerified: false,
@@ -313,12 +433,24 @@ test("verifyEmail: expired stored token throws AppError(400)", async () => {
     verificationTokenExpiresAt: new Date(Date.now() - 1000) // already expired
   });
   const markVerifiedCalls: string[] = [];
-  withUsers({
-    findById: async () => user,
-    markVerified: async (id) => {
-      markVerifiedCalls.push(id);
-    }
+  const vt = makeVerificationTokenStub({
+    id: "vtok-2",
+    userId: user.id,
+    tokenHash: hashToken(token),
+    expiresAt: new Date(Date.now() - 1000), // already expired
+    createdAt: new Date(),
+    updatedAt: new Date()
   });
+  withRepos(
+    t,
+    {
+      findById: async () => user,
+      markVerified: async (id) => {
+        markVerifiedCalls.push(id);
+      }
+    },
+    vt.repo
+  );
 
   await assert.rejects(
     () => authService.verifyEmail(token),
@@ -333,7 +465,7 @@ test("verifyEmail: expired stored token throws AppError(400)", async () => {
   assert.equal(markVerifiedCalls.length, 0);
 });
 
-test("verifyEmail: token hash mismatch throws AppError(400)", async () => {
+test("verifyEmail: token hash mismatch throws AppError(400)", async (t) => {
   const token = createVerificationToken("507f1f77bcf86cd799439011");
   const user = createUserRecord({
     isVerified: false,
@@ -341,12 +473,24 @@ test("verifyEmail: token hash mismatch throws AppError(400)", async () => {
     verificationTokenExpiresAt: verificationTokenExpiry()
   });
   const markVerifiedCalls: string[] = [];
-  withUsers({
-    findById: async () => user,
-    markVerified: async (id) => {
-      markVerifiedCalls.push(id);
-    }
+  const vt = makeVerificationTokenStub({
+    id: "vtok-3",
+    userId: user.id,
+    tokenHash: hashToken("a-different-token"), // mismatched hash
+    expiresAt: verificationTokenExpiry(),
+    createdAt: new Date(),
+    updatedAt: new Date()
   });
+  withRepos(
+    t,
+    {
+      findById: async () => user,
+      markVerified: async (id) => {
+        markVerifiedCalls.push(id);
+      }
+    },
+    vt.repo
+  );
 
   await assert.rejects(
     () => authService.verifyEmail(token),
@@ -360,8 +504,36 @@ test("verifyEmail: token hash mismatch throws AppError(400)", async () => {
   assert.equal(markVerifiedCalls.length, 0);
 });
 
-test("verifyEmail: structurally invalid JWT throws AppError(400)", async () => {
-  withUsers({ findById: async () => null });
+test("verifyEmail: absent token record (null from store) throws AppError(400)", async (t) => {
+  const token = createVerificationToken("507f1f77bcf86cd799439011");
+  const user = createUserRecord({ isVerified: false, verificationTokenHash: null, verificationTokenExpiresAt: null });
+  const markVerifiedCalls: string[] = [];
+  const vt = makeVerificationTokenStub(null); // no token in the store
+  withRepos(
+    t,
+    {
+      findById: async () => user,
+      markVerified: async (id) => {
+        markVerifiedCalls.push(id);
+      }
+    },
+    vt.repo
+  );
+
+  await assert.rejects(
+    () => authService.verifyEmail(token),
+    (err: unknown) => {
+      assert.ok(err instanceof AppError);
+      assert.equal((err as AppError).status, 400);
+      return true;
+    }
+  );
+  assert.equal(markVerifiedCalls.length, 0);
+});
+
+test("verifyEmail: structurally invalid JWT throws AppError(400)", async (t) => {
+  const vt = makeVerificationTokenStub(null);
+  withRepos(t, { findById: async () => null }, vt.repo);
 
   await assert.rejects(
     () => authService.verifyEmail("not-a-real-jwt"),
@@ -379,52 +551,62 @@ test("verifyEmail: structurally invalid JWT throws AppError(400)", async () => {
 
 test("resendVerification: unverified existing user re-sends a link", async (t) => {
   const user = createUserRecord({ email: "alice@example.com", isVerified: false });
-  const verificationTokenCalls: Array<{ id: string; hash: string | null }> = [];
-  withUsers({
-    findByEmail: async (e) => (e.trim().toLowerCase() === "alice@example.com" ? user : null),
-    setVerificationToken: async (id, hash) => {
-      verificationTokenCalls.push({ id, hash });
+  const upsertForUserCalls: Array<{ userId: string; tokenHash: string }> = [];
+  const vtStub: Repositories["verificationTokens"] = {
+    ...makeVerificationTokenStub(null).repo,
+    upsertForUser: async (userId, tokenHash, expiresAt) => {
+      upsertForUserCalls.push({ userId, tokenHash });
+      return { id: "vtok-r", userId, tokenHash, expiresAt, createdAt: new Date(), updatedAt: new Date() };
     }
-  });
+  };
+  withRepos(
+    t,
+    { findByEmail: async (e) => (e.trim().toLowerCase() === "alice@example.com" ? user : null) },
+    vtStub
+  );
   const links = captureVerificationLogs(t);
 
   await authService.resendVerification("Alice@Example.com");
 
   assert.equal(links.length, 1);
-  // A fresh token hash was persisted.
-  assert.equal(verificationTokenCalls.length, 1);
-  assert.ok(verificationTokenCalls[0]?.hash);
+  // A fresh token hash was persisted in the verification_tokens store.
+  assert.equal(upsertForUserCalls.length, 1);
+  assert.ok(upsertForUserCalls[0]?.tokenHash);
 });
 
 test("resendVerification: already-verified user sends nothing and does not throw", async (t) => {
   const user = createUserRecord({ email: "alice@example.com", isVerified: true });
-  const verificationTokenCalls: number[] = [];
-  withUsers({
-    findByEmail: async () => user,
-    setVerificationToken: async () => {
-      verificationTokenCalls.push(1);
+  const upsertForUserCalls: number[] = [];
+  const vtStub: Repositories["verificationTokens"] = {
+    ...makeVerificationTokenStub(null).repo,
+    upsertForUser: async () => {
+      upsertForUserCalls.push(1);
+      return { id: "x", userId: "x", tokenHash: "x", expiresAt: new Date(), createdAt: new Date(), updatedAt: new Date() };
     }
-  });
+  };
+  withRepos(t, { findByEmail: async () => user }, vtStub);
   const links = captureVerificationLogs(t);
 
   await authService.resendVerification("alice@example.com");
 
   assert.equal(links.length, 0);
-  assert.equal(verificationTokenCalls.length, 0);
+  assert.equal(upsertForUserCalls.length, 0);
 });
 
 test("resendVerification: absent user sends nothing and does not throw", async (t) => {
-  const verificationTokenCalls: number[] = [];
-  withUsers({
-    findByEmail: async () => null,
-    setVerificationToken: async () => {
-      verificationTokenCalls.push(1);
+  const upsertForUserCalls: number[] = [];
+  const vtStub: Repositories["verificationTokens"] = {
+    ...makeVerificationTokenStub(null).repo,
+    upsertForUser: async () => {
+      upsertForUserCalls.push(1);
+      return { id: "x", userId: "x", tokenHash: "x", expiresAt: new Date(), createdAt: new Date(), updatedAt: new Date() };
     }
-  });
+  };
+  withRepos(t, { findByEmail: async () => null }, vtStub);
   const links = captureVerificationLogs(t);
 
   await authService.resendVerification("ghost@example.com");
 
   assert.equal(links.length, 0);
-  assert.equal(verificationTokenCalls.length, 0);
+  assert.equal(upsertForUserCalls.length, 0);
 });
