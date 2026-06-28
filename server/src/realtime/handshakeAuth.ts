@@ -11,7 +11,7 @@ function parseCookies(header: string): Record<string, string> {
   return header.split(";").reduce<Record<string, string>>((acc, part) => {
     const idx = part.indexOf("=");
     if (idx > -1) {
-      acc[part.slice(0, idx).trim()] = decodeURIComponent(part.slice(idx + 1).trim());
+      acc[part.slice(0, idx).trim()] = part.slice(idx + 1).trim();
     }
     return acc;
   }, {});
