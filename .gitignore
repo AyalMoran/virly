@@ -4,10 +4,19 @@ dist
 .DS_Store
 coverage
 
+# Build artifacts (Storybook build output, TS incremental cache, compiled vite config)
+client/storybook-static/
+*.tsbuildinfo
+*.log
+client/vite.config.js
+client/vite.config.d.ts
+
 # Generated ML artifacts (scaler/model weights are fit from the user's dataset)
 server/artifacts/
 
 *.sh
+# ...but docker-compose mounts and executes this as the mongo init entrypoint
+!docker/mongo-init.sh
 
 # docs/ is tracked, but keep transient agent run-logs and scratch playgrounds out
 docs/**/*.log

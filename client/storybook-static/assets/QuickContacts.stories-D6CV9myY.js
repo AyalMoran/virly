@@ -1,5 +1,0 @@
-import{j as e,t as u}from"./iframe-DZ5yRNij.js";import{Q as l}from"./QuickContacts-Cb_mgrbp.js";import{g}from"./contacts-DePbIDLV.js";import"./preload-helper-C1FmrZbK.js";import"./index-D3pstTQV.js";import"./index-kMzSCBiS.js";import"./user-round-KKghLVv1.js";import"./createLucideIcon-WwrtmSrE.js";const h={title:"Shared UI/QuickContacts",component:l,parameters:{layout:"centered"},decorators:[d=>e.jsx("div",{style:{width:320},children:e.jsx(d,{})})],args:{contacts:g(u),onSelectContact:()=>{}}},r={},t={args:{contacts:[]}};var o,s,a;r.parameters={...r.parameters,docs:{...(o=r.parameters)==null?void 0:o.docs,source:{originalSource:"{}",...(a=(s=r.parameters)==null?void 0:s.docs)==null?void 0:a.source}}};var c,n,i,m,p;t.parameters={...t.parameters,docs:{...(c=t.parameters)==null?void 0:c.docs,source:{originalSource:`{
-  args: {
-    contacts: []
-  }
-}`,...(i=(n=t.parameters)==null?void 0:n.docs)==null?void 0:i.source},description:{story:"No recent counterparties.",...(p=(m=t.parameters)==null?void 0:m.docs)==null?void 0:p.description}}};const k=["Default","Empty"];export{r as Default,t as Empty,k as __namedExportsOrder,h as default};
