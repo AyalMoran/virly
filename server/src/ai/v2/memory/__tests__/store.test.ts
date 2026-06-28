@@ -1,7 +1,4 @@
 
-import assert from "node:assert/strict";
-import { describe, test } from "node:test";
-
 import {
   createInMemoryLongTermStore,
   readLongTermSnapshot,
@@ -31,13 +28,13 @@ describe("v2 long-term Store (in-memory adapter)", () => {
 
     const snapshot = await readLongTermSnapshot(store, userId);
 
-    assert.equal(snapshot.counterparties.length, 1);
+    expect(snapshot.counterparties.length).toBe(1);
     // email is normalised to lower-case on write
-    assert.equal(snapshot.counterparties[0]?.email, "rani@example.com");
-    assert.equal(snapshot.counterparties[0]?.displayName, "Rani Cohen");
-    assert.equal(snapshot.preferences.preferredLanguage, "he");
-    assert.equal(snapshot.facts.length, 1);
-    assert.equal(snapshot.facts[0]?.text, "rent is on the 1st");
+    expect(snapshot.counterparties[0]?.email).toBe("rani@example.com");
+    expect(snapshot.counterparties[0]?.displayName).toBe("Rani Cohen");
+    expect(snapshot.preferences.preferredLanguage).toBe("he");
+    expect(snapshot.facts.length).toBe(1);
+    expect(snapshot.facts[0]?.text).toBe("rent is on the 1st");
   });
 
   test("relation widens to 'both' when the counterparty is seen in both directions", async () => {
@@ -54,8 +51,8 @@ describe("v2 long-term Store (in-memory adapter)", () => {
     });
 
     const snapshot = await readLongTermSnapshot(store, userId);
-    assert.equal(snapshot.counterparties.length, 1);
-    assert.equal(snapshot.counterparties[0]?.relation, "both");
+    expect(snapshot.counterparties.length).toBe(1);
+    expect(snapshot.counterparties[0]?.relation).toBe("both");
   });
 
   test("preferences merge rather than replace", async () => {
@@ -66,8 +63,8 @@ describe("v2 long-term Store (in-memory adapter)", () => {
     await upsertPreferences(store, userId, { confirmAboveAmount: 500 });
 
     const snapshot = await readLongTermSnapshot(store, userId);
-    assert.equal(snapshot.preferences.preferredLanguage, "en");
-    assert.equal(snapshot.preferences.confirmAboveAmount, 500);
+    expect(snapshot.preferences.preferredLanguage).toBe("en");
+    expect(snapshot.preferences.confirmAboveAmount).toBe(500);
   });
 
   test("namespaces isolate users from each other", async () => {
@@ -80,12 +77,12 @@ describe("v2 long-term Store (in-memory adapter)", () => {
 
     const aliceNs = userNamespace("alice");
     const bobNs = userNamespace("bob");
-    assert.notDeepEqual(aliceNs, bobNs);
+    expect(aliceNs).not.toStrictEqual(bobNs);
 
     const bobSnapshot = await readLongTermSnapshot(store, "bob");
-    assert.equal(bobSnapshot.counterparties.length, 0);
+    expect(bobSnapshot.counterparties.length).toBe(0);
 
     const aliceSnapshot = await readLongTermSnapshot(store, "alice");
-    assert.equal(aliceSnapshot.counterparties.length, 1);
+    expect(aliceSnapshot.counterparties.length).toBe(1);
   });
 });

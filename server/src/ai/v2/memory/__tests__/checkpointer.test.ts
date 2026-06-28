@@ -1,7 +1,4 @@
 
-import assert from "node:assert/strict";
-import { describe, test } from "node:test";
-
 import { Annotation, StateGraph } from "@langchain/langgraph";
 
 import { createCheckpointer, createInMemoryCheckpointer } from "../checkpointer.js";
@@ -26,9 +23,9 @@ function buildCountingGraph(checkpointer: ReturnType<typeof createInMemoryCheckp
 describe("v2 thread checkpointer", () => {
   test("createCheckpointer returns an in-memory saver when no client is supplied", () => {
     const saver = createCheckpointer();
-    assert.ok(saver, "expected a checkpointer instance");
-    assert.equal(typeof saver.getTuple, "function");
-    assert.equal(typeof saver.put, "function");
+    expect(saver).toBeTruthy();
+    expect(typeof saver.getTuple).toBe("function");
+    expect(typeof saver.put).toBe("function");
   });
 
   test("a thread written in turn 1 is restored in turn 2 (same thread_id)", async () => {
@@ -40,7 +37,7 @@ describe("v2 thread checkpointer", () => {
     const second = await graph.invoke({ turns: ["turn-2"] }, config);
 
     // The checkpointer restored turn 1's state, so the appending reducer has both.
-    assert.deepEqual(second.turns, ["turn-1", "turn-2"]);
+    expect(second.turns).toStrictEqual(["turn-1", "turn-2"]);
   });
 
   test("different thread_ids do not share state", async () => {
@@ -53,6 +50,6 @@ describe("v2 thread checkpointer", () => {
       { configurable: { thread_id: "t2" } }
     );
 
-    assert.deepEqual(other.turns, ["b"]);
+    expect(other.turns).toStrictEqual(["b"]);
   });
 });
