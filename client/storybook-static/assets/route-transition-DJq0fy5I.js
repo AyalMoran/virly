@@ -1,1 +1,0 @@
-const s={transitionFromAuth:!0},n="virly-auth-transition";function a(){sessionStorage.setItem(n,"1")}function i(o){const t=o;return!!(t!=null&&t.transitionFromAuth)||sessionStorage.getItem(n)==="1"}function r(){sessionStorage.removeItem(n)}export{s as a,r as c,i as h,a as m};

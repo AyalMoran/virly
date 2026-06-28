@@ -1,5 +1,0 @@
-import{j as m}from"./iframe-DZ5yRNij.js";import{P as p}from"./Primitives-DzJ49MJc.js";import"./preload-helper-C1FmrZbK.js";import"./createLucideIcon-WwrtmSrE.js";const f={title:"Shared UI/PageHeader",component:p,parameters:{layout:"padded"},args:{eyebrow:"Transfer",title:"Write a cheque"}},r={},e={args:{children:m.jsx("button",{className:"button button-secondary",children:"New transfer"})}};var t,a,s;r.parameters={...r.parameters,docs:{...(t=r.parameters)==null?void 0:t.docs,source:{originalSource:"{}",...(s=(a=r.parameters)==null?void 0:a.docs)==null?void 0:s.source}}};var o,n,c,i,d;e.parameters={...e.parameters,docs:{...(o=e.parameters)==null?void 0:o.docs,source:{originalSource:`{
-  args: {
-    children: <button className="button button-secondary">New transfer</button>
-  }
-}`,...(c=(n=e.parameters)==null?void 0:n.docs)==null?void 0:c.source},description:{story:"With a trailing action in the header.",...(d=(i=e.parameters)==null?void 0:i.docs)==null?void 0:d.description}}};const g=["Default","WithActions"];export{r as Default,e as WithActions,g as __namedExportsOrder,f as default};
