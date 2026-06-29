@@ -1,6 +1,3 @@
-import assert from "node:assert/strict";
-import { beforeEach, describe, test } from "node:test";
-
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
 import type { ChatOpenAI } from "@langchain/openai";
@@ -44,8 +41,8 @@ describe("v2 summarization node", () => {
   test("under the token trigger: returns no state update", async () => {
     const node = buildSummarizationNode(stubModel, { triggerTokens: 100000 });
     const out = await node(state(turns(3)));
-    assert.deepEqual(out, {});
-    assert.equal(summarizerCalls, 0);
+    expect(out).toEqual({});
+    expect(summarizerCalls).toBe(0);
   });
 
   test("over trigger: folds older messages and advances the covered pointer", async () => {
@@ -55,22 +52,16 @@ describe("v2 summarization node", () => {
     });
     const messages = turns(20, "x".repeat(40));
     const out = await node(state(messages));
-    assert.equal(summarizerCalls, 1);
-    assert.match(out.runningSummary ?? "", /Dan and Rani/);
-    assert.ok(
-      (out.summaryCoveredCount ?? 0) > 0,
-      "expected covered pointer to advance"
-    );
-    assert.ok(
-      (out.summaryCoveredCount ?? 0) < messages.length,
-      "must keep a recent window"
-    );
+    expect(summarizerCalls).toBe(1);
+    expect(out.runningSummary ?? "").toMatch(/Dan and Rani/);
+    expect((out.summaryCoveredCount ?? 0) > 0).toBe(true);
+    expect((out.summaryCoveredCount ?? 0) < messages.length).toBe(true);
   });
 
   test("recent window boundary lands on a HumanMessage (no split tool group)", async () => {
     const messages = turns(20, "x".repeat(40));
     const boundary = recentBoundaryIndex(messages, 40);
-    assert.ok(messages[boundary] instanceof HumanMessage, "boundary not human-aligned");
+    expect(messages[boundary] instanceof HumanMessage).toBe(true);
   });
 
   test("a tool reply is never orphaned at the window start", () => {
@@ -82,7 +73,7 @@ describe("v2 summarization node", () => {
       new AIMessage("Prepared a transfer for your confirmation.")
     ];
     const boundary = recentBoundaryIndex(messages, 40);
-    assert.ok(messages[boundary] instanceof HumanMessage);
+    expect(messages[boundary] instanceof HumanMessage).toBe(true);
   });
 
   test("incremental: nothing new to fold returns no update", async () => {
@@ -94,8 +85,8 @@ describe("v2 summarization node", () => {
     const boundary = recentBoundaryIndex(messages, 40);
     // Pretend everything up to the boundary is already summarized.
     const out = await node(state(messages, { summaryCoveredCount: boundary }));
-    assert.deepEqual(out, {});
-    assert.equal(summarizerCalls, 0);
+    expect(out).toEqual({});
+    expect(summarizerCalls).toBe(0);
   });
 
   test("summarizer failure degrades to a no-op (covered pointer unchanged)", async () => {
@@ -104,6 +95,6 @@ describe("v2 summarization node", () => {
       recentTokens: 40
     });
     const out = await node(state(turns(20, "x".repeat(40))));
-    assert.deepEqual(out, {});
+    expect(out).toEqual({});
   });
 });

@@ -1,6 +1,3 @@
-import assert from "node:assert/strict";
-import { describe, test } from "node:test";
-
 import { AIMessage, HumanMessage, SystemMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
 import type { ChatOpenAI } from "@langchain/openai";
@@ -53,9 +50,9 @@ describe("v2 agent node compressed view", () => {
     await node(state, baseConfig as never);
 
     // [system, recent-2, recent-3] — the two old messages are excluded.
-    assert.equal(captured.length, 3);
-    assert.ok(captured[0] instanceof SystemMessage);
-    assert.equal((captured[1] as HumanMessage).content, "recent-2");
+    expect(captured.length).toBe(3);
+    expect(captured[0] instanceof SystemMessage).toBe(true);
+    expect((captured[1] as HumanMessage).content).toBe("recent-2");
   });
 
   test("injects runningSummary from state into the system prompt", async () => {
@@ -70,6 +67,6 @@ describe("v2 agent node compressed view", () => {
     await node(state, baseConfig as never);
 
     const system = (captured[0] as SystemMessage).content as string;
-    assert.match(system, /Dan totals/);
+    expect(system).toMatch(/Dan totals/);
   });
 });
