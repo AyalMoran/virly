@@ -21,6 +21,15 @@ export const V2AgentState = Annotation.Root({
   /** The id of a card this turn's modification superseded. */
   supersededConfirmationId: Annotation<string | undefined>(),
 
+  // --- Phase 6: summarization view (token-budgeted; kept OFF `messages`) ---
+  /** Cumulative summary of messages older than the live window (langmem-style). */
+  runningSummary: Annotation<string | undefined>(),
+  /** How many leading `messages` are already folded into `runningSummary`. */
+  summaryCoveredCount: Annotation<number>({
+    reducer: (_prev, next) => next,
+    default: () => 0
+  }),
+
   // --- Phase 5: human-in-the-loop transfer execution (resumable graph only) ---
   /** Filled on resume from the confirmation card's Confirm/Deny click. */
   confirmationOutcome: Annotation<"confirmed" | "denied" | undefined>(),
