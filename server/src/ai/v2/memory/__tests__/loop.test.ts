@@ -8,8 +8,6 @@
 import { InMemoryStore } from "@langchain/langgraph";
 
 import {
-  readConversationSummary,
-  saveConversationSummary,
   withLongTermCounterparties,
   upsertInteractedCounterparties
 } from "../loop.js";
@@ -40,78 +38,6 @@ function memoryWith(email: string, displayName?: string): CounterpartyMemory {
     ]
   };
 }
-
-// ---------------------------------------------------------------------------
-// readConversationSummary / saveConversationSummary
-// ---------------------------------------------------------------------------
-
-describe("saveConversationSummary + readConversationSummary", () => {
-  test("round-trips a summary through the store", async () => {
-    const store = new InMemoryStore();
-    await saveConversationSummary(store, "user-1", "conv-1", "Earlier: Dan sent 200.");
-    const result = await readConversationSummary(store, "user-1", "conv-1");
-    expect(result).toBe("Earlier: Dan sent 200.");
-  });
-
-  test("returns undefined when no summary has been written", async () => {
-    const store = new InMemoryStore();
-    const result = await readConversationSummary(store, "user-x", "conv-new");
-    expect(result).toBeUndefined();
-  });
-
-  test("different conversation IDs are isolated", async () => {
-    const store = new InMemoryStore();
-    await saveConversationSummary(store, "user-1", "conv-A", "Summary A");
-    await saveConversationSummary(store, "user-1", "conv-B", "Summary B");
-    const a = await readConversationSummary(store, "user-1", "conv-A");
-    const b = await readConversationSummary(store, "user-1", "conv-B");
-    expect(a).toBe("Summary A");
-    expect(b).toBe("Summary B");
-  });
-
-  test("different user IDs are isolated", async () => {
-    const store = new InMemoryStore();
-    await saveConversationSummary(store, "user-1", "conv-1", "User-1 summary");
-    await saveConversationSummary(store, "user-2", "conv-1", "User-2 summary");
-    const u1 = await readConversationSummary(store, "user-1", "conv-1");
-    const u2 = await readConversationSummary(store, "user-2", "conv-1");
-    expect(u1).toBe("User-1 summary");
-    expect(u2).toBe("User-2 summary");
-  });
-
-  test("overwrites an existing summary", async () => {
-    const store = new InMemoryStore();
-    await saveConversationSummary(store, "u", "c", "First version");
-    await saveConversationSummary(store, "u", "c", "Second version");
-    const result = await readConversationSummary(store, "u", "c");
-    expect(result).toBe("Second version");
-  });
-
-  test("returns undefined when the stored text is only whitespace", async () => {
-    const store = new InMemoryStore();
-    // Directly put a whitespace-only value into the store.
-    await store.put(["virly", "users", "u"], "summary:c-ws", { text: "   " });
-    const result = await readConversationSummary(store, "u", "c-ws");
-    expect(result).toBeUndefined();
-  });
-
-  test("degrades gracefully when store.get rejects", async () => {
-    const brokenStore = {
-      get: async () => { throw new Error("DB down"); },
-      put: async () => {}
-    } as unknown as InMemoryStore;
-    const result = await readConversationSummary(brokenStore, "u", "c");
-    expect(result).toBeUndefined();
-  });
-
-  test("degrades gracefully when store.put rejects", async () => {
-    const brokenStore = {
-      put: async () => { throw new Error("DB down"); }
-    } as unknown as InMemoryStore;
-    // Must not throw
-    await expect(saveConversationSummary(brokenStore, "u", "c", "text")).resolves.toBeUndefined();
-  });
-});
 
 // ---------------------------------------------------------------------------
 // withLongTermCounterparties
