@@ -33,7 +33,7 @@ export const SUMMARY_RECENT_TOKENS = 1500;
 function roleOf(message: BaseMessage): string {
   if (message instanceof HumanMessage) return "User";
   if (isAiMessage(message)) return "Assistant";
-  return "Note";
+  return "Tool";
 }
 
 /**
@@ -56,6 +56,9 @@ export function recentBoundaryIndex(
     if (tokens > recentTokens) {
       break;
     }
+    // When the whole thread fits within recentTokens, the loop runs to
+    // completion with start reaching 0. The caller treats boundary <= covered
+    // as a no-op fold, so nothing is summarized in that case.
   }
   let snapped = start;
   while (snapped > 0 && !(messages[snapped] instanceof HumanMessage)) {

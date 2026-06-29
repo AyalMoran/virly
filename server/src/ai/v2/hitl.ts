@@ -1,15 +1,16 @@
 /**
  * Human-in-the-loop transfer path (design §8 / Phase 5).
  *
- * The resumable graph is the same read-only loop plus a money branch:
+ * The resumable graph is the single v2 execution path:
  *
- *   prepare → agent ⇄ tools → finalize → (card? transferGate : persist)
+ *   prepare → summarize → agent ⇄ tools → finalize → (card? transferGate : persist)
+ *   tools → summarize → agent  (summarize runs before every agent call)
  *   transferGate --interrupt--> [Confirm → executeTransfer | Deny] → persist
  *
  * It is compiled WITH a checkpointer so `interrupt()` can pause on a prepared
  * card and `Command({ resume })` can continue later from the authenticated
- * confirmation endpoint. The conformance suite does NOT use this graph (it drives
- * the non-resumable per-turn entry); this is the production HITL path.
+ * confirmation endpoint. This is the ONLY v2 graph: it is used by both the
+ * production HITL flow and the conformance/eval harness (via runAssistant).
  */
 import { HumanMessage } from "@langchain/core/messages";
 import {
