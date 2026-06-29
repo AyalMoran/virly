@@ -1,8 +1,6 @@
 // src/transactionQuery.service.test.ts
 
-import assert from "node:assert/strict";
-import test from "node:test";
-import { setRepositories, getRepositories } from "../../repositories/index.js";
+import { setRepositories } from "../../repositories/index.js";
 import { createMongoRepositories } from "../../repositories/mongo/index.js";
 import { transactionQueryService } from "../transactionQuery.service.js";
 import type { TransactionRecord } from "../../repositories/types.js";
@@ -53,7 +51,7 @@ function withRepoMock(
 test("listForOwner: ownerId scoping is always applied", withRepoMock(
   {
     listForOwner: async (input) => {
-      assert.equal(input.ownerId, "owner-123");
+      expect(input.ownerId).toBe("owner-123");
       return { transactions: [], total: 0 };
     }
   },
@@ -65,7 +63,7 @@ test("listForOwner: ownerId scoping is always applied", withRepoMock(
 test("listForOwner: counterpartyEmail filter forwarded when provided", withRepoMock(
   {
     listForOwner: async (input) => {
-      assert.equal(input.counterpartyEmail, "alice@example.com");
+      expect(input.counterpartyEmail).toBe("alice@example.com");
       return { transactions: [], total: 0 };
     }
   },
@@ -82,7 +80,7 @@ test("listForOwner: counterpartyEmail filter forwarded when provided", withRepoM
 test("listForOwner: no counterpartyEmail when not provided", withRepoMock(
   {
     listForOwner: async (input) => {
-      assert.equal(Object.hasOwn(input, "counterpartyEmail") && input.counterpartyEmail !== undefined, false);
+      expect(Object.hasOwn(input, "counterpartyEmail") && input.counterpartyEmail !== undefined).toBe(false);
       return { transactions: [], total: 0 };
     }
   },
@@ -94,8 +92,8 @@ test("listForOwner: no counterpartyEmail when not provided", withRepoMock(
 test("listForOwner: page and limit forwarded correctly", withRepoMock(
   {
     listForOwner: async (input) => {
-      assert.equal(input.page, 3);
-      assert.equal(input.limit, 5);
+      expect(input.page).toBe(3);
+      expect(input.limit).toBe(5);
       return { transactions: [], total: 0 };
     }
   },
@@ -115,9 +113,9 @@ test("listForOwner: returns transactions and total from repo", withRepoMock(
     const result = await transactionQueryService.listForOwner({
       ownerId: "owner-123", page: 1, limit: 10
     });
-    assert.equal(result.total, 42);
-    assert.equal(result.transactions.length, 2);
-    assert.equal(result.transactions[0].id, "60d5ec49f1b2c8a1f8e4e1b1");
+    expect(result.total).toBe(42);
+    expect(result.transactions.length).toBe(2);
+    expect(result.transactions[0].id).toBe("60d5ec49f1b2c8a1f8e4e1b1");
   }
 ));
 
@@ -130,8 +128,8 @@ test("getRelationshipStats: forwards ownerId and counterpartyEmail to repo", wit
     getRelationshipStats: async (input) => {
       // The service no longer does ObjectId casting — that's in the repo.
       // Verify the string is passed through unchanged.
-      assert.equal(input.ownerId, OWNER_OID);
-      assert.equal(input.counterpartyEmail, "bob@example.com");
+      expect(input.ownerId).toBe(OWNER_OID);
+      expect(input.counterpartyEmail).toBe("bob@example.com");
       return { totalSent: 0, totalReceived: 0, transactionCount: 0, lastTransactionAt: null };
     }
   },
@@ -157,10 +155,10 @@ test("getRelationshipStats: returns correct totals for known fixture", withRepoM
       ownerId: OWNER_OID,
       counterpartyEmail: "bob@example.com"
     });
-    assert.equal(result.totalSent, 500);
-    assert.equal(result.totalReceived, 200.5);
-    assert.equal(result.transactionCount, 7);
-    assert.deepEqual(result.lastTransactionAt, new Date("2026-06-10T08:00:00.000Z"));
+    expect(result.totalSent).toBe(500);
+    expect(result.totalReceived).toBe(200.5);
+    expect(result.transactionCount).toBe(7);
+    expect(result.lastTransactionAt).toStrictEqual(new Date("2026-06-10T08:00:00.000Z"));
   }
 ));
 
@@ -178,10 +176,10 @@ test("getRelationshipStats: returns zero-defaults when repo returns zeros", with
       ownerId: OWNER_OID,
       counterpartyEmail: "bob@example.com"
     });
-    assert.equal(result.totalSent, 0);
-    assert.equal(result.totalReceived, 0);
-    assert.equal(result.transactionCount, 0);
-    assert.equal(result.lastTransactionAt, null);
+    expect(result.totalSent).toBe(0);
+    expect(result.totalReceived).toBe(0);
+    expect(result.transactionCount).toBe(0);
+    expect(result.lastTransactionAt).toBeNull();
   }
 ));
 
@@ -192,8 +190,8 @@ test("getRelationshipStats: returns zero-defaults when repo returns zeros", with
 test("recentWithCounterparty: forwards ownerId and counterpartyEmail to repo", withRepoMock(
   {
     recentWithCounterparty: async (input) => {
-      assert.equal(input.ownerId, "owner-xyz");
-      assert.equal(input.counterpartyEmail, "carol@example.com");
+      expect(input.ownerId).toBe("owner-xyz");
+      expect(input.counterpartyEmail).toBe("carol@example.com");
       return [];
     }
   },
@@ -209,7 +207,7 @@ test("recentWithCounterparty: forwards ownerId and counterpartyEmail to repo", w
 test("recentWithCounterparty: forwards limit to repo", withRepoMock(
   {
     recentWithCounterparty: async (input) => {
-      assert.equal(input.limit, 5);
+      expect(input.limit).toBe(5);
       return [];
     }
   },
@@ -232,7 +230,7 @@ test("recentWithCounterparty: returns the records from repo", withRepoMock(
       counterpartyEmail: "carol@example.com",
       limit: 5
     });
-    assert.equal(result.length, 1);
-    assert.equal(result[0].id, "tx-9");
+    expect(result.length).toBe(1);
+    expect(result[0].id).toBe("tx-9");
   }
 ));

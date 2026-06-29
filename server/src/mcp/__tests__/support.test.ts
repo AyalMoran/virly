@@ -1,6 +1,3 @@
-import assert from "node:assert/strict";
-import { describe, test } from "node:test";
-
 import { createSupportTools, type SupportToolDeps } from "../support.js";
 import type { RuntimeToolResult, ToolContext } from "../../ai/state.js";
 import type { UserRecord } from "../../repositories/types.js";
@@ -58,27 +55,27 @@ function makeDeps(overrides: Partial<SupportToolDeps> = {}): {
 
 function tool(deps: SupportToolDeps, name: string) {
   const t = createSupportTools(deps).find((x) => x.name === name);
-  assert.ok(t, `tool ${name} should exist`);
-  return t;
+  expect(t).toBeTruthy();
+  return t!;
 }
 
 describe("support MCP tools", () => {
   test("get_balance resolves the customer and runs the executor with their id", async () => {
     const { deps, calls } = makeDeps();
     const out = await tool(deps, "get_balance").handler({ customerEmail: "dan@example.com" });
-    assert.equal(out.isError, undefined);
-    assert.match(out.content[0].text, /ran getAccountBalance/);
-    assert.equal(calls[0].name, "getAccountBalance");
-    assert.equal(calls[0].ctx.userId, "507f1f77bcf86cd799439011");
-    assert.equal(calls[0].ctx.conversationId, "mcp-support");
+    expect(out.isError).toBeUndefined();
+    expect(out.content[0].text).toMatch(/ran getAccountBalance/);
+    expect(calls[0].name).toBe("getAccountBalance");
+    expect(calls[0].ctx.userId).toBe("507f1f77bcf86cd799439011");
+    expect(calls[0].ctx.conversationId).toBe("mcp-support");
   });
 
   test("unknown customer returns an error result without calling executors", async () => {
     const { deps, calls } = makeDeps();
     const out = await tool(deps, "get_balance").handler({ customerEmail: "nope@example.com" });
-    assert.equal(out.isError, true);
-    assert.match(out.content[0].text, /No customer found/);
-    assert.equal(calls.length, 0);
+    expect(out.isError).toBe(true);
+    expect(out.content[0].text).toMatch(/No customer found/);
+    expect(calls.length).toBe(0);
   });
 
   test("get_counterparty_summary passes a resolved counterparty ref to the executor", async () => {
@@ -87,15 +84,15 @@ describe("support MCP tools", () => {
       customerEmail: "dan@example.com",
       counterpartyEmail: "Rani@Example.com"
     });
-    assert.equal(calls[0].name, "getCounterpartySummary");
-    assert.equal(calls[0].ctx.resolvedCounterparty?.email, "rani@example.com");
+    expect(calls[0].name).toBe("getCounterpartySummary");
+    expect(calls[0].ctx.resolvedCounterparty?.email).toBe("rani@example.com");
   });
 
   test("lookup_customer returns a profile summary", async () => {
     const { deps } = makeDeps();
     const out = await tool(deps, "lookup_customer").handler({ customerEmail: "dan@example.com" });
-    assert.match(out.content[0].text, /dan@example\.com/);
-    assert.match(out.content[0].text, /balance: 1840\.50/);
+    expect(out.content[0].text).toMatch(/dan@example\.com/);
+    expect(out.content[0].text).toMatch(/balance: 1840\.50/);
   });
 
   test("list_fraud_flags formats flags and passes filters through", async () => {
@@ -119,8 +116,8 @@ describe("support MCP tools", () => {
       }) as SupportToolDeps["listFraudFlags"]
     });
     const out = await tool(deps, "list_fraud_flags").handler({ level: "high", limit: 5 });
-    assert.match(out.content[0].text, /\[high\] score=0\.8 ₪450 → dan@example\.com/);
-    assert.deepEqual(received, { level: "high", userId: undefined, limit: 5 });
+    expect(out.content[0].text).toMatch(/\[high\] score=0\.8 ₪450 → dan@example\.com/);
+    expect(received).toStrictEqual({ level: "high", userId: undefined, limit: 5 });
   });
 
   test("list_fraud_flags resolves customerEmail to a userId filter", async () => {
@@ -132,20 +129,20 @@ describe("support MCP tools", () => {
       }) as SupportToolDeps["listFraudFlags"]
     });
     await tool(deps, "list_fraud_flags").handler({ customerEmail: "dan@example.com" });
-    assert.equal(received.userId, "507f1f77bcf86cd799439011");
+    expect(received.userId).toBe("507f1f77bcf86cd799439011");
   });
 
   test("list_held_transfers reports an empty result cleanly", async () => {
     const { deps } = makeDeps();
     const out = await tool(deps, "list_held_transfers").handler({ status: "pending" });
-    assert.match(out.content[0].text, /No held transfers/);
+    expect(out.content[0].text).toMatch(/No held transfers/);
   });
 
   test("search_policy_docs reports a friendly message when RAG is disabled", async () => {
     const { deps } = makeDeps();
     const out = await tool(deps, "search_policy_docs").handler({ query: "loan packages" });
-    assert.equal(out.isError, undefined);
-    assert.match(out.content[0].text, /not enabled/);
+    expect(out.isError).toBeUndefined();
+    expect(out.content[0].text).toMatch(/not enabled/);
   });
 
   test("search_policy_docs renders cited excerpts when available", async () => {
@@ -166,7 +163,7 @@ describe("support MCP tools", () => {
       })) as SupportToolDeps["retrieve"]
     });
     const out = await tool(deps, "search_policy_docs").handler({ query: "premium apr" });
-    assert.match(out.content[0].text, /\[1\] Loan Packages \(loan_package\)/);
-    assert.match(out.content[0].text, /5\.9%/);
+    expect(out.content[0].text).toMatch(/\[1\] Loan Packages \(loan_package\)/);
+    expect(out.content[0].text).toMatch(/5\.9%/);
   });
 });

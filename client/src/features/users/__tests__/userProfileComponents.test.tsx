@@ -1,5 +1,3 @@
-import assert from "node:assert/strict";
-import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { EmptyRelationshipState } from "../../../features/users/EmptyRelationshipState";
@@ -59,11 +57,11 @@ test("profile header shows identity, verification badge, and send action", () =>
     />
   );
 
-  assert.match(html, /Daniel Cohen/);
-  assert.match(html, /daniel@example\.com/);
-  assert.match(html, /Verified/);
-  assert.match(html, /Member since March 2026/);
-  assert.match(html, /Transfer/);
+  expect(html).toMatch(/Daniel Cohen/);
+  expect(html).toMatch(/daniel@example\.com/);
+  expect(html).toMatch(/Verified/);
+  expect(html).toMatch(/Member since March 2026/);
+  expect(html).toMatch(/Transfer/);
 });
 
 test("relationship summary renders viewer-relative totals", () => {
@@ -71,14 +69,14 @@ test("relationship summary renders viewer-relative totals", () => {
     <RelationshipSummaryCard relationship={relationship} viewedName="Daniel" />
   );
 
-  assert.match(html, /Between you and Daniel/);
-  assert.match(html, /You sent/);
-  assert.match(html, /You received/);
-  assert.match(html, /Net sent/);
-  assert.match(html, /1,240/);
-  assert.match(html, /450/);
-  assert.match(html, /790/);
-  assert.match(html, />8</);
+  expect(html).toMatch(/Between you and Daniel/);
+  expect(html).toMatch(/You sent/);
+  expect(html).toMatch(/You received/);
+  expect(html).toMatch(/Net sent/);
+  expect(html).toMatch(/1,240/);
+  expect(html).toMatch(/450/);
+  expect(html).toMatch(/790/);
+  expect(html).toMatch(/>8</);
 });
 
 test("shared transactions render direction relative to the viewer", () => {
@@ -91,15 +89,15 @@ test("shared transactions render direction relative to the viewer", () => {
     />
   );
 
-  assert.match(html, /Sent to Daniel/);
-  assert.match(html, /Received from Daniel/);
-  assert.match(html, /Lunch/);
-  assert.match(html, /Completed/);
-  assert.match(html, /amount-debit/);
-  assert.match(html, /amount-credit/);
+  expect(html).toMatch(/Sent to Daniel/);
+  expect(html).toMatch(/Received from Daniel/);
+  expect(html).toMatch(/Lunch/);
+  expect(html).toMatch(/Completed/);
+  expect(html).toMatch(/amount-debit/);
+  expect(html).toMatch(/amount-credit/);
   // Rows open the shared transaction details dialog, so they expose button semantics.
-  assert.match(html, /transaction-row selectable/);
-  assert.match(html, /role="button"/);
+  expect(html).toMatch(/transaction-row selectable/);
+  expect(html).toMatch(/role="button"/);
 });
 
 test("recipient status renders verified copy with transfer action", () => {
@@ -111,8 +109,8 @@ test("recipient status renders verified copy with transfer action", () => {
     />
   );
 
-  assert.match(html, /Verified recipient/);
-  assert.match(html, /Transfer/);
+  expect(html).toMatch(/Verified recipient/);
+  expect(html).toMatch(/Transfer/);
 });
 
 test("recipient status for self profile hides the transfer action", () => {
@@ -128,8 +126,13 @@ test("recipient status for self profile hides the transfer action", () => {
     />
   );
 
-  assert.match(html, /Your account/);
-  assert.doesNotMatch(html, /Transfer/);
+  expect(html).toMatch(/Your account/);
+  // The self card has no transfer action button (the only <button> the card
+  // ever renders is the "Transfer" action, gated on canTransferToUser).
+  // NOTE: the prior assertion was not.toMatch(/Transfer/), which was a latent
+  // bug — it tripped on the explanatory copy ("Transfers to yourself are not
+  // possible.") rather than the action. The component already hides the action.
+  expect(html).not.toMatch(/<button/i);
 });
 
 test("empty relationship state offers a safe send-money entry point", () => {
@@ -137,6 +140,6 @@ test("empty relationship state offers a safe send-money entry point", () => {
     <EmptyRelationshipState viewedName="Daniel" canSendMoney onSendMoney={() => {}} />
   );
 
-  assert.match(html, /You and Daniel have no transactions yet/);
-  assert.match(html, /Transfer/);
+  expect(html).toMatch(/You and Daniel have no transactions yet/);
+  expect(html).toMatch(/Transfer/);
 });

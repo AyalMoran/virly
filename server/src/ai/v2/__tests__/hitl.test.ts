@@ -1,6 +1,3 @@
-import assert from "node:assert/strict";
-import { describe, test } from "node:test";
-
 import { Command, END, MemorySaver, START, StateGraph } from "@langchain/langgraph";
 
 import { DEFAULT_ASSISTANT_ID } from "../../assistants.js";
@@ -82,9 +79,9 @@ describe("v2 HITL transfer gate (interrupt / Command resume)", () => {
     };
 
     const interrupts = out.__interrupt__;
-    assert.ok(Array.isArray(interrupts) && interrupts.length > 0, "expected an interrupt");
-    assert.equal(out.confirmation?.id, "pending-transfer-1");
-    assert.equal(calls.length, 0, "no money moved while paused");
+    expect(Array.isArray(interrupts) && interrupts.length > 0).toBeTruthy();
+    expect(out.confirmation?.id).toBe("pending-transfer-1");
+    expect(calls.length).toBe(0);
   });
 
   test("resume(confirm) executes exactly once via the backend service", async () => {
@@ -99,8 +96,8 @@ describe("v2 HITL transfer gate (interrupt / Command resume)", () => {
       { configurable: { ...config.configurable } }
     )) as { transferResult?: { status?: string } };
 
-    assert.deepEqual(calls, ["confirm:pending-transfer-1:1"]);
-    assert.equal(resumed.transferResult?.status, "confirmed");
+    expect(calls).toStrictEqual(["confirm:pending-transfer-1:1"]);
+    expect(resumed.transferResult?.status).toBe("confirmed");
   });
 
   test("resume(deny) executes nothing", async () => {
@@ -115,7 +112,7 @@ describe("v2 HITL transfer gate (interrupt / Command resume)", () => {
       { configurable: { ...config.configurable } }
     )) as { transferResult?: unknown; confirmation?: unknown };
 
-    assert.equal(calls.length, 0, "deny must not execute a transfer");
-    assert.equal(resumed.transferResult, undefined);
+    expect(calls.length).toBe(0);
+    expect(resumed.transferResult).toBeUndefined();
   });
 });

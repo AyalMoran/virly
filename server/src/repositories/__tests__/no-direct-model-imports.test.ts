@@ -1,12 +1,12 @@
 
 
-import assert from "node:assert/strict";
-import test from "node:test";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 
 // `src/` root: this test now lives at src/repositories/__tests__/, so go up two.
-const ROOT = path.resolve(import.meta.dirname, "../..");
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.resolve(__dirname, "../..");
 const ALLOWED_PREFIXES = [
   path.join(ROOT, "repositories", "mongo"),
   path.join(ROOT, "ai", "evals")
@@ -29,5 +29,5 @@ test("only repositories/mongo and ai/evals import ../models/*", async () => {
     const src = await readFile(file, "utf8");
     if (/from\s+["'](\.\.\/)*models\//.test(src)) offenders.push(path.relative(ROOT, file));
   }
-  assert.deepEqual(offenders, [], `Files still importing models directly: ${offenders.join(", ")}`);
+  expect(offenders).toStrictEqual([]);
 });

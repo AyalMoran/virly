@@ -1,5 +1,3 @@
-import assert from "node:assert/strict";
-import test from "node:test";
 import { executeTransfer } from "../transfer.service.js";
 import { setRealtime, noopRealtime } from "../../realtime/registry.js";
 import { setRepositories } from "../../repositories/index.js";
@@ -37,7 +35,7 @@ test("executeTransfer notifies the recipient in real time", async () => {
 
   await executeTransfer({ senderId: "sender-id", recipientEmail: "recip@example.com", amount: 50, reason: null });
 
-  assert.deepEqual(emits, [{ userId: "recipient-id", event: "transfer:received", amount: 50 }]);
+  expect(emits).toStrictEqual([{ userId: "recipient-id", event: "transfer:received", amount: 50 }]);
   setRealtime(noopRealtime);
 });
 
@@ -47,6 +45,6 @@ test("a realtime emit failure does not break the transfer", async () => {
 
   const result = await executeTransfer({ senderId: "sender-id", recipientEmail: "recip@example.com", amount: 50, reason: null });
 
-  assert.equal(result.newBalance, 950); // 1000 - 50; transfer still succeeded
+  expect(result.newBalance).toBe(950); // 1000 - 50; transfer still succeeded
   setRealtime(noopRealtime);
 });

@@ -1,5 +1,3 @@
-import assert from "node:assert/strict";
-import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
@@ -57,39 +55,39 @@ function withMockLocalStorage<T>(initial: Record<string, string>, fn: () => T): 
 
 //#region Conversion and formatting
 test("convertIlsForDisplay converts ILS into USD/EUR with minor-unit rounding", () => {
-  assert.equal(convertIlsForDisplay(100, "ILS", rates.rates), 100);
-  assert.equal(convertIlsForDisplay(100, "USD", rates.rates), 27);
-  assert.equal(convertIlsForDisplay(370, "EUR", rates.rates), 92.5);
+  expect(convertIlsForDisplay(100, "ILS", rates.rates)).toBe(100);
+  expect(convertIlsForDisplay(100, "USD", rates.rates)).toBe(27);
+  expect(convertIlsForDisplay(370, "EUR", rates.rates)).toBe(92.5);
   // 0.1 + 0.2 noise snaps to minor units before converting.
-  assert.equal(convertIlsForDisplay(0.1 + 0.2, "USD", rates.rates), 0.08);
+  expect(convertIlsForDisplay(0.1 + 0.2, "USD", rates.rates)).toBe(0.08);
 });
 
 test("formatIlsAmount renders the selected display currency", () => {
-  assert.equal(formatIlsAmount(100, "USD", rates), formatMoneyIn(27, "USD"));
-  assert.equal(formatIlsAmount(370, "EUR", rates), formatMoneyIn(92.5, "EUR"));
+  expect(formatIlsAmount(100, "USD", rates)).toBe(formatMoneyIn(27, "USD"));
+  expect(formatIlsAmount(370, "EUR", rates)).toBe(formatMoneyIn(92.5, "EUR"));
 });
 
 test("formatIlsAmount keeps ILS formatting for ILS and when rates are missing", () => {
   const ilsFormatted = formatIlsAmount(123.45, "ILS", rates);
-  assert.ok(ilsFormatted.includes("₪"));
+  expect(ilsFormatted.includes("₪")).toBeTruthy();
   // Conversion unavailable: degrade safely to the original ILS amount.
   const fallback = formatIlsAmount(123.45, "USD", null);
-  assert.equal(fallback, ilsFormatted);
+  expect(fallback).toBe(ilsFormatted);
 });
 //#endregion
 
 //#region Persistence
 test("selected display currency persists to localStorage and reads back", () => {
   withMockLocalStorage({}, () => {
-    assert.equal(readStoredCurrency(), "ILS");
+    expect(readStoredCurrency()).toBe("ILS");
     storeCurrency("EUR");
-    assert.equal(readStoredCurrency(), "EUR");
+    expect(readStoredCurrency()).toBe("EUR");
   });
 });
 
 test("invalid stored currency falls back to ILS", () => {
   withMockLocalStorage({ [CURRENCY_STORAGE_KEY]: "BTC" }, () => {
-    assert.equal(readStoredCurrency(), "ILS");
+    expect(readStoredCurrency()).toBe("ILS");
   });
 });
 
@@ -100,7 +98,7 @@ test("provider initializes from the persisted currency selection", () => {
         <CurrencySelector />
       </CurrencyProvider>
     );
-    assert.match(html, /<option value="USD" selected="">/);
+    expect(html).toMatch(/<option value="USD" selected="">/);
   });
 });
 //#endregion
@@ -129,20 +127,20 @@ test("header renders the currency dropdown in the top-right actions area", async
   const actionsIndex = html.indexOf('class="topbar-actions"');
   const selectorIndex = html.indexOf('aria-label="Display currency"');
   const userChipIndex = html.indexOf('class="topbar-user"');
-  assert.ok(actionsIndex >= 0, "topbar-actions should render");
-  assert.ok(selectorIndex > actionsIndex, "selector should be inside topbar actions");
-  assert.ok(userChipIndex > selectorIndex, "selector should sit before the user chip");
+  expect(actionsIndex).toBeGreaterThanOrEqual(0);
+  expect(selectorIndex).toBeGreaterThan(actionsIndex);
+  expect(userChipIndex).toBeGreaterThan(selectorIndex);
 });
 
 test("currency selector offers ILS, USD and EUR with an accessible label", () => {
   const html = renderToStaticMarkup(
     <CurrencySelector currency="ILS" onCurrencyChange={() => {}} />
   );
-  assert.match(html, /aria-label="Display currency"/);
-  assert.match(html, /value="ILS"/);
-  assert.match(html, /value="USD"/);
-  assert.match(html, /value="EUR"/);
-  assert.ok(!html.includes("GBP"));
+  expect(html).toMatch(/aria-label="Display currency"/);
+  expect(html).toMatch(/value="ILS"/);
+  expect(html).toMatch(/value="USD"/);
+  expect(html).toMatch(/value="EUR"/);
+  expect(html.includes("GBP")).toBeFalsy();
 });
 //#endregion
 
@@ -166,8 +164,8 @@ test("transaction amounts render converted when a display currency is selected",
   );
 
   // ₪100 at 0.27 USD per ILS renders as $27.00.
-  assert.ok(html.includes(formatMoneyIn(27, "USD")));
-  assert.ok(!html.includes("₪"));
+  expect(html.includes(formatMoneyIn(27, "USD"))).toBeTruthy();
+  expect(html.includes("₪")).toBeFalsy();
 });
 
 test("transaction amounts stay in ILS without rates (conversion unavailable)", () => {
@@ -188,7 +186,7 @@ test("transaction amounts stay in ILS without rates (conversion unavailable)", (
     </MemoryRouter>
   );
 
-  assert.ok(html.includes("₪"));
+  expect(html.includes("₪")).toBeTruthy();
 });
 //#endregion
 
@@ -206,11 +204,11 @@ const usdQuote: TransferQuote = {
 
 test("USD transfer confirmation small print shows the actual ILS amount", () => {
   const html = renderToStaticMarkup(<TransferQuoteSmallPrint quote={usdQuote} />);
-  assert.match(html, /class="transfer-quote-small-print"/);
-  assert.ok(html.includes("Actual transfer amount:"));
-  assert.ok(html.includes(formatCurrency(185.19)));
-  assert.ok(html.includes("USD → ILS rate"));
-  assert.ok(html.includes("2026-06-11"));
+  expect(html).toMatch(/class="transfer-quote-small-print"/);
+  expect(html.includes("Actual transfer amount:")).toBeTruthy();
+  expect(html.includes(formatCurrency(185.19))).toBeTruthy();
+  expect(html.includes("USD → ILS rate")).toBeTruthy();
+  expect(html.includes("2026-06-11")).toBeTruthy();
 });
 
 test("ILS transfer confirmation renders no conversion small print", () => {
@@ -228,6 +226,6 @@ test("ILS transfer confirmation renders no conversion small print", () => {
       }}
     />
   );
-  assert.equal(html, "");
+  expect(html).toBe("");
 });
 //#endregion

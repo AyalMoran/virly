@@ -1,8 +1,3 @@
-// Created: 2026-06-15
-
-import assert from "node:assert/strict";
-import { describe, test } from "node:test";
-
 import {
   AIMessage,
   AIMessageChunk,
@@ -15,15 +10,14 @@ import { finalizeNode } from "../nodes/finalize.js";
 
 describe("v2 message-type helpers (streaming-robust)", () => {
   test("isAiMessage matches AIMessage AND AIMessageChunk, not others", () => {
-    assert.equal(isAiMessage(new AIMessage("hi")), true);
+    expect(isAiMessage(new AIMessage("hi"))).toBe(true);
     // The streaming case that instanceof AIMessage misses:
-    assert.equal(isAiMessage(new AIMessageChunk("hi")), true);
-    assert.equal(isAiMessage(new HumanMessage("hi")), false);
-    assert.equal(
-      isAiMessage(new ToolMessage({ content: "x", tool_call_id: "t" })),
-      false
-    );
-    assert.equal(isAiMessage(undefined), false);
+    expect(isAiMessage(new AIMessageChunk("hi"))).toBe(true);
+    expect(isAiMessage(new HumanMessage("hi"))).toBe(false);
+    expect(
+      isAiMessage(new ToolMessage({ content: "x", tool_call_id: "t" }))
+    ).toBe(false);
+    expect(isAiMessage(undefined)).toBe(false);
   });
 
   test("aiToolCalls reads tool calls off a streamed AIMessageChunk", () => {
@@ -31,8 +25,8 @@ describe("v2 message-type helpers (streaming-robust)", () => {
       content: "",
       tool_calls: [{ name: "getBalance", args: {}, id: "call_1" }]
     });
-    assert.equal(aiToolCalls(chunk).length, 1);
-    assert.equal(aiToolCalls(new HumanMessage("hi")).length, 0);
+    expect(aiToolCalls(chunk).length).toBe(1);
+    expect(aiToolCalls(new HumanMessage("hi")).length).toBe(0);
   });
 });
 
@@ -54,7 +48,7 @@ describe("finalize extracts the reply from a streamed AIMessageChunk", () => {
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const out = await finalizeNode(state as any, config as any);
-    assert.equal(out.responseMessage, "Your balance is ₪1,840.50.");
+    expect(out.responseMessage).toBe("Your balance is ₪1,840.50.");
   });
 
   test("plain AIMessage still works (non-streaming path)", async () => {
@@ -66,6 +60,6 @@ describe("finalize extracts the reply from a streamed AIMessageChunk", () => {
     };
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const out = await finalizeNode(state as any, config as any);
-    assert.equal(out.responseMessage, "Your balance is ₪1,840.50.");
+    expect(out.responseMessage).toBe("Your balance is ₪1,840.50.");
   });
 });

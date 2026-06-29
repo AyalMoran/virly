@@ -1,5 +1,4 @@
-import assert from "node:assert/strict";
-import test from "node:test";
+
 import type { VerificationTokenRecord, VerificationTokenRepository } from "../types.js";
 
 test("VerificationTokenRecord and repository shape compile", () => {
@@ -14,6 +13,6 @@ test("VerificationTokenRecord and repository shape compile", () => {
     async deleteForUser() {},
     async deleteExpired() { return 0; }
   };
-  assert.equal(typeof repo.upsertForUser, "function");
-  assert.equal(rec.userId, "u1");
+  expect(typeof repo.upsertForUser).toBe("function");
+  expect(rec.userId).toBe("u1");
 });

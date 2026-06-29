@@ -1,5 +1,4 @@
 // server/tests/contract/videoSession.contract.test.ts
-import assert from "node:assert/strict";
 import { describeContract } from "./harness.js";
 import type { VideoSessionRecord } from "../../src/repositories/types.js";
 
@@ -31,41 +30,41 @@ describeContract("VideoSessionRepository", {
     const created = await repos.videoSessions.create(
       makeSession({ roomName: "room-A", topic: "billing", type: "sales" })
     );
-    assert.match(created.id, /^[0-9a-fA-F]{24}$/);
-    assert.equal(created.userId, USER);
-    assert.equal(created.type, "sales");
-    assert.equal(created.status, "waiting_for_agent");
-    assert.equal(created.roomName, "room-A");
-    assert.equal(created.topic, "billing");
-    assert.equal(created.assignedAgentId, null);
-    assert.deepEqual(created.metadata, { userAgent: "UA/1.0", locale: "he-IL", source: "dashboard" });
+    expect(created.id).toMatch(/^[0-9a-fA-F]{24}$/);
+    expect(created.userId).toBe(USER);
+    expect(created.type).toBe("sales");
+    expect(created.status).toBe("waiting_for_agent");
+    expect(created.roomName).toBe("room-A");
+    expect(created.topic).toBe("billing");
+    expect(created.assignedAgentId).toBeNull();
+    expect(created.metadata).toStrictEqual({ userAgent: "UA/1.0", locale: "he-IL", source: "dashboard" });
 
     const found = await repos.videoSessions.findById(created.id);
-    assert.ok(found);
-    assert.equal(found.id, created.id);
-    assert.equal(found.roomName, "room-A");
+    expect(found).toBeTruthy();
+    expect(found!.id).toBe(created.id);
+    expect(found!.roomName).toBe("room-A");
   },
 
   "findById returns null for malformed and missing ids": async ({ repos }) => {
-    assert.equal(await repos.videoSessions.findById("not-an-id"), null);
-    assert.equal(await repos.videoSessions.findById("f".repeat(24)), null);
+    expect(await repos.videoSessions.findById("not-an-id")).toBeNull();
+    expect(await repos.videoSessions.findById("f".repeat(24))).toBeNull();
   },
 
   "findByRoomName returns the session or null": async ({ repos }) => {
     const created = await repos.videoSessions.create(makeSession({ roomName: "room-unique-1" }));
     const found = await repos.videoSessions.findByRoomName("room-unique-1");
-    assert.ok(found);
-    assert.equal(found.id, created.id);
-    assert.equal(await repos.videoSessions.findByRoomName("no-such-room"), null);
+    expect(found).toBeTruthy();
+    expect(found!.id).toBe(created.id);
+    expect(await repos.videoSessions.findByRoomName("no-such-room")).toBeNull();
   },
 
   "metadata projects to {userAgent, locale, source} with null/explicit values": async ({ repos }) => {
     const created = await repos.videoSessions.create(
       makeSession({ roomName: "room-meta", metadata: { userAgent: null, locale: null, source: "ai_assistant" } })
     );
-    assert.deepEqual(created.metadata, { userAgent: null, locale: null, source: "ai_assistant" });
+    expect(created.metadata).toStrictEqual({ userAgent: null, locale: null, source: "ai_assistant" });
     const found = await repos.videoSessions.findById(created.id);
-    assert.deepEqual(found?.metadata, { userAgent: null, locale: null, source: "ai_assistant" });
+    expect(found?.metadata).toStrictEqual({ userAgent: null, locale: null, source: "ai_assistant" });
   },
 
   "update patches fields, bumps updatedAt, returns the updated record": async ({ repos }) => {
@@ -76,18 +75,18 @@ describeContract("VideoSessionRepository", {
       assignedAgentId: "b".repeat(24),
       startedAt
     });
-    assert.ok(updated);
-    assert.equal(updated.status, "active");
-    assert.equal(updated.assignedAgentId, "b".repeat(24));
-    assert.equal(updated.startedAt?.toISOString(), "2024-05-01T10:00:00.000Z");
-    assert.ok(updated.updatedAt >= created.updatedAt);
+    expect(updated).toBeTruthy();
+    expect(updated!.status).toBe("active");
+    expect(updated!.assignedAgentId).toBe("b".repeat(24));
+    expect(updated!.startedAt?.toISOString()).toBe("2024-05-01T10:00:00.000Z");
+    expect(updated!.updatedAt >= created.updatedAt).toBeTruthy();
     // unchanged fields preserved
-    assert.equal(updated.roomName, "room-upd");
+    expect(updated!.roomName).toBe("room-upd");
   },
 
   "update returns null for malformed and missing ids": async ({ repos }) => {
-    assert.equal(await repos.videoSessions.update("bad", { status: "active" }), null);
-    assert.equal(await repos.videoSessions.update("f".repeat(24), { status: "active" }), null);
+    expect(await repos.videoSessions.update("bad", { status: "active" })).toBeNull();
+    expect(await repos.videoSessions.update("f".repeat(24), { status: "active" })).toBeNull();
   },
 
   "update can replace metadata wholesale": async ({ repos }) => {
@@ -95,7 +94,7 @@ describeContract("VideoSessionRepository", {
     const updated = await repos.videoSessions.update(created.id, {
       metadata: { userAgent: "UA/2.0", locale: "en-US", source: "account_page" }
     });
-    assert.deepEqual(updated?.metadata, { userAgent: "UA/2.0", locale: "en-US", source: "account_page" });
+    expect(updated?.metadata).toStrictEqual({ userAgent: "UA/2.0", locale: "en-US", source: "account_page" });
   },
 
   "listForUser returns the user's sessions newest-first": async ({ repos }) => {
@@ -106,7 +105,7 @@ describeContract("VideoSessionRepository", {
     await repos.videoSessions.create(makeSession({ roomName: "r3", userId: "c".repeat(24) }));
 
     const rows = await repos.videoSessions.listForUser(USER);
-    assert.deepEqual(rows.map((r) => r.id), [b.id, a.id]);
+    expect(rows.map((r) => r.id)).toStrictEqual([b.id, a.id]);
   },
 
   "listForAgentQueue filters by types and optional status, newest-first, capped by limit": async ({ repos }) => {
@@ -118,11 +117,11 @@ describeContract("VideoSessionRepository", {
 
     // single type
     const support = await repos.videoSessions.listForAgentQueue({ types: ["support"], limit: 10 });
-    assert.deepEqual(support.map((r) => r.id).sort(), [s1.id, s3.id].sort());
+    expect(support.map((r) => r.id).sort()).toStrictEqual([s1.id, s3.id].sort());
 
     // multiple types, newest-first
     const all = await repos.videoSessions.listForAgentQueue({ types: ["support", "sales"], limit: 10 });
-    assert.deepEqual(all.map((r) => r.id), [s3.id, s2.id, s1.id]);
+    expect(all.map((r) => r.id)).toStrictEqual([s3.id, s2.id, s1.id]);
 
     // type + status
     const waitingSupport = await repos.videoSessions.listForAgentQueue({
@@ -130,11 +129,11 @@ describeContract("VideoSessionRepository", {
       status: "waiting_for_agent",
       limit: 10
     });
-    assert.deepEqual(waitingSupport.map((r) => r.id), [s1.id]);
+    expect(waitingSupport.map((r) => r.id)).toStrictEqual([s1.id]);
 
     // limit
     const limited = await repos.videoSessions.listForAgentQueue({ types: ["support", "sales"], limit: 2 });
-    assert.equal(limited.length, 2);
-    assert.deepEqual(limited.map((r) => r.id), [s3.id, s2.id]);
+    expect(limited.length).toBe(2);
+    expect(limited.map((r) => r.id)).toStrictEqual([s3.id, s2.id]);
   }
 });

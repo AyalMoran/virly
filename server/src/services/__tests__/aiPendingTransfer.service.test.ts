@@ -1,7 +1,3 @@
-
-
-import assert from "node:assert/strict";
-import test from "node:test";
 import { createMongoRepositories } from "../../repositories/mongo/index.js";
 import {
   setRepositories,
@@ -47,12 +43,14 @@ function baseRecord(overrides: Partial<AiPendingTransferRecord> = {}): AiPending
   };
 }
 
+const cleanups: Array<() => void | Promise<void>> = [];
+afterEach(async () => { for (const c of cleanups.splice(0).reverse()) await c(); });
+
 /**
  * Installs a repository set whose aiPendingTransfers.findById is stubbed, then
  * restores the real Mongo repositories afterwards. Captures the id passed in.
  */
 function stubFindById(
-  t: test.TestContext,
   doc: AiPendingTransferRecord | null
 ): { capturedId: string | null } {
   const capture: { capturedId: string | null } = { capturedId: null };
@@ -65,7 +63,7 @@ function stubFindById(
     }
   };
   setRepositories(repos);
-  t.after(() => {
+  cleanups.push(() => {
     setRepositories(createMongoRepositories());
   });
   return capture;
@@ -171,9 +169,9 @@ function makeTxRepos(opts: {
   return stub;
 }
 
-function installRepos(t: test.TestContext, repos: Repositories) {
+function installRepos(repos: Repositories) {
   setRepositories(repos);
-  t.after(() => {
+  cleanups.push(() => {
     setRepositories(createMongoRepositories());
   });
 }
@@ -182,9 +180,9 @@ function installRepos(t: test.TestContext, repos: Repositories) {
 // respondToAiPendingTransfer — confirm path runs INSIDE runInTransaction
 // ---------------------------------------------------------------------------
 
-test("confirm: runs the settlement inside runInTransaction and flips status atomically", async (t) => {
+test("confirm: runs the settlement inside runInTransaction and flips status atomically", async () => {
   const log: CallLog = [];
-  installRepos(t, makeTxRepos({ log, pending: baseRecord({ status: "pending" }) }));
+  installRepos(makeTxRepos({ log, pending: baseRecord({ status: "pending" }) }));
 
   const result = await respondToAiPendingTransfer({
     userId,
@@ -193,50 +191,43 @@ test("confirm: runs the settlement inside runInTransaction and flips status atom
     version: 1
   });
 
-  assert.equal(result.status, "confirmed");
+  expect(result.status).toBe("confirmed");
   // The whole settlement happened between enter and commit.
   const enter = log.indexOf("runInTransaction:enter");
   const commit = log.indexOf("runInTransaction:commit");
-  assert.ok(enter >= 0 && commit > enter, "must open a transaction");
+  expect(enter >= 0 && commit > enter).toBeTruthy();
 
   const settle = log.indexOf("transactions.createMany:tx");
   const flip = log.indexOf("aiPendingTransfers.updateStatus:confirmed:tx");
-  assert.ok(settle > enter && settle < commit, "transfer settles inside the tx");
-  assert.ok(flip > enter && flip < commit, "status flips inside the tx");
+  expect(settle > enter && settle < commit).toBeTruthy();
+  expect(flip > enter && flip < commit).toBeTruthy();
   // Settlement before the status flip (the confirm card is marked only after money moves).
-  assert.ok(settle < flip, "transfer must settle before status is flipped to confirmed");
+  expect(settle < flip).toBeTruthy();
 });
 
-test("confirm: when the transfer throws, the status is NOT flipped (atomic rollback)", async (t) => {
+test("confirm: when the transfer throws, the status is NOT flipped (atomic rollback)", async () => {
   const log: CallLog = [];
   installRepos(
-    t,
     makeTxRepos({ log, pending: baseRecord({ status: "pending" }), failTransfer: true })
   );
 
-  await assert.rejects(
+  await expect(
     respondToAiPendingTransfer({
       userId,
       pendingTransferId,
       action: "confirm",
       version: 1
     })
-  );
+  ).rejects.toThrow();
 
-  assert.ok(log.includes("runInTransaction:enter"), "transaction was opened");
-  assert.ok(
-    !log.includes("runInTransaction:commit"),
-    "transaction must NOT commit when the transfer fails"
-  );
-  assert.ok(
-    !log.some((l) => l.startsWith("aiPendingTransfers.updateStatus:confirmed")),
-    "status must not be flipped to confirmed when the transfer fails"
-  );
+  expect(log.includes("runInTransaction:enter")).toBeTruthy();
+  expect(log.includes("runInTransaction:commit")).toBe(false);
+  expect(log.some((l) => l.startsWith("aiPendingTransfers.updateStatus:confirmed"))).toBe(false);
 });
 
-test("confirm: does not call mongoose.startSession (settlement goes through runInTransaction)", async (t) => {
+test("confirm: does not call mongoose.startSession (settlement goes through runInTransaction)", async () => {
   const log: CallLog = [];
-  installRepos(t, makeTxRepos({ log, pending: baseRecord({ status: "pending" }) }));
+  installRepos(makeTxRepos({ log, pending: baseRecord({ status: "pending" }) }));
 
   await respondToAiPendingTransfer({
     userId,
@@ -246,18 +237,16 @@ test("confirm: does not call mongoose.startSession (settlement goes through runI
   });
 
   // runInTransaction is the only transaction boundary the service uses now.
-  assert.equal(
-    log.filter((l) => l === "runInTransaction:enter").length,
-    1,
-    "exactly one runInTransaction boundary"
-  );
+  expect(
+    log.filter((l) => l === "runInTransaction:enter").length
+  ).toBe(1);
 });
 
 // ---------------------------------------------------------------------------
 // modifyAiPendingTransfer — supersede path runs INSIDE runInTransaction
 // ---------------------------------------------------------------------------
 
-test("modify: supersedes the old pending and creates the new one inside one transaction", async (t) => {
+test("modify: supersedes the old pending and creates the new one inside one transaction", async () => {
   const log: CallLog = [];
   const old = baseRecord({ status: "pending", amount: 100 });
   const repos = makeTxRepos({ log, pending: old });
@@ -270,7 +259,7 @@ test("modify: supersedes the old pending and creates the new one inside one tran
       return [];
     }
   };
-  installRepos(t, repos);
+  installRepos(repos);
 
   const result = await modifyAiPendingTransfer({
     userId,
@@ -280,50 +269,50 @@ test("modify: supersedes the old pending and creates the new one inside one tran
     modificationDraft: { recipientEmail: "alice@example.com", amount: 200 }
   } as never);
 
-  assert.equal((result as { status: string }).status, "ready");
+  expect((result as { status: string }).status).toBe("ready");
   const enter = log.indexOf("runInTransaction:enter");
   const commit = log.indexOf("runInTransaction:commit");
   const create = log.indexOf("aiPendingTransfers.create:tx");
   const supersede = log.indexOf("aiPendingTransfers.updateStatus:superseded:tx");
-  assert.ok(enter >= 0 && commit > enter, "must open a transaction");
-  assert.ok(create > enter && create < commit, "new pending created inside the tx");
-  assert.ok(supersede > enter && supersede < commit, "old pending superseded inside the tx");
+  expect(enter >= 0 && commit > enter).toBeTruthy();
+  expect(create > enter && create < commit).toBeTruthy();
+  expect(supersede > enter && supersede < commit).toBeTruthy();
 });
 
 // ---------------------------------------------------------------------------
 // getResumablePendingForUser (non-transaction path, routes through the repo)
 // ---------------------------------------------------------------------------
 
-test("getResumablePendingForUser queries the repo by pendingTransferId", async (t) => {
-  const capture = stubFindById(t, baseRecord());
+test("getResumablePendingForUser queries the repo by pendingTransferId", async () => {
+  const capture = stubFindById(baseRecord());
 
   await getResumablePendingForUser(pendingTransferId, userId);
 
-  assert.equal(capture.capturedId, pendingTransferId, "must look up by pendingTransferId");
+  expect(capture.capturedId).toBe(pendingTransferId);
 });
 
-test("getResumablePendingForUser returns the conversationId from the record", async (t) => {
-  stubFindById(t, baseRecord({ conversationId: "conv-abc" }));
+test("getResumablePendingForUser returns the conversationId from the record", async () => {
+  stubFindById(baseRecord({ conversationId: "conv-abc" }));
 
   const result = await getResumablePendingForUser(pendingTransferId, userId);
 
-  assert.ok(result !== null, "expected a result");
-  assert.equal(result.conversationId, "conv-abc");
+  expect(result).not.toBeNull();
+  expect(result!.conversationId).toBe("conv-abc");
 });
 
-test("getResumablePendingForUser returns null when the record is missing", async (t) => {
-  stubFindById(t, null);
+test("getResumablePendingForUser returns null when the record is missing", async () => {
+  stubFindById(null);
 
   const result = await getResumablePendingForUser(pendingTransferId, userId);
 
-  assert.equal(result, null);
+  expect(result).toBeNull();
 });
 
-test("getResumablePendingForUser returns null when the record belongs to another user", async (t) => {
+test("getResumablePendingForUser returns null when the record belongs to another user", async () => {
   // Preserves the original `{ _id, userId }` ownership scoping.
-  stubFindById(t, baseRecord({ userId: "507f1f77bcf86cd799439099" }));
+  stubFindById(baseRecord({ userId: "507f1f77bcf86cd799439099" }));
 
   const result = await getResumablePendingForUser(pendingTransferId, userId);
 
-  assert.equal(result, null, "must not resume a foreign user's pending transfer");
+  expect(result).toBeNull();
 });

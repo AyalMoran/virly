@@ -1,6 +1,3 @@
-import assert from "node:assert/strict";
-import test from "node:test";
-
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
 
 import {
@@ -33,11 +30,11 @@ test("legacy {role,content,createdAt} documents deserialize to Human/AIMessage",
 
   const loaded = trimConversationMessages(fromStored(legacyDocumentMessages));
 
-  assert.equal(loaded.length, 2);
-  assert.equal(loaded[0].getType(), "human");
-  assert.equal(loaded[1].getType(), "ai");
-  assert.equal(String(loaded[0].content), "what's my balance?");
-  assert.equal(String(loaded[1].content), "Your balance is 1,000 ILS.");
+  expect(loaded.length).toBe(2);
+  expect(loaded[0].getType()).toBe("human");
+  expect(loaded[1].getType()).toBe("ai");
+  expect(String(loaded[0].content)).toBe("what's my balance?");
+  expect(String(loaded[1].content)).toBe("Your balance is 1,000 ILS.");
 });
 
 test("legacy documents longer than the window trim to the most recent twenty", () => {
@@ -52,10 +49,10 @@ test("legacy documents longer than the window trim to the most recent twenty", (
 
   const loaded = trimConversationMessages(fromStored(legacyDocumentMessages));
 
-  assert.equal(loaded.length, 20);
+  expect(loaded.length).toBe(20);
   // Index 5 survives trimming first; odd index => assistant => AIMessage.
-  assert.equal(String(loaded[0].content), "legacy-5");
-  assert.equal(loaded[0].getType(), "ai");
+  expect(String(loaded[0].content)).toBe("legacy-5");
+  expect(loaded[0].getType()).toBe("ai");
 });
 
 // ---------------------------------------------------------------------------
@@ -96,10 +93,10 @@ test("classifier prompt is byte-identical for legacy vs migrated messages", () =
     counterpartyMemory: memory
   });
 
-  assert.equal(migratedPrompt, legacyPrompt);
+  expect(migratedPrompt).toBe(legacyPrompt);
   // Assistant email is masked in both (R3 masking preserved).
-  assert.ok(migratedPrompt.includes("a***@example.com"));
-  assert.ok(!migratedPrompt.includes("alex@example.com"));
+  expect(migratedPrompt.includes("a***@example.com")).toBeTruthy();
+  expect(!migratedPrompt.includes("alex@example.com")).toBeTruthy();
 });
 
 test("transfer-draft prompt is byte-identical for legacy vs migrated messages", () => {
@@ -115,7 +112,7 @@ test("transfer-draft prompt is byte-identical for legacy vs migrated messages", 
     counterpartyMemory: memory
   });
 
-  assert.equal(migratedPrompt, legacyPrompt);
+  expect(migratedPrompt).toBe(legacyPrompt);
 });
 
 test("reference-resolver prompt is byte-identical for legacy vs migrated messages", () => {
@@ -133,5 +130,5 @@ test("reference-resolver prompt is byte-identical for legacy vs migrated message
     memory
   });
 
-  assert.equal(migratedPrompt, legacyPrompt);
+  expect(migratedPrompt).toBe(legacyPrompt);
 });

@@ -1,6 +1,3 @@
-import assert from "node:assert/strict";
-import { describe, test } from "node:test";
-
 import { executeTransferNode } from "../executeTransfer.js";
 import { DEFAULT_ASSISTANT_ID } from "../../../assistants.js";
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
@@ -40,9 +37,9 @@ describe("executeTransferNode", () => {
       message: "held"
     });
     const out = await executeTransferNode(state, configWith(respond));
-    assert.equal((out.transferResult as { status: string }).status, "held");
-    assert.match(String(out.responseMessage), /held for review|check your email/i);
-    assert.doesNotMatch(String(out.responseMessage), /on its way/i);
+    expect((out.transferResult as { status: string }).status).toBe("held");
+    expect(String(out.responseMessage)).toMatch(/held for review|check your email/i);
+    expect(String(out.responseMessage)).not.toMatch(/on its way/i);
   });
 
   test("a confirmed result yields the success message", async () => {
@@ -53,7 +50,7 @@ describe("executeTransferNode", () => {
       transaction: { id: "t1" }
     });
     const out = await executeTransferNode(state, configWith(respond));
-    assert.equal((out.transferResult as { status: string }).status, "confirmed");
-    assert.match(String(out.responseMessage), /on its way/i);
+    expect((out.transferResult as { status: string }).status).toBe("confirmed");
+    expect(String(out.responseMessage)).toMatch(/on its way/i);
   });
 });

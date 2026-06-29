@@ -4,7 +4,7 @@
  * v2-conformance.test.ts. Run with:
  *
  *   VIRLY_AI_V2_EVAL=1 VIRLY_AI_GRAPH_VERSION=v2 LANGSMITH_TRACING=false \
- *     npx tsx --test src/ai/evals/v2/persona-tone.test.ts
+ *     NODE_OPTIONS=--experimental-vm-modules npx jest src/ai/evals/v2/__tests__/persona-tone.test.ts
  *
  * (server/.env is auto-loaded, so usually just: VIRLY_AI_V2_EVAL=1 ...)
  *
@@ -13,9 +13,6 @@
  * switch into persona register on a serious turn. A Hebrew-stimulus variant that
  * exercises in-language phrase suppression is a possible future addition.
  */
-import assert from "node:assert/strict";
-import { before, describe, test } from "node:test";
-
 import { config } from "../../../../config.js";
 import { assistantIds } from "../../../assistants.js";
 import { createConfiguredAssistantLlmProvider } from "../../../llm.js";
@@ -34,16 +31,16 @@ const skip = !enabled
     ? "set OPENAI_API_KEY and VIRLY_AI_MODEL to run the live persona-tone eval"
     : false;
 
-describe("V2 persona tone (LLM)", { skip }, () => {
+(skip ? describe.skip : describe)("V2 persona tone (LLM)", () => {
   let provider: AssistantLlmProvider;
-  before(() => {
+  beforeAll(() => {
     const configured = createConfiguredAssistantLlmProvider();
-    assert.ok(configured, "Live LLM provider could not be constructed.");
-    provider = configured;
+    expect(configured).toBeTruthy();
+    provider = configured!;
   });
 
   for (const assistantId of assistantIds) {
-    test(`${assistantId}: no personality leak on a serious (security-sensitive) turn`, { timeout: 120_000 }, async () => {
+    test(`${assistantId}: no personality leak on a serious (security-sensitive) turn`, async () => {
       const runs = await runScenarioLive(
         {
           id: `persona-serious-${assistantId}`,
@@ -56,7 +53,7 @@ describe("V2 persona tone (LLM)", { skip }, () => {
         provider
       );
       const failures = collectPersonaLeakFailures(assistantId, runs[0]!.result);
-      assert.strictEqual(failures.length, 0, `\n  - ${failures.join("\n  - ")}\n`);
-    });
+      expect(failures.length).toBe(0);
+    }, 120_000);
   }
 });

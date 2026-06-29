@@ -1,6 +1,3 @@
-import assert from "node:assert/strict";
-import { describe, test } from "node:test";
-
 import { retrievePolicyDocs, searchKnowledge } from "../retriever.js";
 import type {
   KnowledgeRepository,
@@ -48,13 +45,13 @@ describe("searchKnowledge (config-free core)", () => {
       topK: 5
     });
 
-    assert.equal(embeddedQuery, "what is the premium APR");
-    assert.equal(citations.length, 1);
-    assert.equal(citations[0].title, "Personal Loan Packages");
-    assert.equal(citations[0].category, "loan_package");
-    assert.equal(citations[0].chunkIndex, 2);
-    assert.equal(citations[0].score, 0.9123);
-    assert.match(citations[0].excerpt, /5\.9%/);
+    expect(embeddedQuery).toBe("what is the premium APR");
+    expect(citations.length).toBe(1);
+    expect(citations[0].title).toBe("Personal Loan Packages");
+    expect(citations[0].category).toBe("loan_package");
+    expect(citations[0].chunkIndex).toBe(2);
+    expect(citations[0].score).toBe(0.9123);
+    expect(citations[0].excerpt).toMatch(/5\.9%/);
   });
 
   test("passes topK / category / minScore through to the repository", async () => {
@@ -72,7 +69,7 @@ describe("searchKnowledge (config-free core)", () => {
       category: "policy",
       minScore: 0.4
     });
-    assert.deepEqual(seen[0], {
+    expect(seen[0]).toStrictEqual({
       embedding: Array(1536).fill(0),
       topK: 3,
       category: "policy",
@@ -87,7 +84,7 @@ describe("retrievePolicyDocs (env-gated wrapper)", () => {
       repository: repoReturning([hit]),
       embed: async () => Array(1536).fill(0.2)
     });
-    assert.equal(result.available, false);
-    if (!result.available) assert.equal(result.reason, "disabled");
+    expect(result.available).toBe(false);
+    if (!result.available) expect(result.reason).toBe("disabled");
   });
 });

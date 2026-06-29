@@ -1,5 +1,3 @@
-import assert from "node:assert/strict";
-import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -37,13 +35,13 @@ function assertStructuredMarkup(input: {
   message: string;
   expectedText: RegExp;
 }) {
-  assert.match(input.html, input.expectedText);
-  assert.match(input.html, /dir="rtl"/);
-  assert.match(input.html, /<bdi[^>]+dir="ltr"/);
-  assert.match(input.html, /min-w-0/);
-  assert.match(input.html, /break-words|break-all|overflow-wrap:anywhere/);
-  assert.doesNotMatch(input.message, /\*\*|^\s*[-*]\s+/m);
-  assert.doesNotMatch(input.html, /\*\*/);
+  expect(input.html).toMatch(input.expectedText);
+  expect(input.html).toMatch(/dir="rtl"/);
+  expect(input.html).toMatch(/<bdi[^>]+dir="ltr"/);
+  expect(input.html).toMatch(/min-w-0/);
+  expect(input.html).toMatch(/break-words|break-all|overflow-wrap:anywhere/);
+  expect(input.message).not.toMatch(/\*\*|^\s*[-*]\s+/m);
+  expect(input.html).not.toMatch(/\*\*/);
 }
 
 async function runAndRenderScenario(input: {
@@ -68,8 +66,8 @@ async function runAndRenderScenario(input: {
     <AssistantBlocks blocks={blocks} locale="he-IL" />,
   );
 
-  assert.equal(result.responseFormatVersion, assistantResponseFormatVersion);
-  assert.equal(blocks[0]?.type, input.expectedBlockType);
+  expect(result.responseFormatVersion).toBe(assistantResponseFormatVersion);
+  expect(blocks[0]?.type).toBe(input.expectedBlockType);
 
   return {
     result,
@@ -113,7 +111,7 @@ test("e2e renders Hebrew account summary as structured cards without raw Markdow
     message: result.message,
     expectedText: /סיכום חשבון|יתרה זמינה/,
   });
-  assert.match(html, /₪/);
+  expect(html).toMatch(/₪/);
 });
 
 test("e2e renders Hebrew recent transactions with mixed names and emails", async () => {
@@ -163,7 +161,7 @@ test("e2e renders Hebrew recent transactions with mixed names and emails", async
     message: result.message,
     expectedText: /very\.long\.email\.address@example\.com/,
   });
-  assert.match(html, /noa\.cohen@example\.com/);
+  expect(html).toMatch(/noa\.cohen@example\.com/);
 });
 
 test("e2e renders Hebrew transaction search results from trusted rows", async () => {
@@ -201,7 +199,7 @@ test("e2e renders Hebrew transaction search results from trusted rows", async ()
     message: result.message,
     expectedText: /english\.recipient@example\.com/,
   });
-  assert.match(html, /שכר דירה/);
+  expect(html).toMatch(/שכר דירה/);
 });
 
 test("e2e renders Hebrew pending transfers without changing confirmation flow", async () => {
@@ -242,8 +240,8 @@ test("e2e renders Hebrew pending transfers without changing confirmation flow", 
     message: result.message,
     expectedText: /recipient\.long\.email@example\.com/,
   });
-  assert.match(html, /מקדמה/);
-  assert.doesNotMatch(html, /Confirm|Deny/);
+  expect(html).toMatch(/מקדמה/);
+  expect(html).not.toMatch(/Confirm|Deny/);
 });
 
 test("e2e renders Hebrew transfer limits and usage as structured cards", async () => {
@@ -276,6 +274,6 @@ test("e2e renders Hebrew transfer limits and usage as structured cards", async (
     message: result.message,
     expectedText: /מגבלות העברה|Daily remaining|2100/,
   });
-  assert.match(html, /₪/);
-  assert.doesNotMatch(html, /\*\*/);
+  expect(html).toMatch(/₪/);
+  expect(html).not.toMatch(/\*\*/);
 });
