@@ -2,10 +2,10 @@
  * `persist` — turn tail (design §4.1).
  *
  * The checkpointer/`conversationStore` persist the thread (handled by the graph
- * entry, which owns the store I/O). This in-graph node is the seam for long-term
- * `Store` upserts and rolling-summary trimming (Phase 6). For the read-only loop
- * it is a pass-through; keeping it in the topology makes the
- * prepare→agent⇄tools→finalize→persist shape explicit and ready to grow.
+ * entry, which owns the store I/O). Long-term Store upserts now run in the hitl.ts
+ * entry points; rolling-summary management now lives in the summarize node. This
+ * node is currently a pass-through that keeps the topology explicit and ready to
+ * grow with future tail-of-turn concerns.
  */
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 

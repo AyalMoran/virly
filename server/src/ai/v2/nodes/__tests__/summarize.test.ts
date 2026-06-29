@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, test } from "node:test";
+import { beforeEach, describe, test } from "node:test";
 
 import { AIMessage, HumanMessage, ToolMessage } from "@langchain/core/messages";
 import type { BaseMessage } from "@langchain/core/messages";
@@ -37,8 +37,11 @@ function state(messages: BaseMessage[], over: Partial<V2AgentStateType> = {}) {
 }
 
 describe("v2 summarization node", () => {
-  test("under the token trigger: returns no state update", async () => {
+  beforeEach(() => {
     summarizerCalls = 0;
+  });
+
+  test("under the token trigger: returns no state update", async () => {
     const node = buildSummarizationNode(stubModel, { triggerTokens: 100000 });
     const out = await node(state(turns(3)));
     assert.deepEqual(out, {});
@@ -46,7 +49,6 @@ describe("v2 summarization node", () => {
   });
 
   test("over trigger: folds older messages and advances the covered pointer", async () => {
-    summarizerCalls = 0;
     const node = buildSummarizationNode(stubModel, {
       triggerTokens: 50,
       recentTokens: 40
@@ -84,7 +86,6 @@ describe("v2 summarization node", () => {
   });
 
   test("incremental: nothing new to fold returns no update", async () => {
-    summarizerCalls = 0;
     const node = buildSummarizationNode(stubModel, {
       triggerTokens: 50,
       recentTokens: 40

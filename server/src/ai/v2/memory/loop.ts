@@ -2,8 +2,8 @@
 /**
  * Memory-in-the-loop wiring (design §6 / Phase 6).
  *
- * Bridges the long-term `Store` to a turn: hydrate known counterparties + the
- * rolling summary before the model runs, and upsert what was learned after. All
+ * Bridges the long-term `Store` to a turn: hydrate known counterparties before
+ * the model runs, and upsert what was learned after. All
  * functions degrade to no-ops when no store is available (the DB-free conformance
  * path), so they never change in-process behavior.
  */
