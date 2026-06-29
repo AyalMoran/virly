@@ -1,6 +1,3 @@
-import assert from "node:assert/strict";
-import { describe, test } from "node:test";
-
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
@@ -12,11 +9,11 @@ describe("unified resumable graph wiring", () => {
   test("buildResumableGraph wires summarize between prepare/tools and agent", () => {
     const path = fileURLToPath(new URL("../hitl.ts", import.meta.url));
     const src = readFileSync(path, "utf8");
-    assert.match(src, /\.addNode\("summarize",\s*buildSummarizationNode\(model\)\)/);
-    assert.match(src, /\.addEdge\("prepare",\s*"summarize"\)/);
-    assert.match(src, /\.addEdge\("summarize",\s*"agent"\)/);
-    assert.match(src, /\.addEdge\("tools",\s*"summarize"\)/);
+    expect(src).toMatch(/\.addNode\("summarize",\s*buildSummarizationNode\(model\)\)/);
+    expect(src).toMatch(/\.addEdge\("prepare",\s*"summarize"\)/);
+    expect(src).toMatch(/\.addEdge\("summarize",\s*"agent"\)/);
+    expect(src).toMatch(/\.addEdge\("tools",\s*"summarize"\)/);
     // The money branch must remain intact.
-    assert.match(src, /\.addNode\("transferGate"/);
+    expect(src).toMatch(/\.addNode\("transferGate"/);
   });
 });
