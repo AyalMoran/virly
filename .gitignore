@@ -14,7 +14,8 @@ client/vite.config.d.ts
 # Generated ML artifacts (scaler/model weights are fit from the user's dataset)
 server/artifacts/
 
-
+# Generated Graphify artifacts (graphify is a CLI tool for generating graph data about the codebase)
+graphify*
 
 # docs/ is tracked, but keep transient agent run-logs and scratch playgrounds out
 docs/**/*.log
