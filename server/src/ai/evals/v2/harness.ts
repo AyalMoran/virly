@@ -31,8 +31,9 @@ import {
   createTransferModificationService,
   createTransferPreparationService
 } from "../support.js";
+import { getRepositories, setRepositories } from "../../../repositories/index.js";
 import { WORLD, worldCounterpartyEmails } from "./world.js";
-import { createV2WorldTools } from "./worldTools.js";
+import { createV2WorldTools, createV2WorldRepositories } from "./worldTools.js";
 import type { V2Scenario, V2TurnExpectation } from "./types.js";
 
 /**
@@ -108,11 +109,32 @@ export type V2TurnRun = {
   result: RunAssistantResult;
 };
 
+/**
+ * The world suite is DB-free, but the v2 fraud path reads the repository
+ * singleton directly (not via the injected executors). Register the DB-free world
+ * repositories once — and only when nothing is registered yet, so a real or
+ * seeded registration is never clobbered. Mirrors how the seeded-Mongo harness
+ * brackets repository state.
+ *
+ * Exported so the LangSmith experiment runner (which drives the same v2 graph with
+ * the world tools, but not through `runScenarioLive`) can register them too.
+ */
+export function ensureWorldRepositories(): void {
+  try {
+    getRepositories();
+    return;
+  } catch {
+    // Not initialised — register the DB-free world fakes below.
+  }
+  setRepositories(createV2WorldRepositories());
+}
+
 export async function runScenarioLive(
   scenario: V2Scenario,
   assistantId: AssistantId,
   llmProvider: AssistantLlmProvider
 ): Promise<V2TurnRun[]> {
+  ensureWorldRepositories();
   const store = createSeededStore(
     scenario.seedCounterparties ?? worldCounterpartyEmails()
   );
