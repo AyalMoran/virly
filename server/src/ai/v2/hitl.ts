@@ -1,15 +1,16 @@
 /**
  * Human-in-the-loop transfer path (design §8 / Phase 5).
  *
- * The resumable graph is the same read-only loop plus a money branch:
+ * The resumable graph is the single v2 execution path:
  *
- *   prepare → agent ⇄ tools → finalize → (card? transferGate : persist)
+ *   prepare → summarize → agent ⇄ tools → finalize → (card? transferGate : persist)
+ *   tools → summarize → agent  (summarize runs before every agent call)
  *   transferGate --interrupt--> [Confirm → executeTransfer | Deny] → persist
  *
  * It is compiled WITH a checkpointer so `interrupt()` can pause on a prepared
  * card and `Command({ resume })` can continue later from the authenticated
- * confirmation endpoint. The conformance suite does NOT use this graph (it drives
- * the non-resumable per-turn entry); this is the production HITL path.
+ * confirmation endpoint. This is the ONLY v2 graph: it is used by both the
+ * production HITL flow and the conformance/eval harness (via runAssistant).
  */
 import { HumanMessage } from "@langchain/core/messages";
 import {
@@ -41,13 +42,18 @@ import { config } from "../../config.js";
 import { buildAgentNode } from "./agent.js";
 import { aiToolCalls } from "./messages.js";
 import { createMongoCheckpointer, getPostgresCheckpointer } from "./memory/checkpointer.js";
-import { resolveLongTermStore, withLongTermCounterparties } from "./memory/loop.js";
+import {
+  resolveLongTermStore,
+  upsertInteractedCounterparties,
+  withLongTermCounterparties
+} from "./memory/loop.js";
 import { mapStreamChunk } from "./streamEvents.js";
 import { createV2ChatModel, isV2ModelConfigured } from "./model.js";
 import { executeTransferNode } from "./nodes/executeTransfer.js";
 import { finalizeNode } from "./nodes/finalize.js";
 import { persistNode } from "./nodes/persist.js";
 import { prepareNode } from "./nodes/prepare.js";
+import { buildSummarizationNode } from "./nodes/summarize.js";
 import { transferGateNode, type TransferResumePayload } from "./nodes/transferGate.js";
 import { V2AgentState, type V2AgentStateType } from "./state.js";
 import type { V2Configurable, V2TurnOutcome } from "./toolContext.js";
@@ -78,6 +84,7 @@ export function buildResumableGraph(checkpointer: BaseCheckpointSaver) {
   const model = createV2ChatModel();
   return new StateGraph(V2AgentState)
     .addNode("prepare", prepareNode)
+    .addNode("summarize", buildSummarizationNode(model))
     .addNode("agent", buildAgentNode(model))
     .addNode("tools", createV2ToolNode())
     .addNode("finalize", finalizeNode)
@@ -85,9 +92,10 @@ export function buildResumableGraph(checkpointer: BaseCheckpointSaver) {
     .addNode("executeTransfer", executeTransferNode)
     .addNode("persist", persistNode)
     .addEdge(START, "prepare")
-    .addEdge("prepare", "agent")
+    .addEdge("prepare", "summarize")
+    .addEdge("summarize", "agent")
     .addConditionalEdges("agent", routeAgent, { tools: "tools", finalize: "finalize" })
-    .addEdge("tools", "agent")
+    .addEdge("tools", "summarize")
     .addConditionalEdges("finalize", routeAfterFinalize, {
       transferGate: "transferGate",
       persist: "persist"
@@ -241,6 +249,12 @@ export async function invokeV2Resumable(
     });
   }
 
+  // Layer 2: feed cross-session long-term memory (counterparties). Best-effort;
+  // a store outage must not fail the turn (upsert swallows its own errors).
+  if (input.userId && longTermStore) {
+    await upsertInteractedCounterparties(longTermStore, input.userId, memory);
+  }
+
   return {
     message: responseMessage,
     responseMessage,
@@ -331,6 +345,12 @@ export async function* streamAssistantV2(
         ? "הכנתי העברה לאישורך."
         : "I've prepared a transfer for your confirmation."
       : "");
+
+  // Layer 2: feed cross-session long-term memory (counterparties). Best-effort;
+  // a store outage must not fail the turn (upsert swallows its own errors).
+  if (input.userId && longTermStore) {
+    await upsertInteractedCounterparties(longTermStore, input.userId, memory);
+  }
 
   yield {
     event: "result",

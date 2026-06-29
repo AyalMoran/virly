@@ -30,11 +30,18 @@ export function buildAgentNode(model: ChatOpenAI) {
       pendingConfirmation: cfg.pendingConfirmation,
       now: cfg.now,
       timezone: cfg.timezone,
-      runningSummary: cfg.runningSummary
+      // Phase 6: the summary lives in checkpointed state, maintained by `summarize`.
+      runningSummary: state.runningSummary
     });
 
+    // Send only the boundary-safe recent window; older turns are represented by
+    // `runningSummary` in the system prompt. The full thread stays in the
+    // checkpointer untouched.
+    const covered = state.summaryCoveredCount ?? 0;
+    const view = state.messages.slice(covered);
+
     const aiMessage = await boundModel.invoke(
-      [new SystemMessage(system), ...state.messages],
+      [new SystemMessage(system), ...view],
       config
     );
 

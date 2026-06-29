@@ -71,8 +71,6 @@ export type V2Configurable = {
   turnOutcome: V2TurnOutcome;
   /** Known counterparties (name/email) injected into the system prompt. */
   knownCounterparties: Array<{ email: string; label: string; aliases: string[] }>;
-  /** Compressed earlier-conversation summary when the thread was trimmed (Phase 6). */
-  runningSummary?: string;
 };
 
 export function getConfigurable(
