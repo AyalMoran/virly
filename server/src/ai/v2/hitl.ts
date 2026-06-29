@@ -41,7 +41,11 @@ import { config } from "../../config.js";
 import { buildAgentNode } from "./agent.js";
 import { aiToolCalls } from "./messages.js";
 import { createMongoCheckpointer, getPostgresCheckpointer } from "./memory/checkpointer.js";
-import { resolveLongTermStore, withLongTermCounterparties } from "./memory/loop.js";
+import {
+  resolveLongTermStore,
+  upsertInteractedCounterparties,
+  withLongTermCounterparties
+} from "./memory/loop.js";
 import { mapStreamChunk } from "./streamEvents.js";
 import { createV2ChatModel, isV2ModelConfigured } from "./model.js";
 import { executeTransferNode } from "./nodes/executeTransfer.js";
@@ -244,6 +248,12 @@ export async function invokeV2Resumable(
     });
   }
 
+  // Layer 2: feed cross-session long-term memory (counterparties). Best-effort;
+  // a store outage must not fail the turn (upsert swallows its own errors).
+  if (input.userId && longTermStore) {
+    await upsertInteractedCounterparties(longTermStore, input.userId, memory);
+  }
+
   return {
     message: responseMessage,
     responseMessage,
@@ -334,6 +344,12 @@ export async function* streamAssistantV2(
         ? "הכנתי העברה לאישורך."
         : "I've prepared a transfer for your confirmation."
       : "");
+
+  // Layer 2: feed cross-session long-term memory (counterparties). Best-effort;
+  // a store outage must not fail the turn (upsert swallows its own errors).
+  if (input.userId && longTermStore) {
+    await upsertInteractedCounterparties(longTermStore, input.userId, memory);
+  }
 
   yield {
     event: "result",
