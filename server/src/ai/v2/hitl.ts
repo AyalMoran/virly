@@ -48,6 +48,7 @@ import { executeTransferNode } from "./nodes/executeTransfer.js";
 import { finalizeNode } from "./nodes/finalize.js";
 import { persistNode } from "./nodes/persist.js";
 import { prepareNode } from "./nodes/prepare.js";
+import { buildSummarizationNode } from "./nodes/summarize.js";
 import { transferGateNode, type TransferResumePayload } from "./nodes/transferGate.js";
 import { V2AgentState, type V2AgentStateType } from "./state.js";
 import type { V2Configurable, V2TurnOutcome } from "./toolContext.js";
@@ -78,6 +79,7 @@ export function buildResumableGraph(checkpointer: BaseCheckpointSaver) {
   const model = createV2ChatModel();
   return new StateGraph(V2AgentState)
     .addNode("prepare", prepareNode)
+    .addNode("summarize", buildSummarizationNode(model))
     .addNode("agent", buildAgentNode(model))
     .addNode("tools", createV2ToolNode())
     .addNode("finalize", finalizeNode)
@@ -85,9 +87,10 @@ export function buildResumableGraph(checkpointer: BaseCheckpointSaver) {
     .addNode("executeTransfer", executeTransferNode)
     .addNode("persist", persistNode)
     .addEdge(START, "prepare")
-    .addEdge("prepare", "agent")
+    .addEdge("prepare", "summarize")
+    .addEdge("summarize", "agent")
     .addConditionalEdges("agent", routeAgent, { tools: "tools", finalize: "finalize" })
-    .addEdge("tools", "agent")
+    .addEdge("tools", "summarize")
     .addConditionalEdges("finalize", routeAfterFinalize, {
       transferGate: "transferGate",
       persist: "persist"
