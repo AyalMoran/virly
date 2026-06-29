@@ -15,14 +15,16 @@ import type {
   RunAssistantOptions,
   RunAssistantResult
 } from "./state.js";
-import { runAssistantGraphV2 } from "./v2/graph.js";
+import { invokeV2Resumable } from "./v2/hitl.js";
 
 export function runAssistant(
   input: RunAssistantInput,
   options: RunAssistantOptions = {}
 ): Promise<RunAssistantResult> {
   if (config.ai.graphVersion === "v2") {
-    return runAssistantGraphV2(input, options);
+    // The single v2 graph: resumable, checkpointer-backed, with the summarization
+    // view. In the DB-free eval/test env the checkpointer degrades to in-memory.
+    return invokeV2Resumable(input, options);
   }
   return runAssistantGraph(input, options);
 }
