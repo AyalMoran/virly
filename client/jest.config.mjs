@@ -6,6 +6,9 @@ export default {
   testEnvironment: "node",
   roots: ["<rootDir>/src"],
   testMatch: ["**/__tests__/**/*.test.tsx", "**/__tests__/**/*.test.ts"],
+  // node env has no Web Storage; install in-memory localStorage/sessionStorage
+  // shims per test file so client tests are order-independent (see jest.setup.ts).
+  setupFiles: ["<rootDir>/jest.setup.ts"],
   moduleNameMapper: {
     "^@/(.*)$": "<rootDir>/src/$1",
     "^(\\.{1,2}/.*)\\.js$": "$1",
