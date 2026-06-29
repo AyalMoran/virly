@@ -58,7 +58,16 @@ probing the behaviours the V2 design promises:
   assistant ids and asserts the factual outcome is identical.
 - **DB-free world.** `world.ts` / `worldTools.ts` define a known, multi-counterparty
   world (Rani/Dan/Noa with distinct totals, a fixed ledger, balance, limits) as
-  fake tools. The **only** live dependency is the LLM; no Mongo.
+  fake tools. The **only** live dependency is the LLM; no Mongo. Read-only lookups
+  go through the injected world fakes, but the v2 fraud path
+  (`assessTransactionRisk` + `prepareTransfer`'s risk note) calls `scoreTransfer`,
+  which reads the repository singleton *directly* — not via the injected executors.
+  So `worldTools.ts` also exports `createV2WorldRepositories()` (a DB-free fake
+  `Repositories`: empty debit history ⇒ a stable low-risk score), and `harness.ts`
+  registers it with `setRepositories` before a run — but only when nothing is
+  registered yet. It reads nothing, so the suite stays Mongo-free; the call is
+  nonetheless load-bearing, since without it the fraud tool throws
+  "Repositories not initialised".
 - **LLM-as-judge.** `judge.ts` grades faithfulness + language mirroring only — it
   is explicitly told to ignore tone and to never fail a reply just because a
   user-requested transfer amount differs from a historical total.
@@ -72,10 +81,10 @@ probing the behaviours the V2 design promises:
 | File | Role |
 | --- | --- |
 | `world.ts` | Ground-truth data + pure helpers |
-| `worldTools.ts` | DB-free fake read-only tools over the world |
+| `worldTools.ts` | DB-free fake read-only tools + `createV2WorldRepositories()` (fake repos for the fraud path) over the world |
 | `types.ts` | `V2Scenario` / `V2TurnExpectation` |
 | `scenarios.ts` | The multi-turn scenarios |
-| `harness.ts` | Seeded store, DB-free amount service, scenario driver, entrypoint indirection |
+| `harness.ts` | Seeded store, DB-free amount service, `ensureWorldRepositories()`, scenario driver, entrypoint indirection |
 | `assertions.ts` | Personality-agnostic structural assertions |
 | `judge.ts` | LLM-as-judge (faithfulness + language) |
 | `v2-conformance.test.ts` | Gated Node test runner |

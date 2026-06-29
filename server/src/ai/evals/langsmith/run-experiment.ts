@@ -9,7 +9,7 @@ import {
   createTransferModificationService,
   createTransferPreparationService
 } from "../support.js";
-import { dbFreeAmountResolutionService } from "../v2/harness.js";
+import { dbFreeAmountResolutionService, ensureWorldRepositories } from "../v2/harness.js";
 import {
   WORLD,
   worldCounterpartyEmails
@@ -111,6 +111,9 @@ async function runTarget(inputs: LangSmithAssistantInputs): Promise<TargetOutput
     throw new Error(`Unsupported toolPreset: ${inputs.toolPreset}`);
   }
 
+  // The v2 fraud path reads the repository singleton directly; register the
+  // DB-free world repositories so it stays inert (mirrors the conformance harness).
+  ensureWorldRepositories();
   const store = createStore(inputs);
   const tools = createV2WorldTools();
   const transferPreparationService = createTransferPreparationService();
