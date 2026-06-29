@@ -14,9 +14,7 @@ client/vite.config.d.ts
 # Generated ML artifacts (scaler/model weights are fit from the user's dataset)
 server/artifacts/
 
-*.sh
-# ...but docker-compose mounts and executes this as the mongo init entrypoint
-!docker/mongo-init.sh
+
 
 # docs/ is tracked, but keep transient agent run-logs and scratch playgrounds out
 docs/**/*.log
@@ -25,15 +23,13 @@ docs/**/*.log
 .claude
 .superpowers
 .instance
-/scripts
-/compare
+.vscode
+
 /skills-lock.json
 
 # LangGraph API
 .langgraph_api
 
-
-scripts/fill-personal-details.api.js
 
 # design-sync (claude.ai/design) — staged scripts, build output, machine state
 .ds-sync/
