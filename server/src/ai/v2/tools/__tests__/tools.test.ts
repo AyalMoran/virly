@@ -1,6 +1,3 @@
-import assert from "node:assert/strict";
-import { describe, test } from "node:test";
-
 import { DEFAULT_ASSISTANT_ID } from "../../../assistants.js";
 import {
   createTransferModificationService,
@@ -40,7 +37,7 @@ function makeConfig(message: string, outcome: V2TurnOutcome = { uiBlocks: [] }) 
 describe("v2 read-only tool wrappers (DB-free world)", () => {
   test("getBalance surfaces the world balance from config identity", async () => {
     const out = await getBalanceTool.invoke({}, makeConfig("what's my balance"));
-    assert.match(String(out), /1840\.50|1840\.5/);
+    expect(String(out)).toMatch(/1840\.50|1840\.5/);
   });
 
   test("getTotals(sent) reads the resolved counterparty email from args", async () => {
@@ -48,7 +45,7 @@ describe("v2 read-only tool wrappers (DB-free world)", () => {
       { counterpartyEmail: "rani@example.com", direction: "sent" },
       makeConfig("how much did I send Rani")
     );
-    assert.match(String(out), /320/);
+    expect(String(out)).toMatch(/320/);
   });
 
   test("getTotals(received) for Dan returns 200", async () => {
@@ -56,7 +53,7 @@ describe("v2 read-only tool wrappers (DB-free world)", () => {
       { counterpartyEmail: "dan@example.com", direction: "received" },
       makeConfig("how much did Dan send me")
     );
-    assert.match(String(out), /200/);
+    expect(String(out)).toMatch(/200/);
   });
 
   test("findCounterparty resolves a name to an authoritative email", async () => {
@@ -64,7 +61,7 @@ describe("v2 read-only tool wrappers (DB-free world)", () => {
       { query: "Rani", relationHint: "any" },
       makeConfig("Rani")
     );
-    assert.match(String(out), /rani@example\.com/);
+    expect(String(out)).toMatch(/rani@example\.com/);
   });
 
   test("searchTransactions(list) exposes rows with ids for ordinal follow-ups", async () => {
@@ -73,9 +70,9 @@ describe("v2 read-only tool wrappers (DB-free world)", () => {
       makeConfig("show me my recent transactions")
     );
     const text = String(out);
-    assert.match(text, /120/);
-    assert.match(text, /90/);
-    assert.match(text, /tx-2/); // second row id available to the model
+    expect(text).toMatch(/120/);
+    expect(text).toMatch(/90/);
+    expect(text).toMatch(/tx-2/); // second row id available to the model
   });
 
   test("getTransactionReceipt resolves by the passed transactionId", async () => {
@@ -84,8 +81,8 @@ describe("v2 read-only tool wrappers (DB-free world)", () => {
       makeConfig("tell me more about the second one")
     );
     const text = String(out);
-    assert.match(text, /90/);
-    assert.match(text, /Dan/);
+    expect(text).toMatch(/90/);
+    expect(text).toMatch(/Dan/);
   });
 });
 
@@ -98,9 +95,9 @@ describe("v2 money tools build cards without executing (DB-free world)", () => {
       config
     );
 
-    assert.match(String(text), /NOT sent/i);
-    assert.equal(outcome.confirmation?.recipientEmail, "dan@example.com");
-    assert.equal(outcome.confirmation?.amount, 320);
+    expect(String(text)).toMatch(/NOT sent/i);
+    expect(outcome.confirmation?.recipientEmail).toBe("dan@example.com");
+    expect(outcome.confirmation?.amount).toBe(320);
   });
 
   test("prepareTransfer without a recipient asks for clarification, no card", async () => {
@@ -108,8 +105,8 @@ describe("v2 money tools build cards without executing (DB-free world)", () => {
     const config = makeConfig("send 250", outcome);
     await prepareTransferTool.invoke({ amount: 250 }, config);
 
-    assert.equal(outcome.confirmation, undefined);
-    assert.equal(outcome.clarification?.reason, "missing_recipient");
+    expect(outcome.confirmation).toBeUndefined();
+    expect(outcome.clarification?.reason).toBe("missing_recipient");
   });
 
   test("modifyPendingTransfer supersedes the active card with the new amount", async () => {
@@ -130,9 +127,9 @@ describe("v2 money tools build cards without executing (DB-free world)", () => {
 
     await modifyPendingTransferTool.invoke({ amount: 400 }, config);
 
-    assert.equal(outcome.confirmation?.amount, 400);
+    expect(outcome.confirmation?.amount).toBe(400);
     // recipient carries over from the active card
-    assert.equal(outcome.confirmation?.recipientEmail, "rani@example.com");
-    assert.equal(outcome.supersededConfirmationId, "pending-transfer-1");
+    expect(outcome.confirmation?.recipientEmail).toBe("rani@example.com");
+    expect(outcome.supersededConfirmationId).toBe("pending-transfer-1");
   });
 });

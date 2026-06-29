@@ -1,5 +1,3 @@
-import assert from "node:assert/strict";
-import { test } from "node:test";
 import { buildSystemPrompt } from "../prompt.js";
 
 const base = {
@@ -12,18 +10,18 @@ const base = {
 
 test("system prompt embeds the selected persona's voice + serious rule", () => {
   const p = buildSystemPrompt({ assistantId: "yehuda", ...base });
-  assert.match(p, /\[PERSONA\] You are Yehuda/);
-  assert.match(p, /sarcastic/);
-  assert.match(p, /SERIOUS SITUATIONS/);
+  expect(p).toMatch(/\[PERSONA\] You are Yehuda/);
+  expect(p).toMatch(/sarcastic/);
+  expect(p).toMatch(/SERIOUS SITUATIONS/);
   // Integration-specific: the persona block sits after the identity block and
   // before [CAPABILITIES] — content checks live in persona.test.ts.
-  assert.ok(p.indexOf("[PERSONA]") > p.indexOf("the Virly banking assistant"));
-  assert.ok(p.indexOf("[PERSONA]") < p.indexOf("[CAPABILITIES]"));
+  expect(p.indexOf("[PERSONA]")).toBeGreaterThan(p.indexOf("the Virly banking assistant"));
+  expect(p.indexOf("[PERSONA]")).toBeLessThan(p.indexOf("[CAPABILITIES]"));
 });
 
 test("different personas produce different system prompts", () => {
   const a = buildSystemPrompt({ assistantId: "oshri", ...base });
   const b = buildSystemPrompt({ assistantId: "chaya", ...base });
-  assert.notStrictEqual(a, b);
-  assert.match(a, /playful/);
+  expect(a).not.toBe(b);
+  expect(a).toMatch(/playful/);
 });

@@ -1,6 +1,3 @@
-import assert from "node:assert/strict";
-import { describe, test } from "node:test";
-
 import { syncKnowledgeBase } from "../ingest.js";
 import type { KnowledgeSource, SourceFile } from "../sources/types.js";
 import type {
@@ -73,10 +70,10 @@ describe("syncKnowledgeBase", () => {
   test("creates new documents and embeds their chunks", async () => {
     const { repo, chunksByDoc } = fakeRepo();
     const summary = await syncKnowledgeBase(fakeSource([file()]), { repository: repo, embed });
-    assert.equal(summary.created, 1);
-    assert.equal(summary.updated, 0);
-    assert.ok(summary.chunks >= 1);
-    assert.equal(chunksByDoc.get("id-a.md")?.length, summary.chunks);
+    expect(summary.created).toBe(1);
+    expect(summary.updated).toBe(0);
+    expect(summary.chunks).toBeGreaterThanOrEqual(1);
+    expect(chunksByDoc.get("id-a.md")?.length).toBe(summary.chunks);
   });
 
   test("skips unchanged files (same revision) without embedding", async () => {
@@ -90,9 +87,9 @@ describe("syncKnowledgeBase", () => {
       repository: repo,
       embed: countingEmbed
     });
-    assert.equal(summary.skipped, 1);
-    assert.equal(summary.created, 0);
-    assert.equal(embedCalls, 0);
+    expect(summary.skipped).toBe(1);
+    expect(summary.created).toBe(0);
+    expect(embedCalls).toBe(0);
   });
 
   test("updates a file whose revision changed", async () => {
@@ -101,8 +98,8 @@ describe("syncKnowledgeBase", () => {
       repository: repo,
       embed
     });
-    assert.equal(summary.updated, 1);
-    assert.equal(summary.created, 0);
+    expect(summary.updated).toBe(1);
+    expect(summary.created).toBe(0);
   });
 
   test("removes documents that vanished from the source", async () => {
@@ -114,8 +111,8 @@ describe("syncKnowledgeBase", () => {
       repository: repo,
       embed
     });
-    assert.equal(summary.removed, 1);
-    assert.deepEqual(deleted, ["gone.md"]);
+    expect(summary.removed).toBe(1);
+    expect(deleted).toStrictEqual(["gone.md"]);
   });
 
   test("dry-run writes nothing but reports the plan", async () => {
@@ -129,8 +126,8 @@ describe("syncKnowledgeBase", () => {
       },
       dryRun: true
     });
-    assert.equal(summary.created, 1);
-    assert.equal(embedCalls, 0);
-    assert.equal(chunksByDoc.size, 0);
+    expect(summary.created).toBe(1);
+    expect(embedCalls).toBe(0);
+    expect(chunksByDoc.size).toBe(0);
   });
 });

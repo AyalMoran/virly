@@ -1,6 +1,3 @@
-import assert from "node:assert/strict";
-import { describe, test } from "node:test";
-
 import {
   createDriveSource,
   FOLDER_MIME,
@@ -62,21 +59,21 @@ describe("createDriveSource", () => {
     const files = await createDriveSource("root", client).list();
     const byRef = new Map(files.map((f) => [f.sourceRef, f]));
 
-    assert.equal(files.length, 2);
+    expect(files.length).toBe(2);
     // text file → getFileMedia, md5 revision, category from path inference
     const f1 = byRef.get("f1")!;
-    assert.equal(f1.revision, "abc");
-    assert.equal(f1.title, "policy");
-    assert.equal(f1.category, "policy");
-    assert.deepEqual(fetched, ["f1"]);
+    expect(f1.revision).toBe("abc");
+    expect(f1.title).toBe("policy");
+    expect(f1.category).toBe("policy");
+    expect(fetched).toStrictEqual(["f1"]);
 
     // Google Doc → export to markdown, revision = version:modifiedTime, loan category
     const f2 = byRef.get("f2")!;
-    assert.equal(f2.revision, "7:2026-01-01T00:00:00Z");
-    assert.equal(f2.category, "loan_package");
-    assert.equal(f2.uri, "https://drive.google.com/doc/f2");
-    assert.match(f2.content, /APR details/);
-    assert.deepEqual(exported, ["f2"]);
+    expect(f2.revision).toBe("7:2026-01-01T00:00:00Z");
+    expect(f2.category).toBe("loan_package");
+    expect(f2.uri).toBe("https://drive.google.com/doc/f2");
+    expect(f2.content).toMatch(/APR details/);
+    expect(exported).toStrictEqual(["f2"]);
   });
 
   test("routes PDF files through getPdfText (extracted text)", async () => {
@@ -85,11 +82,11 @@ describe("createDriveSource", () => {
     };
     const { client, pdfFetched } = fakeClient(tree, { p1: "Extracted loan terms text." });
     const files = await createDriveSource("root", client).list();
-    assert.equal(files.length, 1);
-    assert.deepEqual(pdfFetched, ["p1"]);
-    assert.equal(files[0].title, "terms");
-    assert.equal(files[0].mimeType, PDF_MIME);
-    assert.match(files[0].content, /Extracted loan terms/);
+    expect(files.length).toBe(1);
+    expect(pdfFetched).toStrictEqual(["p1"]);
+    expect(files[0].title).toBe("terms");
+    expect(files[0].mimeType).toBe(PDF_MIME);
+    expect(files[0].content).toMatch(/Extracted loan terms/);
   });
 
   test("skips unsupported mime types and empty files", async () => {
@@ -105,9 +102,9 @@ describe("createDriveSource", () => {
       onSkip: (f, reason) => skipped.push(`${f.id}:${reason}`)
     }).list();
 
-    assert.equal(files.length, 0);
-    assert.ok(skipped.some((s) => s.startsWith("img:")));
-    assert.ok(skipped.some((s) => s.startsWith("empty:")));
+    expect(files.length).toBe(0);
+    expect(skipped.some((s) => s.startsWith("img:"))).toBeTruthy();
+    expect(skipped.some((s) => s.startsWith("empty:"))).toBeTruthy();
   });
 
   test("categoryOverride wins over path inference", async () => {
@@ -118,6 +115,6 @@ describe("createDriveSource", () => {
     const files = await createDriveSource("root", client, {
       categoryOverride: "loan_package"
     }).list();
-    assert.equal(files[0].category, "loan_package");
+    expect(files[0].category).toBe("loan_package");
   });
 });

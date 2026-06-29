@@ -17,7 +17,7 @@ and AI evals (live LLM, LangSmith).
 | **Unit — client** | `npm run test:client` | Node, `npm install` | React component rendering and currency logic | Every PR |
 | **Contract** | `npm run test:contract --workspace server` | Docker (`pgvector/pgvector:pg16`, Mongo 7), env vars | Both DB drivers satisfy the same repository contract; pgvector store proves kNN and vector search | Before release / nightly CI |
 | **AI evals (v1 deterministic)** | `npx tsx server/src/ai/evals/cli.ts` | None for deterministic mode; `OPENAI_API_KEY` + `VIRLY_AI_MODEL` for LLM modes | Graph routing and turn expectations against fixture conversations | PR for deterministic; nightly/pre-release for LLM modes |
-| **AI evals (v2 conformance)** | `VIRLY_AI_V2_EVAL=1 npx tsx --test server/src/ai/evals/v2/v2-conformance.test.ts` | `OPENAI_API_KEY`, `VIRLY_AI_MODEL` (from `server/.env`) | V2 assistant behavioural contract (multi-turn, Hebrew/English, coreference) | Nightly / pre-release |
+| **AI evals (v2 conformance)** | `VIRLY_AI_V2_EVAL=1 npm test --workspace server -- src/ai/evals/v2/__tests__/v2-conformance.test.ts` | `OPENAI_API_KEY`, `VIRLY_AI_MODEL` (from `server/.env`) | V2 assistant behavioural contract (multi-turn, Hebrew/English, coreference) | Nightly / pre-release |
 | **LangSmith experiment** | `npx tsx server/src/ai/evals/langsmith/run-experiment.ts` | `OPENAI_API_KEY`, `VIRLY_AI_MODEL`, `LANGSMITH_API_KEY`, dataset synced | Structural contract against uploaded dataset examples | Pre-release / on demand |
 | **RAG retrieval eval** | `npm run eval:policy-rag --workspace server` | `VIRLY_AI_PG_URL`, `OPENAI_API_KEY`, `VIRLY_RAG_ENABLED=true`, knowledge base synced | Recall@k for policy document retrieval against a set of labelled questions | After knowledge-base changes / pre-release |
 
@@ -27,8 +27,11 @@ and AI evals (live LLM, LangSmith).
 
 ### Runner
 
-Unit tests use Node's built-in `node:test` runner via `tsx`. No Jest, no Vitest.
-Tests are discovered by glob and run in parallel by default.
+Unit tests run on **Jest** (native-ESM mode via `@swc/jest`). Tests use injected
+Jest globals (`describe`/`it`/`expect`); `jest` (fn/spyOn/mock) is imported from
+`@jest/globals` when needed. Tests are discovered by glob and run in parallel by
+default. Server config: `server/jest.config.mjs`; contract config (serial,
+self-skipping): `server/jest.contract.config.mjs`; client: `client/jest.config.mjs`.
 
 ### Server unit tests (69 files)
 
@@ -43,10 +46,10 @@ cd server && npm test
 This expands to:
 
 ```
-tsx --test "src/**/*.test.ts"
+NODE_OPTIONS=--experimental-vm-modules jest
 ```
 
-All 69 test files under `server/src/**` are covered. Tests mock at the **repository
+which discovers `src/**/__tests__/**/*.test.ts`. Tests mock at the **repository
 interface** (`Repositories` type in `server/src/repositories/types.ts`), so no
 live database connection is needed.
 
@@ -60,10 +63,10 @@ live database connection is needed.
 > values, or set `LANGSMITH_TRACING=false` and any missing secrets to a placeholder.
 > Individual test files that have no external deps run cleanly without any `.env`.
 
-**Running a single file (no env required):**
+**Running a single file (no env required, from `server/`):**
 
 ```bash
-npx tsx --tsconfig server/tsconfig.json --test server/src/repositories/types.test.ts
+NODE_OPTIONS=--experimental-vm-modules npx jest src/repositories/__tests__/types.test.ts
 ```
 
 ### Client unit tests (30 tests)
@@ -77,7 +80,7 @@ npm run test:client
 This expands to:
 
 ```
-tsx --tsconfig client/tsconfig.json --test "client/tests/**/*.test.tsx"
+NODE_OPTIONS=--experimental-vm-modules jest   # discovers client/src/**/__tests__/**/*.test.tsx
 ```
 
 No live DB or network calls. Tests render React components with `react-dom/test-utils`
@@ -98,10 +101,10 @@ If any service or route imports a Mongoose model directly (instead of going thro
 the repository interface), this test fails with the list of offending files. The test
 runs as part of the normal server unit suite and does not need any external services.
 
-**Standalone run:**
+**Standalone run (from `server/`):**
 
 ```bash
-npx tsx --test server/src/repositories/no-direct-model-imports.test.ts
+NODE_OPTIONS=--experimental-vm-modules npx jest src/repositories/__tests__/no-direct-model-imports.test.ts
 ```
 
 ### Fraud detection unit tests (`server/src/fraud/`)
@@ -209,7 +212,7 @@ npm run test:contract --workspace server
 This expands to:
 
 ```
-tsx --test --test-concurrency=1 "tests/contract/**/*.test.ts"
+NODE_OPTIONS=--experimental-vm-modules jest --config jest.contract.config.mjs   # serial; tests/contract/**/*.test.ts
 ```
 
 `--test-concurrency=1` is required because each test truncates/drops the database
@@ -313,16 +316,16 @@ only live dependency is the LLM.
 ```bash
 # Run the full v2 conformance suite (from server/ directory)
 VIRLY_AI_V2_EVAL=1 LANGSMITH_TRACING=false \
-  npx tsx --test src/ai/evals/v2/v2-conformance.test.ts
+  NODE_OPTIONS=--experimental-vm-modules npx jest src/ai/evals/v2/__tests__/v2-conformance.test.ts
 
 # Run a single scenario by name
 VIRLY_AI_V2_EVAL=1 LANGSMITH_TRACING=false \
-  npx tsx --test --test-name-pattern="hebrew-coref-transfer" \
-  src/ai/evals/v2/v2-conformance.test.ts
+  NODE_OPTIONS=--experimental-vm-modules npx jest \
+  src/ai/evals/v2/__tests__/v2-conformance.test.ts -t "hebrew-coref-transfer"
 
 # Run the persona-tone eval
 VIRLY_AI_V2_EVAL=1 LANGSMITH_TRACING=false \
-  npx tsx --test src/ai/evals/v2/persona-tone.test.ts
+  NODE_OPTIONS=--experimental-vm-modules npx jest src/ai/evals/v2/__tests__/persona-tone.test.ts
 ```
 
 Without `VIRLY_AI_V2_EVAL=1` the suite prints a skip message and exits — CI stays

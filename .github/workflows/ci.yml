@@ -20,6 +20,8 @@ jobs:
         run: npx tsc -p server/tsconfig.json --noEmit
       - name: Unit tests (server)
         run: npm test --workspace server
+      - name: Unit tests (client)
+        run: npm test --workspace client
 
   contract:
     name: contract tests (pgvector)

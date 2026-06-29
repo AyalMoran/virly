@@ -1,17 +1,16 @@
 
 
 // src/repositories/mongo/videoAuditLog.repository.test.ts
-import assert from "node:assert/strict";
-import test from "node:test";
 import { VideoAuditLog } from "../../../models/VideoAuditLog.js";
 import { mongoVideoAuditLogRepository } from "../videoAuditLog.repository.js";
 
-function patch<T extends object, K extends keyof T>(o: T, k: K, v: T[K], t: test.TestContext) {
+const cleanups: Array<() => void | Promise<void>> = [];
+afterEach(async () => { for (const c of cleanups.splice(0).reverse()) await c(); });
+
+function patch<T extends object, K extends keyof T>(o: T, k: K, v: T[K]) {
   const orig = o[k];
   o[k] = v;
-  t.after(() => {
-    o[k] = orig;
-  });
+  cleanups.push(() => { o[k] = orig; });
 }
 
 const LOG_OID = "507f1f77bcf86cd799439011";
@@ -39,13 +38,12 @@ const leanLog = {
 // create
 // ---------------------------------------------------------------------------
 
-test("videoAuditLog.create: maps returned doc to VideoAuditLogRecord with string id, no _id leaked", async (t) => {
+test("videoAuditLog.create: maps returned doc to VideoAuditLogRecord with string id, no _id leaked", async () => {
   const returnedDoc = { ...leanLog, toObject: () => leanLog };
   patch(
     VideoAuditLog,
     "create",
-    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof VideoAuditLog.create,
-    t
+    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof VideoAuditLog.create
   );
 
   const input = {
@@ -63,28 +61,27 @@ test("videoAuditLog.create: maps returned doc to VideoAuditLogRecord with string
 
   const rec = await mongoVideoAuditLogRepository.create(input);
 
-  assert.ok(rec);
-  assert.equal(rec.id, LOG_OID);
-  assert.equal((rec as Record<string, unknown>)._id, undefined, "must not expose _id");
-  assert.equal(rec.actorId, ACTOR_OID);
-  assert.equal(rec.targetUserId, TARGET_OID);
-  assert.equal(rec.videoSessionId, SESSION_OID);
-  assert.equal(rec.event, "video_session_created");
-  assert.equal(rec.actorRole, "support_agent");
-  assert.equal(rec.sessionType, "support");
-  assert.equal(rec.result, "success");
-  assert.ok(rec.createdAt instanceof Date);
-  assert.ok(rec.updatedAt instanceof Date);
+  expect(rec).toBeTruthy();
+  expect(rec.id).toBe(LOG_OID);
+  expect((rec as Record<string, unknown>)._id).toBeUndefined();
+  expect(rec.actorId).toBe(ACTOR_OID);
+  expect(rec.targetUserId).toBe(TARGET_OID);
+  expect(rec.videoSessionId).toBe(SESSION_OID);
+  expect(rec.event).toBe("video_session_created");
+  expect(rec.actorRole).toBe("support_agent");
+  expect(rec.sessionType).toBe("support");
+  expect(rec.result).toBe("success");
+  expect(rec.createdAt).toBeInstanceOf(Date);
+  expect(rec.updatedAt).toBeInstanceOf(Date);
 });
 
-test("videoAuditLog.create: passes all fields to VideoAuditLog.create", async (t) => {
+test("videoAuditLog.create: passes all fields to VideoAuditLog.create", async () => {
   let capturedDocs: unknown;
   const returnedDoc = { ...leanLog, toObject: () => leanLog };
   patch(
     VideoAuditLog,
     "create",
-    (async (docs: unknown) => { capturedDocs = docs; return [returnedDoc]; }) as unknown as typeof VideoAuditLog.create,
-    t
+    (async (docs: unknown) => { capturedDocs = docs; return [returnedDoc]; }) as unknown as typeof VideoAuditLog.create
   );
 
   const input = {
@@ -103,29 +100,28 @@ test("videoAuditLog.create: passes all fields to VideoAuditLog.create", async (t
   await mongoVideoAuditLogRepository.create(input);
 
   const docs = capturedDocs as Array<Record<string, unknown>>;
-  assert.ok(Array.isArray(docs) && docs.length === 1, "should pass array with one item");
+  expect(Array.isArray(docs) && docs.length === 1).toBeTruthy();
   const doc = docs[0];
-  assert.equal(doc.event, "video_session_ended");
-  assert.equal(doc.actorId, ACTOR_OID);
-  assert.equal(doc.actorRole, "support_agent");
-  assert.equal(doc.targetUserId, TARGET_OID);
-  assert.equal(doc.videoSessionId, SESSION_OID);
-  assert.equal(doc.sessionType, "support");
-  assert.equal(doc.result, "success");
-  assert.equal(doc.ipAddress, "10.0.0.1");
-  assert.equal(doc.userAgent, "TestAgent/1.0");
-  assert.deepEqual(doc.details, { foo: "bar" });
+  expect(doc.event).toBe("video_session_ended");
+  expect(doc.actorId).toBe(ACTOR_OID);
+  expect(doc.actorRole).toBe("support_agent");
+  expect(doc.targetUserId).toBe(TARGET_OID);
+  expect(doc.videoSessionId).toBe(SESSION_OID);
+  expect(doc.sessionType).toBe("support");
+  expect(doc.result).toBe("success");
+  expect(doc.ipAddress).toBe("10.0.0.1");
+  expect(doc.userAgent).toBe("TestAgent/1.0");
+  expect(doc.details).toStrictEqual({ foo: "bar" });
 });
 
-test("videoAuditLog.create: passes session when tx context is provided", async (t) => {
+test("videoAuditLog.create: passes session when tx context is provided", async () => {
   const fakeSession = { id: "fake-session" };
   let capturedOpts: unknown;
   const returnedDoc = { ...leanLog, toObject: () => leanLog };
   patch(
     VideoAuditLog,
     "create",
-    (async (_docs: unknown, opts: unknown) => { capturedOpts = opts; return [returnedDoc]; }) as unknown as typeof VideoAuditLog.create,
-    t
+    (async (_docs: unknown, opts: unknown) => { capturedOpts = opts; return [returnedDoc]; }) as unknown as typeof VideoAuditLog.create
   );
 
   const input = {
@@ -143,17 +139,16 @@ test("videoAuditLog.create: passes session when tx context is provided", async (
 
   await mongoVideoAuditLogRepository.create(input, fakeSession);
 
-  assert.equal((capturedOpts as Record<string, unknown>).session, fakeSession);
+  expect((capturedOpts as Record<string, unknown>).session).toBe(fakeSession);
 });
 
-test("videoAuditLog.create: ipAddress=null is preserved", async (t) => {
+test("videoAuditLog.create: ipAddress=null is preserved", async () => {
   const logNullIp = { ...leanLog, ipAddress: null };
   const returnedDoc = { ...logNullIp, toObject: () => logNullIp };
   patch(
     VideoAuditLog,
     "create",
-    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof VideoAuditLog.create,
-    t
+    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof VideoAuditLog.create
   );
 
   const rec = await mongoVideoAuditLogRepository.create({
@@ -169,18 +164,17 @@ test("videoAuditLog.create: ipAddress=null is preserved", async (t) => {
     details: {}
   });
 
-  assert.equal(rec.ipAddress, null);
+  expect(rec.ipAddress).toBeNull();
 });
 
-test("videoAuditLog.create: details plain object passes through unchanged", async (t) => {
+test("videoAuditLog.create: details plain object passes through unchanged", async () => {
   const complexDetails = { action: "join", metadata: { clientVersion: "1.2.3" }, tags: ["a", "b"] };
   const logWithDetails = { ...leanLog, details: complexDetails };
   const returnedDoc = { ...logWithDetails, toObject: () => logWithDetails };
   patch(
     VideoAuditLog,
     "create",
-    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof VideoAuditLog.create,
-    t
+    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof VideoAuditLog.create
   );
 
   const rec = await mongoVideoAuditLogRepository.create({
@@ -196,10 +190,10 @@ test("videoAuditLog.create: details plain object passes through unchanged", asyn
     details: complexDetails
   });
 
-  assert.deepEqual(rec.details, complexDetails);
+  expect(rec.details).toStrictEqual(complexDetails);
 });
 
-test("videoAuditLog.create: actorId/targetUserId/videoSessionId are stringified in the record", async (t) => {
+test("videoAuditLog.create: actorId/targetUserId/videoSessionId are stringified in the record", async () => {
   // Simulate Mongoose returning ObjectId-like objects from .toObject()
   const oidLike = { toString: () => ACTOR_OID };
   const targetOidLike = { toString: () => TARGET_OID };
@@ -214,8 +208,7 @@ test("videoAuditLog.create: actorId/targetUserId/videoSessionId are stringified 
   patch(
     VideoAuditLog,
     "create",
-    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof VideoAuditLog.create,
-    t
+    (async (_docs: unknown) => [returnedDoc]) as unknown as typeof VideoAuditLog.create
   );
 
   const rec = await mongoVideoAuditLogRepository.create({
@@ -231,10 +224,10 @@ test("videoAuditLog.create: actorId/targetUserId/videoSessionId are stringified 
     details: {}
   });
 
-  assert.equal(typeof rec.actorId, "string");
-  assert.equal(typeof rec.targetUserId, "string");
-  assert.equal(typeof rec.videoSessionId, "string");
-  assert.equal(rec.actorId, ACTOR_OID);
-  assert.equal(rec.targetUserId, TARGET_OID);
-  assert.equal(rec.videoSessionId, SESSION_OID);
+  expect(typeof rec.actorId).toBe("string");
+  expect(typeof rec.targetUserId).toBe("string");
+  expect(typeof rec.videoSessionId).toBe("string");
+  expect(rec.actorId).toBe(ACTOR_OID);
+  expect(rec.targetUserId).toBe(TARGET_OID);
+  expect(rec.videoSessionId).toBe(SESSION_OID);
 });

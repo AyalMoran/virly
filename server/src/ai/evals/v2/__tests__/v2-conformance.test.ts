@@ -1,7 +1,7 @@
 
 
 /**
- * V2 live conformance suite (Node test runner).
+ * V2 live conformance suite (Jest).
  *
  * This is the RED suite for the V2 design: it drives long multi-turn
  * conversations through the live LLM and asserts the V2 behavioural contract.
@@ -11,12 +11,9 @@
  *
  * Opt-in (kept out of the default `npm test`):
  *   VIRLY_AI_V2_EVAL=1 OPENAI_API_KEY=... VIRLY_AI_MODEL=... \
- *     npx tsx --test src/ai/evals/v2/v2-conformance.test.ts
+ *     NODE_OPTIONS=--experimental-vm-modules npx jest src/ai/evals/v2/__tests__/v2-conformance.test.ts
  * (server/.env is auto-loaded, so usually just: VIRLY_AI_V2_EVAL=1 ...)
  */
-import assert from "node:assert/strict";
-import { before, describe, test } from "node:test";
-
 import { config } from "../../../../config.js";
 import { assistantIds } from "../../../assistants.js";
 import { createConfiguredAssistantLlmProvider } from "../../../llm.js";
@@ -53,17 +50,17 @@ const WORLD_FACTS = {
   recentTransactions: WORLD_RECENT_TX
 };
 
-describe("V2 live conformance (LLM)", { skip }, () => {
+(skip ? describe.skip : describe)("V2 live conformance (LLM)", () => {
   let provider: AssistantLlmProvider;
 
-  before(() => {
+  beforeAll(() => {
     const configured = createConfiguredAssistantLlmProvider();
-    assert.ok(configured, "Live LLM provider could not be constructed (key/model).");
-    provider = configured;
+    expect(configured).toBeTruthy();
+    provider = configured!;
   });
 
   for (const scenario of v2Scenarios) {
-    test(`${scenario.id}: ${scenario.title}`, { timeout: 240_000 }, async () => {
+    test(`${scenario.id}: ${scenario.title}`, async () => {
       const runs = await runScenarioLive(scenario, "oshri", provider);
       const failures: string[] = [];
 
@@ -87,17 +84,12 @@ describe("V2 live conformance (LLM)", { skip }, () => {
         }
       }
 
-      assert.strictEqual(
-        failures.length,
-        0,
-        `\n  - ${failures.join("\n  - ")}\n`
-      );
-    });
+      expect(failures.length).toBe(0);
+    }, 240_000);
   }
 
   test(
     "personality independence: factual outcome identical across all assistants",
-    { timeout: 360_000 },
     async () => {
       const scenario = v2Scenarios[0]; // ends in: "send him the same I sent Rani" -> Dan, 320
       const outcomes: Record<string, string> = {};
@@ -109,16 +101,9 @@ describe("V2 live conformance (LLM)", { skip }, () => {
       }
 
       const distinct = new Set(Object.values(outcomes));
-      assert.strictEqual(
-        distinct.size,
-        1,
-        `factual outcome varied by personality: ${JSON.stringify(outcomes)}`
-      );
-      assert.strictEqual(
-        [...distinct][0],
-        "dan@example.com|320",
-        `expected dan@example.com|320 for every assistant, got ${JSON.stringify(outcomes)}`
-      );
-    }
+      expect(distinct.size).toBe(1);
+      expect([...distinct][0]).toBe("dan@example.com|320");
+    },
+    360_000
   );
 });

@@ -1,7 +1,5 @@
 
 
-import assert from "node:assert/strict";
-import test from "node:test";
 import { createEmptyCounterpartyMemory } from "../counterpartyMemory.js";
 import { runAssistantGraph } from "../graph.js";
 import type {
@@ -83,12 +81,12 @@ test("amount-resolution failure with a known frame recipient asks only the amoun
     }
   );
 
-  assert.ok(result.clarification, "expected a clarification");
-  assert.equal(result.clarification?.expectedReplyType, "amount");
-  assert.match(result.clarification?.message ?? "", /shai@example\.com/);
+  expect(result.clarification).toBeTruthy();
+  expect(result.clarification?.expectedReplyType).toBe("amount");
+  expect(result.clarification?.message ?? "").toMatch(/shai@example\.com/);
   // It must NOT drop both slots ("whom and how much?").
-  assert.doesNotMatch(result.clarification?.message ?? "", /whom|to whom|ובאיזה סכום/i);
-  assert.equal(result.confirmation, undefined);
+  expect(result.clarification?.message ?? "").not.toMatch(/whom|to whom|ובאיזה סכום/i);
+  expect(result.confirmation).toBeUndefined();
 });
 
 test("missing recipient with a known amount asks only the recipient", async () => {
@@ -114,10 +112,10 @@ test("missing recipient with a known amount asks only the recipient", async () =
     }
   );
 
-  assert.ok(result.clarification, "expected a clarification");
-  assert.equal(result.clarification?.expectedReplyType, "recipient");
-  assert.match(result.clarification?.message ?? "", /25/);
+  expect(result.clarification).toBeTruthy();
+  expect(result.clarification?.expectedReplyType).toBe("recipient");
+  expect(result.clarification?.message ?? "").toMatch(/25/);
   // It must ask only for the recipient, not also for the amount.
-  assert.doesNotMatch(result.clarification?.message ?? "", /how much|ובאיזה סכום/i);
-  assert.equal(result.confirmation, undefined);
+  expect(result.clarification?.message ?? "").not.toMatch(/how much|ובאיזה סכום/i);
+  expect(result.confirmation).toBeUndefined();
 });

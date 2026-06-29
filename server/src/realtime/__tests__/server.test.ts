@@ -1,6 +1,4 @@
 // src/realtime/server.test.ts
-import assert from "node:assert/strict";
-import test from "node:test";
 import { createServer } from "node:http";
 import { io as ioClient } from "socket.io-client";
 import { attachSocketServer } from "../server.js";
@@ -34,7 +32,7 @@ test("authenticated client joins its room and receives an emitToUser event", asy
     gateway.emitToUser("u1", "transfer:received", { amount: 42, reason: null });
 
     const payload = await Promise.race([received, timeoutReject(5000)]);
-    assert.equal(payload.amount, 42);
+    expect(payload.amount).toBe(42);
   } finally {
     client.close();
     http.close();
@@ -55,10 +53,7 @@ test("rejects an unauthenticated socket (no cookie)", async () => {
     await Promise.race([
       new Promise<void>((_, reject) => {
         client.on("connect_error", (err) => {
-          assert.ok(
-            err.message.includes("unauthorized"),
-            `expected "unauthorized" but got: ${err.message}`
-          );
+          expect(err.message).toMatch(/unauthorized/);
           reject(Object.assign(new Error("_pass_"), { __pass: true }));
         });
         client.on("connect", () => {

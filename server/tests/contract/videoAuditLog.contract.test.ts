@@ -1,5 +1,4 @@
 // server/tests/contract/videoAuditLog.contract.test.ts
-import assert from "node:assert/strict";
 import { describeContract } from "./harness.js";
 import type { VideoAuditLogRecord } from "../../src/repositories/types.js";
 
@@ -24,34 +23,34 @@ function makeAudit(
 describeContract("VideoAuditLogRepository", {
   "create returns a record with a 24-hex id and round-trips all fields": async ({ repos }) => {
     const created = await repos.videoAuditLogs.create(makeAudit());
-    assert.match(created.id, /^[0-9a-fA-F]{24}$/);
-    assert.equal(created.event, "video_session_created");
-    assert.equal(created.actorId, "a".repeat(24));
-    assert.equal(created.actorRole, "support_agent");
-    assert.equal(created.targetUserId, "b".repeat(24));
-    assert.equal(created.videoSessionId, "c".repeat(24));
-    assert.equal(created.sessionType, "support");
-    assert.equal(created.result, "success");
-    assert.equal(created.ipAddress, "203.0.113.7");
-    assert.equal(created.userAgent, "UA/1.0");
-    assert.deepEqual(created.details, { reason: "user requested" });
-    assert.ok(created.createdAt instanceof Date);
-    assert.ok(created.updatedAt instanceof Date);
+    expect(created.id).toMatch(/^[0-9a-fA-F]{24}$/);
+    expect(created.event).toBe("video_session_created");
+    expect(created.actorId).toBe("a".repeat(24));
+    expect(created.actorRole).toBe("support_agent");
+    expect(created.targetUserId).toBe("b".repeat(24));
+    expect(created.videoSessionId).toBe("c".repeat(24));
+    expect(created.sessionType).toBe("support");
+    expect(created.result).toBe("success");
+    expect(created.ipAddress).toBe("203.0.113.7");
+    expect(created.userAgent).toBe("UA/1.0");
+    expect(created.details).toStrictEqual({ reason: "user requested" });
+    expect(created.createdAt).toBeInstanceOf(Date);
+    expect(created.updatedAt).toBeInstanceOf(Date);
   },
 
   "create persists null ipAddress/userAgent and a failure result": async ({ repos }) => {
     const created = await repos.videoAuditLogs.create(
       makeAudit({ ipAddress: null, userAgent: null, result: "failure", event: "video_session_failed" })
     );
-    assert.equal(created.ipAddress, null);
-    assert.equal(created.userAgent, null);
-    assert.equal(created.result, "failure");
-    assert.equal(created.event, "video_session_failed");
+    expect(created.ipAddress).toBeNull();
+    expect(created.userAgent).toBeNull();
+    expect(created.result).toBe("failure");
+    expect(created.event).toBe("video_session_failed");
   },
 
   "empty details object round-trips as an empty object": async ({ repos }) => {
     const created = await repos.videoAuditLogs.create(makeAudit({ details: {} }));
-    assert.deepEqual(created.details, {});
+    expect(created.details).toStrictEqual({});
   },
 
   "details (jsonb) round-trips a nested structure exactly": async ({ repos }) => {
@@ -61,14 +60,14 @@ describeContract("VideoAuditLogRepository", {
       flags: ["recorded", "transcribed"]
     };
     const created = await repos.videoAuditLogs.create(makeAudit({ details }));
-    assert.deepEqual(created.details, details);
+    expect(created.details).toStrictEqual(details);
   },
 
   "sales sessionType and a manager actorRole round-trip": async ({ repos }) => {
     const created = await repos.videoAuditLogs.create(
       makeAudit({ sessionType: "sales", actorRole: "sales_agent", event: "video_session_assigned" })
     );
-    assert.equal(created.sessionType, "sales");
-    assert.equal(created.actorRole, "sales_agent");
+    expect(created.sessionType).toBe("sales");
+    expect(created.actorRole).toBe("sales_agent");
   }
 });

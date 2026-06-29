@@ -1,5 +1,3 @@
-import assert from "node:assert/strict";
-import test from "node:test";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import {
@@ -17,11 +15,11 @@ test("fallback markdown renders sanitized bold, bullets, emails, and amounts", (
     />,
   );
 
-  assert.match(html, /<strong/);
-  assert.match(html, /<ul/);
-  assert.match(html, /<bdi[^>]+dir="ltr"/);
-  assert.match(html, /very\.long\.email\.address@example\.com/);
-  assert.doesNotMatch(html, /\*\*/);
+  expect(html).toMatch(/<strong/);
+  expect(html).toMatch(/<ul/);
+  expect(html).toMatch(/<bdi[^>]+dir="ltr"/);
+  expect(html).toMatch(/very\.long\.email\.address@example\.com/);
+  expect(html).not.toMatch(/\*\*/);
 });
 
 test("transaction blocks render RTL-safe mixed Hebrew English financial data", () => {
@@ -60,13 +58,13 @@ test("transaction blocks render RTL-safe mixed Hebrew English financial data", (
     <AssistantBlocks blocks={blocks} locale="he-IL" />,
   );
 
-  assert.match(html, /dir="rtl"/);
-  assert.match(html, /very\.long\.email\.address@example\.com/);
-  assert.match(html, /noa\.cohen@example\.com/);
-  assert.match(html, /<bdi[^>]+dir="ltr"/);
-  assert.match(html, /₪/);
-  assert.match(html, /overflow-wrap:anywhere/);
-  assert.doesNotMatch(html, /\*\*/);
+  expect(html).toMatch(/dir="rtl"/);
+  expect(html).toMatch(/very\.long\.email\.address@example\.com/);
+  expect(html).toMatch(/noa\.cohen@example\.com/);
+  expect(html).toMatch(/<bdi[^>]+dir="ltr"/);
+  expect(html).toMatch(/₪/);
+  expect(html).toMatch(/overflow-wrap:anywhere/);
+  expect(html).not.toMatch(/\*\*/);
 });
 
 test("account and pending transfer blocks expose responsive wrapping classes", () => {
@@ -111,11 +109,11 @@ test("account and pending transfer blocks expose responsive wrapping classes", (
     <AssistantBlocks blocks={blocks} locale="he-IL" />,
   );
 
-  assert.match(html, /sm:grid-cols/);
-  assert.match(html, /recipient\.long\.email@example\.com/);
-  assert.match(html, /<bdi[^>]+dir="ltr"/);
-  assert.match(html, /break-words|break-all/);
-  assert.doesNotMatch(html, /\*\*/);
+  expect(html).toMatch(/sm:grid-cols/);
+  expect(html).toMatch(/recipient\.long\.email@example\.com/);
+  expect(html).toMatch(/<bdi[^>]+dir="ltr"/);
+  expect(html).toMatch(/break-words|break-all/);
+  expect(html).not.toMatch(/\*\*/);
 });
 
 test("transfer status and limits blocks render trusted values without raw Markdown", () => {
@@ -154,10 +152,10 @@ test("transfer status and limits blocks render trusted values without raw Markdo
     <AssistantBlocks blocks={blocks} locale="he-IL" />,
   );
 
-  assert.match(html, /pending\.recipient@example\.com/);
-  assert.match(html, /INSUFFICIENT_BALANCE/);
-  assert.match(html, /Not eligible/);
-  assert.match(html, /<bdi[^>]+dir="ltr"/);
-  assert.match(html, /₪/);
-  assert.doesNotMatch(html, /\*\*/);
+  expect(html).toMatch(/pending\.recipient@example\.com/);
+  expect(html).toMatch(/INSUFFICIENT_BALANCE/);
+  expect(html).toMatch(/Not eligible/);
+  expect(html).toMatch(/<bdi[^>]+dir="ltr"/);
+  expect(html).toMatch(/₪/);
+  expect(html).not.toMatch(/\*\*/);
 });

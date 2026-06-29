@@ -1,6 +1,4 @@
-import assert from "node:assert/strict";
 import http from "node:http";
-import test from "node:test";
 import express from "express";
 import { parseCookies } from "../../middleware/cookies.js";
 import { errorHandler } from "../../middleware/error-handler.js";
@@ -143,7 +141,7 @@ function makeAuditLogRepo(): VideoAuditLogRepository & { events: unknown[] } {
 /** Install a mock repo for the duration of the test, restoring after.
  *  `users` are exposed via the users repo (getActor/listAgentVideoSessions). */
 function withRepo(
-  t: test.TestContext,
+  cleanups: Array<() => void | Promise<void>>,
   sessions: MockSession[] = [],
   users: MockUser[] = []
 ): MockSession[] {
@@ -167,7 +165,7 @@ function withRepo(
   } as unknown as Repositories;
 
   setRepositories(stub);
-  t.after(() => {
+  cleanups.push(() => {
     if (previous) setRepositories(previous);
   });
   return sessions;
@@ -191,8 +189,8 @@ async function withServer<T>(fn: (baseUrl: string) => Promise<T>) {
 
   try {
     const address = server.address();
-    assert.notEqual(address, null);
-    assert.notEqual(typeof address, "string");
+    expect(address).not.toBeNull();
+    expect(typeof address).not.toBe("string");
 
     if (!address || typeof address === "string") {
       throw new Error("Expected local HTTP server address.");
@@ -213,6 +211,9 @@ async function withServer<T>(fn: (baseUrl: string) => Promise<T>) {
   }
 }
 
+const cleanups: Array<() => void | Promise<void>> = [];
+afterEach(async () => { for (const c of cleanups.splice(0).reverse()) await c(); });
+
 test("unauthenticated users cannot create video sessions", async () => {
   await withServer(async (baseUrl) => {
     const response = await fetch(`${baseUrl}/api/video-sessions`, {
@@ -222,14 +223,14 @@ test("unauthenticated users cannot create video sessions", async () => {
     });
     const body = (await response.json()) as { message: string };
 
-    assert.equal(response.status, 401);
-    assert.equal(body.message, "Authentication required.");
+    expect(response.status).toBe(401);
+    expect(body.message).toBe("Authentication required.");
   });
 });
 
-test("created room names do not leak user identity data", async (t) => {
+test("created room names do not leak user identity data", async () => {
   const user = createMockUser(userId, "user", "sensitive.customer@example.com");
-  const sessions = withRepo(t, [], [user]);
+  const sessions = withRepo(cleanups, [], [user]);
 
   const session = await createVideoSession({
     userId,
@@ -238,58 +239,42 @@ test("created room names do not leak user identity data", async (t) => {
     source: "dashboard"
   });
 
-  assert.equal(session.id, sessionId);
-  assert.match(session.roomName, /^virly-support-[a-f0-9]{32}-[A-Za-z0-9_-]+$/);
-  assert.equal(session.roomName.includes(userId), false);
-  assert.equal(session.roomName.includes("sensitive"), false);
-  assert.equal(session.roomName.includes("customer"), false);
-  assert.equal(session.roomName.includes("example.com"), false);
+  expect(session.id).toBe(sessionId);
+  expect(session.roomName).toMatch(/^virly-support-[a-f0-9]{32}-[A-Za-z0-9_-]+$/);
+  expect(session.roomName.includes(userId)).toBe(false);
+  expect(session.roomName.includes("sensitive")).toBe(false);
+  expect(session.roomName.includes("customer")).toBe(false);
+  expect(session.roomName.includes("example.com")).toBe(false);
   void sessions; // used via withRepo side effect
 });
 
-test("users cannot read another user's video session", async (t) => {
-  withRepo(t, [createMockSession({ userId: otherUserId })]);
+test("users cannot read another user's video session", async () => {
+  withRepo(cleanups, [createMockSession({ userId: otherUserId })]);
 
-  await assert.rejects(
-    () => getOwnVideoSession(userId, sessionId),
-    (error) =>
-      error instanceof VideoSessionServiceError &&
-      error.status === 404 &&
-      error.error === "session_not_found"
-  );
+  const err = await getOwnVideoSession(userId, sessionId).then(() => null, (e) => e);
+  expect(err instanceof VideoSessionServiceError && err.status === 404 && err.error === "session_not_found").toBeTruthy();
 });
 
-test("unauthorized user roles cannot list agent video sessions", async (t) => {
-  withRepo(t, [], [createMockUser(userId, "user")]);
+test("unauthorized user roles cannot list agent video sessions", async () => {
+  withRepo(cleanups, [], [createMockUser(userId, "user")]);
 
-  await assert.rejects(
-    () => listAgentVideoSessions({ actorId: userId }),
-    (error) =>
-      error instanceof VideoSessionServiceError &&
-      error.status === 403 &&
-      error.error === "video_agent_required"
-  );
+  const err = await listAgentVideoSessions({ actorId: userId }).then(() => null, (e) => e);
+  expect(err instanceof VideoSessionServiceError && err.status === 403 && err.error === "video_agent_required").toBeTruthy();
 });
 
-test("sales agents cannot join support video sessions", async (t) => {
-  withRepo(t, [createMockSession({ type: "support" })], [createMockUser(salesAgentId, "sales_agent")]);
+test("sales agents cannot join support video sessions", async () => {
+  withRepo(cleanups, [createMockSession({ type: "support" })], [createMockUser(salesAgentId, "sales_agent")]);
 
-  await assert.rejects(
-    () =>
-      issueVideoJoinConfig({
-        actorId: salesAgentId,
-        sessionId,
-        actorKind: "agent"
-      }),
-    (error) =>
-      error instanceof VideoSessionServiceError &&
-      error.status === 403 &&
-      error.error === "video_session_type_forbidden"
-  );
+  const err = await issueVideoJoinConfig({
+    actorId: salesAgentId,
+    sessionId,
+    actorKind: "agent"
+  }).then(() => null, (e) => e);
+  expect(err instanceof VideoSessionServiceError && err.status === 403 && err.error === "video_session_type_forbidden").toBeTruthy();
 });
 
-test("agent join activates a waiting session and ending marks it ended", async (t) => {
-  const sessions = withRepo(t, [createMockSession()], [createMockUser(supportAgentId, "support_agent")]);
+test("agent join activates a waiting session and ending marks it ended", async () => {
+  const sessions = withRepo(cleanups, [createMockSession()], [createMockUser(supportAgentId, "support_agent")]);
 
   const joinResult = await issueVideoJoinConfig({
     actorId: supportAgentId,
@@ -297,12 +282,12 @@ test("agent join activates a waiting session and ending marks it ended", async (
     actorKind: "agent"
   });
 
-  assert.equal(joinResult.session.status, "active");
-  assert.equal(joinResult.session.assignedAgentId, supportAgentId);
-  assert.ok(joinResult.session.startedAt);
-  assert.ok(joinResult.session.agentJoinedAt);
-  assert.equal(joinResult.jitsi.jwt, undefined);
-  assert.equal(joinResult.jitsi.roomName, sessions[0].roomName);
+  expect(joinResult.session.status).toBe("active");
+  expect(joinResult.session.assignedAgentId).toBe(supportAgentId);
+  expect(joinResult.session.startedAt).toBeTruthy();
+  expect(joinResult.session.agentJoinedAt).toBeTruthy();
+  expect(joinResult.jitsi.jwt).toBeUndefined();
+  expect(joinResult.jitsi.roomName).toBe(sessions[0].roomName);
 
   const ended = await endVideoSession({
     actorId: supportAgentId,
@@ -310,12 +295,12 @@ test("agent join activates a waiting session and ending marks it ended", async (
     actorKind: "agent"
   });
 
-  assert.equal(ended.status, "ended");
-  assert.ok(ended.endedAt);
+  expect(ended.status).toBe("ended");
+  expect(ended.endedAt).toBeTruthy();
 });
 
-test("user ending a waiting session cancels it", async (t) => {
-  withRepo(t, [createMockSession({ status: "waiting_for_agent" })], [createMockUser(userId, "user")]);
+test("user ending a waiting session cancels it", async () => {
+  withRepo(cleanups, [createMockSession({ status: "waiting_for_agent" })], [createMockUser(userId, "user")]);
 
   const cancelled = await endVideoSession({
     actorId: userId,
@@ -323,6 +308,6 @@ test("user ending a waiting session cancels it", async (t) => {
     actorKind: "user"
   });
 
-  assert.equal(cancelled.status, "cancelled");
-  assert.ok(cancelled.endedAt);
+  expect(cancelled.status).toBe("cancelled");
+  expect(cancelled.endedAt).toBeTruthy();
 });

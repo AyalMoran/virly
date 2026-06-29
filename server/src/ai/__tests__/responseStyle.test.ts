@@ -1,5 +1,3 @@
-import assert from "node:assert/strict";
-import test from "node:test";
 import { assistantPersonalities } from "../assistants.js";
 import {
   buildResponseStyleContext,
@@ -11,85 +9,77 @@ import {
 const knownPhrases = collectAllKnownPersonalityPhrases(assistantPersonalities);
 
 test("response situation resolver keeps prepared pending and quoted transfers out of confirmed success", () => {
-  assert.equal(
+  expect(
     resolveResponseSituation({
       intent: "transfer_prepare",
       riskLevel: "medium",
       requiresConfirmation: true,
       transferStatus: "pending",
       toolSucceeded: true
-    }),
-    "transfer_prepare_needs_confirmation"
-  );
-  assert.equal(
+    })
+  ).toBe("transfer_prepare_needs_confirmation");
+  expect(
     resolveResponseSituation({
       intent: "transfer_modify_pending",
       riskLevel: "medium",
       requiresConfirmation: true,
       transferStatus: "pending",
       toolSucceeded: true
-    }),
-    "transfer_modify_pending_success"
-  );
-  assert.equal(
+    })
+  ).toBe("transfer_modify_pending_success");
+  expect(
     resolveResponseSituation({
       intent: "transfer_quote",
       riskLevel: "medium",
       toolSucceeded: true
-    }),
-    "transfer_quote_success"
-  );
+    })
+  ).toBe("transfer_quote_success");
 });
 
 test("response situation resolver only returns confirmed transfer success for backend-confirmed execution", () => {
-  assert.equal(
+  expect(
     resolveResponseSituation({
       intent: "pending_confirmation_status",
       riskLevel: "medium",
       transferStatus: "confirmed",
       requiresConfirmation: true,
       backendConfirmedExecution: false
-    }),
-    "transfer_status_success"
-  );
-  assert.equal(
+    })
+  ).toBe("transfer_status_success");
+  expect(
     resolveResponseSituation({
       intent: "pending_confirmation_status",
       riskLevel: "low",
       transferStatus: "confirmed",
       requiresConfirmation: false,
       backendConfirmedExecution: true
-    }),
-    "transfer_confirmed_success"
-  );
+    })
+  ).toBe("transfer_confirmed_success");
 });
 
 test("response situation resolver separates missing details, insufficient funds, and security-sensitive requests", () => {
-  assert.equal(
+  expect(
     resolveResponseSituation({
       intent: "transfer_prepare",
       riskLevel: "medium",
       missingFields: ["amount"]
-    }),
-    "missing_required_transfer_details"
-  );
-  assert.equal(
+    })
+  ).toBe("missing_required_transfer_details");
+  expect(
     resolveResponseSituation({
       intent: "transfer_eligibility",
       riskLevel: "high",
       toolSucceeded: false,
       failureReason: "INSUFFICIENT_BALANCE"
-    }),
-    "insufficient_funds"
-  );
-  assert.equal(
+    })
+  ).toBe("insufficient_funds");
+  expect(
     resolveResponseSituation({
       intent: "unsafe_request",
       riskLevel: "blocked",
       toolSucceeded: false
-    }),
-    "security_sensitive"
-  );
+    })
+  ).toBe("security_sensitive");
 });
 
 test("style context exposes only active situation phrases and blocks high-risk personality", () => {
@@ -99,18 +89,18 @@ test("style context exposes only active situation phrases and blocks high-risk p
     "balance_inquiry_success",
     "low"
   );
-  assert.equal(balanceStyle.maxPersonalityPhrases, 1);
-  assert.ok(balanceStyle.allowedPhrases.includes("בדקתי לך"));
-  assert.ok(!balanceStyle.allowedPhrases.includes("הכסף כבר בדרך"));
+  expect(balanceStyle.maxPersonalityPhrases).toBe(1);
+  expect(balanceStyle.allowedPhrases.includes("בדקתי לך")).toBeTruthy();
+  expect(!balanceStyle.allowedPhrases.includes("הכסף כבר בדרך")).toBeTruthy();
 
   const insufficientStyle = buildResponseStyleContext(
     oshri,
     "insufficient_funds",
     "high"
   );
-  assert.equal(insufficientStyle.maxPersonalityPhrases, 0);
-  assert.deepEqual(insufficientStyle.allowedPhrases, []);
-  assert.ok(insufficientStyle.forbiddenPhrases.includes("הכסף כבר בדרך"));
+  expect(insufficientStyle.maxPersonalityPhrases).toBe(0);
+  expect(insufficientStyle.allowedPhrases).toStrictEqual([]);
+  expect(insufficientStyle.forbiddenPhrases.includes("הכסף כבר בדרך")).toBeTruthy();
 });
 
 test("personality linter rejects out-of-context success phrases and over-budget usage", () => {
@@ -124,21 +114,21 @@ test("personality linter rejects out-of-context success phrases and over-budget 
     style,
     knownPhrases
   );
-  assert.equal(successPhrase.valid, false);
-  assert.ok(successPhrase.disallowedPhrases.includes("הכסף כבר בדרך"));
+  expect(successPhrase.valid).toBe(false);
+  expect(successPhrase.disallowedPhrases.includes("הכסף כבר בדרך")).toBeTruthy();
 
   const overBudget = lintPersonalityUsage(
     "בדקתי לך. החשבון מוסר שהיתרה מוצגת בכרטיס.",
     style,
     knownPhrases
   );
-  assert.equal(overBudget.valid, false);
-  assert.equal(overBudget.tooManyPersonalityPhrases, true);
+  expect(overBudget.valid).toBe(false);
+  expect(overBudget.tooManyPersonalityPhrases).toBe(true);
 
   const valid = lintPersonalityUsage(
     "בדקתי לך. היתרה מוצגת בכרטיס.",
     style,
     knownPhrases
   );
-  assert.equal(valid.valid, true);
+  expect(valid.valid).toBe(true);
 });
