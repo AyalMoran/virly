@@ -309,7 +309,12 @@ See the full README at [`../server/src/ai/evals/v2/README.md`](../server/src/ai/
 
 The v2 suite is a **RED (intentionally failing) TDD suite** — it documents where
 the current assistant falls short of the V2 behavioural spec. It is DB-free: the
-only live dependency is the LLM.
+only live dependency is the LLM. (The harness does register a DB-free fake
+`Repositories` via `setRepositories` before a run — the v2 fraud path
+`scoreTransfer` reads the repository singleton directly, so without it the
+`assessTransactionRisk` tool throws "Repositories not initialised". The fake reads
+nothing, so the suite stays Mongo-free. The LangSmith experiment runner registers
+the same fake.)
 
 **Required env:** `OPENAI_API_KEY` and `VIRLY_AI_MODEL` (read from `server/.env`).
 

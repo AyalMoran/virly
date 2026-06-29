@@ -6,6 +6,8 @@
  * the suite is the LLM; these tools never touch Mongo.
  */
 import { createToolResult } from "../../toolResults.js";
+import { stubRepository } from "../../../repositories/mongo/stub.js";
+import type { Repositories } from "../../../repositories/index.js";
 import type {
   AssistantToolExecutors,
   AssistantToolName,
@@ -295,4 +297,50 @@ export function createV2WorldTools(): AssistantToolExecutors {
       }, { status: "empty", data: [] });
     }
   };
+}
+
+/**
+ * DB-free fake {@link Repositories} for the world suite.
+ *
+ * The v2 fraud path — the `assessTransactionRisk` tool and `prepareTransfer`'s
+ * risk note — calls `scoreTransfer`, which reads `repos.transactions` DIRECTLY
+ * rather than through the injected executors. Without a registered repository the
+ * run would throw "Repositories not initialised". This returns an empty debit
+ * history (=> a stable low-risk score), so fraud scoring is inert and the suite's
+ * only live dependency stays the LLM. Any other repository access throws loudly,
+ * since nothing else should reach the DB in this suite.
+ */
+export function createV2WorldRepositories(): Repositories {
+  const transactions = new Proxy({} as Repositories["transactions"], {
+    get(_target, prop) {
+      switch (prop) {
+        case "hasDebitToCounterparty":
+          return async () => false;
+        case "getDailyDebitUsage":
+          return async () => ({ total: 0, count: 0 });
+        case "recentForOwner":
+          return async () => [];
+        default:
+          if (typeof prop === "symbol") return undefined;
+          return async () => {
+            throw new Error(
+              `transactions.${String(prop)} is not stubbed in the DB-free v2 world repositories`
+            );
+          };
+      }
+    }
+  });
+
+  return new Proxy({} as Repositories, {
+    get(_target, prop) {
+      if (prop === "transactions") return transactions;
+      if (prop === "runInTransaction") {
+        return async (fn: (tx: undefined) => unknown) => fn(undefined);
+      }
+      if (typeof prop === "symbol") return undefined;
+      // users, aiPendingTransfers, ... are never reached in the LLM-only suite;
+      // surface a clear error if some path unexpectedly does.
+      return stubRepository(`repositories.${String(prop)}`);
+    }
+  });
 }
