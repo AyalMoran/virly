@@ -14,6 +14,7 @@
     "test": "npm test --workspace server && npm test --workspace client",
     "test:client": "npm test --workspace client",
     "test:server": "npm test --workspace server",
-    "build": "npm run build --workspace server && npm run build --workspace client"
+    "build": "npm run build --workspace server && npm run build --workspace client",
+    "mcp:support": "npm run mcp:support --workspace server"
   }
 }
