@@ -236,30 +236,40 @@ Tools: `lookup_customer`, `get_balance`, `get_recent_transactions`,
 `get_counterparty_summary`, `search_policy_docs`, `list_fraud_flags`,
 `list_held_transfers`.
 
-Run it (stdio):
+The server speaks **stdio**, so an MCP client launches it as a subprocess.
+The client must invoke `tsx` directly, with its working directory set to `server/` so `server/.env` is loaded.
+
+Do not configure the client to launch it via `npm run`.
+`npm run` prints a startup banner to stdout, and stdout is the MCP JSON-RPC channel, so the banner corrupts the handshake and the client reports that no tools registered.
+(`npm run mcp:support` from `server/` is still fine as a manual boot check in a terminal, where nothing parses stdout.)
+
+It uses the same environment as the server (`VIRLY_MONGODB_URI`/`VIRLY_DB_DRIVER`, plus `VIRLY_AI_PG_URL` + `OPENAI_API_KEY` + `VIRLY_RAG_ENABLED=true` for `search_policy_docs`).
+With the working directory set to `server/`, these load from `server/.env`.
+
+Claude Code:
 
 ```bash
-npm run mcp:support --workspace server
+claude mcp add virly-support -- \
+  sh -c 'cd /absolute/path/to/virly/server && exec ../node_modules/.bin/tsx scripts/mcp-support-server.ts'
 ```
 
-It uses the same env as the server (`VIRLY_MONGODB_URI`/`VIRLY_DB_DRIVER`, and
-`VIRLY_AI_PG_URL` + `OPENAI_API_KEY` for `search_policy_docs`). Example Claude
-Desktop config (`claude_desktop_config.json`):
+Claude Desktop (`claude_desktop_config.json`):
 
 ```json
 {
   "mcpServers": {
     "virly-support": {
-      "command": "npm",
-      "args": ["run", "mcp:support", "--workspace", "server"],
-      "cwd": "/absolute/path/to/virly",
-      "env": { "VIRLY_MONGODB_URI": "mongodb://localhost:27017/virly" }
+      "command": "/absolute/path/to/virly/node_modules/.bin/tsx",
+      "args": ["scripts/mcp-support-server.ts"],
+      "cwd": "/absolute/path/to/virly/server",
+      "env": { "VIRLY_MCP_OPERATOR": "your-name" }
     }
   }
 }
 ```
 
-Run it with read-scoped database credentials — every tool only reads.
+Run it with read-scoped database credentials - every tool only reads.
+See [operations §7](docs/operations.md) for the full launch, audit-log, and wiring guide.
 
 ---
 

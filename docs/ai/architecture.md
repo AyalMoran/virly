@@ -462,8 +462,13 @@ capabilities the in-app assistant uses. It does not replace the in-app agent; it
 is an alternate surface for support and ops staff (e.g. via Claude Desktop).
 
 ```sh
-npm run mcp:support   # server/scripts/mcp-support-server.ts
+npm run mcp:support   # server/scripts/mcp-support-server.ts (manual boot check)
 ```
+
+To wire this into an MCP client (Claude Code or Claude Desktop), see
+[operations §7.3](../operations.md#73-mcp-client-wiring); clients must launch
+`tsx` directly rather than via `npm run`, whose stdout banner corrupts the
+JSON-RPC stream.
 
 `buildSupportMcpServer()` constructs an `McpServer` (`@modelcontextprotocol/sdk`)
 named `virly-support` and registers the tools produced by `createSupportTools(deps)`.

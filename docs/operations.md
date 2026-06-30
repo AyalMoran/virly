@@ -740,17 +740,30 @@ lines 47-53 (arg parsing; no DB import in the file)._
 > for the full control inventory entry (control 25).
 
 `mcp:support` starts the read-only Virly Support MCP server over **stdio**, for
-use by internal staff via an MCP client such as Claude Desktop.
+use by internal staff via an MCP client such as Claude Code or Claude Desktop.
+The client launches the server as a subprocess; the command below is only a
+manual boot check (nothing parses stdout when you run it by hand).
 
 ```sh
-# From server/
+# From server/, as a boot smoke-test only
 npm run mcp:support
 ```
 
 _Validated against `server/package.json:17`: `mcp:support` runs
 `tsx scripts/mcp-support-server.ts`. Transport is stdio
-(`server/scripts/mcp-support-server.ts:11-12`). All `console.log` is redirected
-to stderr so it cannot corrupt the JSON-RPC stream._
+(`server/scripts/mcp-support-server.ts:11-12`). The entrypoint redirects
+`console.log` to stderr so the application's own logging cannot corrupt the
+JSON-RPC stream._
+
+> **Do not point an MCP client at `npm run mcp:support`.**
+> `npm run` prints a startup banner to **stdout**, and stdout is the MCP
+> JSON-RPC channel, so the banner corrupts the handshake and the client reports
+> that no tools registered.
+> The `console.log` -> stderr redirect cannot prevent this: the npm parent
+> process emits the banner before the script runs.
+> An MCP client must invoke `tsx` directly, with its working directory set to
+> `server/` so `server/.env` is loaded (`dotenv.config()` resolves `.env`
+> against the working directory - `server/src/config.ts:9`). See §7.3.
 
 **Requires:** `VIRLY_MONGODB_URI` (or `VIRLY_POSTGRES_URL` in Postgres mode) and
 `VIRLY_AI_PG_URL` (for `list_fraud_flags`, `list_held_transfers`, and
@@ -791,7 +804,34 @@ _Validated against `server/src/mcp/support.ts:280-291`._
 
 All tools are **read-only**. No money movement is possible through this server.
 
-### 7.3 Claude Desktop wiring (example)
+### 7.3 MCP client wiring
+
+Both clients launch the server by invoking `tsx` directly, with the working
+directory set to `server/`.
+That keeps stdout clean (no `npm run` banner) and lets `server/.env` supply the
+configuration.
+Anything set in the client's `env` block overrides `server/.env`, because
+`dotenv.config()` does not overwrite variables already in the environment.
+In a real deployment, put read-scoped `VIRLY_MONGODB_URI` / `VIRLY_AI_PG_URL` in
+the client's `env` block so the server does not inherit the app's full-access
+credentials from `server/.env`.
+
+Replace `/abs/path/to/virly` with the absolute path to your checkout.
+
+#### Claude Code
+
+```sh
+claude mcp add virly-support \
+  --env VIRLY_MCP_OPERATOR=your-name \
+  -- sh -c 'cd /abs/path/to/virly/server && exec ../node_modules/.bin/tsx scripts/mcp-support-server.ts'
+```
+
+Then open a fresh session and run `/mcp`; `virly-support` should show as
+connected with 10 tools.
+Add more `--env KEY=value` flags for `VIRLY_AI_PG_URL`, `OPENAI_API_KEY`, and
+`VIRLY_RAG_ENABLED` if they are not already in `server/.env`.
+
+#### Claude Desktop
 
 Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
 (macOS) or the equivalent for your OS:
@@ -800,20 +840,18 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`
 {
   "mcpServers": {
     "virly-support": {
-      "command": "npm",
-      "args": ["run", "mcp:support", "--workspace", "server"],
-      "cwd": "/path/to/virly",
+      "command": "/abs/path/to/virly/node_modules/.bin/tsx",
+      "args": ["scripts/mcp-support-server.ts"],
+      "cwd": "/abs/path/to/virly/server",
       "env": {
-        "VIRLY_MCP_OPERATOR": "your-name",
-        "VIRLY_AI_PG_URL": "postgres://...",
-        "VIRLY_MONGODB_URI": "mongodb://...",
-        "OPENAI_API_KEY": "sk-...",
-        "VIRLY_RAG_ENABLED": "true"
+        "VIRLY_MCP_OPERATOR": "your-name"
       }
     }
   }
 }
 ```
 
-Use read-scoped database credentials here — not the same credentials used by
-the running app service. See [Security model §6](security.md#6-support-mcp-server).
+With `cwd` set to `server/`, the server reads `server/.env`, so the `env` block
+only needs entries you want to override or that are not already in `server/.env`.
+
+See [Security model §6](security.md#6-support-mcp-server).
