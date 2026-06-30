@@ -12,7 +12,10 @@
 
 **Module:** `server/src/mcp/support.ts`
 **Entry point script:** `server/scripts/mcp-support-server.ts`
-**Start command:** `npm run mcp:support`
+**Manual boot check:** `npm run mcp:support` (from `server/`)
+**MCP client launch:** invoke `tsx` directly with the working directory set to
+`server/` - never via `npm run`, whose stdout banner corrupts the JSON-RPC
+stream. See [operations §7.3](../../operations.md#73-mcp-client-wiring).
 
 ## What it is
 
