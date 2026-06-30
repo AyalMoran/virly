@@ -67,6 +67,29 @@ These resolve the plan's flagged verify-and-match placeholders against the real 
   There are three `.env.example` files (root, `client/`, `server/`);
   `VITE_API_BASE_URL` already exists in the client env.
 
+### Post-implementation: notification completeness (review follow-up)
+
+Review surfaced that the original Task 5 emit fired only from the top-level
+`executeTransfer`, so the UI route and fraud-hold release notified, but the
+**AI-confirmed** path (`respondToAiPendingTransfer` -> `executeTransferWithSession`
+directly, reached by both the v1 service and the v2 graph node) moved money without
+notifying. Fixed by centralizing the emit:
+
+- Extracted the post-commit, best-effort emit into a shared
+  `notifyTransferReceived({ recipientEmail, amount, reason })` in `transfer.service.ts`;
+  `executeTransfer` now calls it (behavior identical).
+- `respondToAiPendingTransfer` calls `notifyTransferReceived` in its existing
+  post-commit `flag.value` block (set only when money actually moved), so AI-confirmed
+  transfers notify and the held path stays silent until released.
+- Added a **cross-user isolation** test (emit to u1; u2 receives nothing while u1 does —
+  mutation-verified non-vacuous), AI-path tests (confirmed notifies once; held does not;
+  rolled-back transfer does not notify; non-null `reason` threads through trimmed).
+- All money-moving paths now emit exactly once; held emits zero. This follow-up was
+  re-landed onto main after the test suite migrated to colocated Jest, so the new tests
+  live in `__tests__/` (`server/src/realtime/__tests__/server.test.ts`,
+  `server/src/services/__tests__/aiPendingTransfer.service.test.ts`) as Jest specs; full
+  server suite green (1753 passed).
+
 ## Approach & rationale
 
 What real-time event to ship first? Options: (a) incoming-transfer notification, (b)
