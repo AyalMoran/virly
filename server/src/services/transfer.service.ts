@@ -153,14 +153,16 @@ export async function executeTransferWithSession(
   };
 }
 
-export async function executeTransfer(
-  input: ExecuteTransferInput
-): Promise<ExecuteTransferResult> {
-  const result = await getRepositories().runInTransaction(async (tx) =>
-    executeTransferWithSession(input, tx)
-  );
-
-  // Best-effort real-time notify; a realtime failure must not affect the transfer.
+/**
+ * Best-effort, post-commit realtime notify of the recipient. Shared by every
+ * money-moving path (UI route, fraud-hold release, AI-confirmed) so notification
+ * coverage is centralized. A realtime failure must never affect the transfer.
+ */
+export async function notifyTransferReceived(input: {
+  recipientEmail: string;
+  amount: number;
+  reason?: string | null;
+}): Promise<void> {
   try {
     const recipient = await getRepositories().users.findByEmail(
       input.recipientEmail.toLowerCase()
@@ -172,8 +174,16 @@ export async function executeTransfer(
       });
     }
   } catch {
-    /* swallow — notification is non-critical */
+    /* best-effort: a realtime failure must never affect the transfer */
   }
+}
 
+export async function executeTransfer(
+  input: ExecuteTransferInput
+): Promise<ExecuteTransferResult> {
+  const result = await getRepositories().runInTransaction(async (tx) =>
+    executeTransferWithSession(input, tx)
+  );
+  await notifyTransferReceived(input);
   return result;
 }

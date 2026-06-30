@@ -14,6 +14,7 @@ import type {
 import {
   assertAiTransferWithinLimits,
   executeTransferWithSession,
+  notifyTransferReceived,
   type ExecuteTransferResult
 } from "./transfer.service.js";
 import type { AiPendingTransferRecord, TxContext } from "../repositories/types.js";
@@ -596,7 +597,12 @@ export async function respondToAiPendingTransfer(
   const heldClaim = { done: false };
 
   const flag: {
-    value: { recipientEmail: string; amount: number; transactionId?: string } | null;
+    value: {
+      recipientEmail: string;
+      amount: number;
+      reason?: string | null;
+      transactionId?: string;
+    } | null;
   } = { value: null };
   let confirmResult: AiConfirmationResult;
   try {
@@ -690,10 +696,11 @@ export async function respondToAiPendingTransfer(
       tx
     );
 
-    // Captured for a post-commit fraud flag (recorded after the tx settles).
+    // Captured for a post-commit fraud flag + realtime notify (after the tx settles).
     flag.value = {
       recipientEmail: owned.recipientEmail,
       amount: owned.amount,
+      reason: owned.reason,
       transactionId: transferResult.transaction?.id ?? undefined
     };
 
@@ -759,7 +766,8 @@ export async function respondToAiPendingTransfer(
     }
   }
 
-  // Post-commit, best-effort fraud flag — only when a transfer actually executed.
+  // Post-commit, best-effort fraud flag + realtime notify — only when a transfer
+  // actually executed (flag.value is set only on the money-moving path, never held).
   if (flag.value) {
     await recordTransferRiskFlag({
       userId: input.userId,
@@ -767,6 +775,11 @@ export async function respondToAiPendingTransfer(
       amount: flag.value.amount,
       transactionId: flag.value.transactionId,
       alreadyExecuted: true
+    });
+    await notifyTransferReceived({
+      recipientEmail: flag.value.recipientEmail,
+      amount: flag.value.amount,
+      reason: flag.value.reason
     });
   }
   return confirmResult;

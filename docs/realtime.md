@@ -55,8 +55,9 @@ work without a live socket server. Boot replaces it with the real gateway via
 
 ## transfer:received event contract
 
-Emitted in `server/src/services/transfer.service.ts` inside `executeTransfer`, after
-the database transaction commits:
+Emitted from the shared `notifyTransferReceived` helper in
+`server/src/services/transfer.service.ts`, always after the money-moving database
+transaction commits:
 
 ```ts
 getRealtime().emitToUser(recipient.id, "transfer:received", {
@@ -82,6 +83,26 @@ socket.on("transfer:received", (p) =>
 
 `dispatchRealtimeEvent` routes to `handlers.onTransferReceived`, which is the only
 entry in `RealtimeHandlers` today.
+
+## Notification coverage
+
+Recipient notification is centralized in `notifyTransferReceived`
+(`server/src/services/transfer.service.ts`) and fires post-commit, best-effort, from
+every money-moving path:
+
+- the UI route (`server/src/routes/transaction.routes.ts`) and the fraud-hold release
+  (`server/src/fraud/holds.ts`) call `executeTransfer`, which invokes
+  `notifyTransferReceived` after its transaction commits;
+- the AI-confirmed path (`respondToAiPendingTransfer` in
+  `server/src/services/aiPendingTransfer.service.ts`, reached by both the v1 service
+  and the v2 graph node) executes inside its own transaction and calls
+  `notifyTransferReceived` in its post-commit block, gated on the same flag that marks
+  that money actually moved.
+
+A held transfer does NOT notify when the card is confirmed — no money has moved yet.
+It notifies only when the hold is later released via the email link, which goes through
+`executeTransfer`. The notify is always best-effort: a realtime failure is swallowed and
+never affects the transfer result.
 
 ## Adding a new event
 
