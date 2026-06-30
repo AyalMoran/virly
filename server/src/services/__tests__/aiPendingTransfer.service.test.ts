@@ -10,6 +10,11 @@ import {
   respondToAiPendingTransfer,
   modifyAiPendingTransfer
 } from "../aiPendingTransfer.service.js";
+import { setRealtime, noopRealtime } from "../../realtime/registry.js";
+import type { RealtimeEvent, RealtimePayloads } from "../../realtime/types.js";
+import { config } from "../../config.js";
+import { closeAiPool } from "../../db/vector.js";
+import pg from "pg";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -176,6 +181,23 @@ function installRepos(repos: Repositories) {
   });
 }
 
+type RealtimeCall = { userId: string; event: RealtimeEvent; payload: unknown };
+
+/**
+ * Install a realtime spy that records every emitToUser call, and reset to the
+ * silent no-op gateway when the test ends.
+ */
+function spyRealtime(): RealtimeCall[] {
+  const calls: RealtimeCall[] = [];
+  setRealtime({
+    emitToUser<E extends RealtimeEvent>(userId: string, event: E, payload: RealtimePayloads[E]) {
+      calls.push({ userId, event, payload });
+    }
+  });
+  cleanups.push(() => setRealtime(noopRealtime));
+  return calls;
+}
+
 // ---------------------------------------------------------------------------
 // respondToAiPendingTransfer — confirm path runs INSIDE runInTransaction
 // ---------------------------------------------------------------------------
@@ -240,6 +262,127 @@ test("confirm: does not call mongoose.startSession (settlement goes through runI
   expect(
     log.filter((l) => l === "runInTransaction:enter").length
   ).toBe(1);
+});
+
+// ---------------------------------------------------------------------------
+// respondToAiPendingTransfer — recipient realtime notify (post-commit)
+// ---------------------------------------------------------------------------
+
+test("confirm: notifies the recipient via transfer:received exactly once", async () => {
+  const log: CallLog = [];
+  installRepos(makeTxRepos({ log, pending: baseRecord({ status: "pending", amount: 100 }) }));
+  const calls = spyRealtime();
+
+  const result = await respondToAiPendingTransfer({
+    userId,
+    pendingTransferId,
+    action: "confirm",
+    version: 1
+  });
+
+  expect(result.status).toBe("confirmed");
+  const notifies = calls.filter((c) => c.event === "transfer:received");
+  expect(notifies).toHaveLength(1);
+  // The recipient is looked up by email post-commit; makeTxRepos resolves it to id 507f...033.
+  expect(notifies[0].userId).toBe("507f1f77bcf86cd799439033");
+  expect(notifies[0].payload).toEqual({ amount: 100, reason: null });
+});
+
+test("confirm: a rolled-back transfer does NOT notify the recipient", async () => {
+  const log: CallLog = [];
+  installRepos(
+    makeTxRepos({ log, pending: baseRecord({ status: "pending" }), failTransfer: true })
+  );
+  const calls = spyRealtime();
+
+  await expect(
+    respondToAiPendingTransfer({
+      userId,
+      pendingTransferId,
+      action: "confirm",
+      version: 1
+    })
+  ).rejects.toThrow();
+
+  const notifies = calls.filter((c) => c.event === "transfer:received");
+  expect(notifies).toHaveLength(0);
+});
+
+test("confirm: threads a non-empty reason through to the emitted payload (trimmed)", async () => {
+  const log: CallLog = [];
+  installRepos(
+    makeTxRepos({
+      log,
+      pending: baseRecord({ status: "pending", amount: 100, reason: "  lunch  " })
+    })
+  );
+  const calls = spyRealtime();
+
+  const result = await respondToAiPendingTransfer({
+    userId,
+    pendingTransferId,
+    action: "confirm",
+    version: 1
+  });
+
+  expect(result.status).toBe("confirmed");
+  const notifies = calls.filter((c) => c.event === "transfer:received");
+  expect(notifies).toHaveLength(1);
+  const payload = notifies[0].payload as { amount: number; reason: string | null };
+  expect(payload.amount).toBe(100);
+  expect(payload.reason).toBe("lunch"); // reason must be trimmed before emission
+});
+
+test("held: does NOT notify the recipient (no money moved)", async () => {
+  // Reach the REAL hold branch: enable the hold gate and stub the AI-store pg
+  // transport so createHold's INSERT resolves in-memory (no live AI Postgres).
+  const originalLevel = config.fraud.holdLevel;
+  const originalUrl = process.env.VIRLY_AI_PG_URL;
+  const originalQuery = pg.Pool.prototype.query;
+  config.fraud.holdLevel = "high";
+  process.env.VIRLY_AI_PG_URL = "postgresql://stub:stub@127.0.0.1:5432/stub";
+  (pg.Pool.prototype as unknown as { query: unknown }).query = async () => ({ rows: [] });
+  cleanups.push(async () => {
+    (pg.Pool.prototype as unknown as { query: unknown }).query = originalQuery;
+    config.fraud.holdLevel = originalLevel;
+    if (originalUrl === undefined) delete process.env.VIRLY_AI_PG_URL;
+    else process.env.VIRLY_AI_PG_URL = originalUrl;
+    await closeAiPool().catch(() => {});
+  });
+
+  const log: CallLog = [];
+  // amount 450 (>= 0.8 * per-transfer 500) + new counterparty + an amount-spike
+  // anomaly pushes risk to "high", so the gate holds instead of executing.
+  const repos = makeTxRepos({ log, pending: baseRecord({ status: "pending", amount: 450 }) });
+  const tx = (repos as unknown as { transactions: Record<string, unknown> }).transactions;
+  tx.recentForOwner = async () =>
+    Array.from({ length: 6 }, (_v, i) => ({
+      id: `d-${i}`,
+      ownerId: userId,
+      counterpartyEmail: "x@y.com",
+      amount: 10,
+      type: "debit",
+      directionLabel: "Sent",
+      reason: null,
+      createdAt: new Date("2026-01-01T12:00:00Z"),
+      updatedAt: new Date("2026-01-01T12:00:00Z")
+    }));
+  tx.hasDebitToCounterparty = async () => false;
+  installRepos(repos);
+  const calls = spyRealtime();
+
+  const result = await respondToAiPendingTransfer({
+    userId,
+    pendingTransferId,
+    action: "confirm",
+    version: 1
+  });
+
+  expect(result.status).toBe("held"); // the transfer must be held, not executed
+  // No money moved: no settlement.
+  expect(log.includes("transactions.createMany:tx")).toBe(false);
+  const notifies = calls.filter((c) => c.event === "transfer:received");
+  expect(notifies).toHaveLength(0); // a held transfer must NOT notify the recipient
 });
 
 // ---------------------------------------------------------------------------
