@@ -11,6 +11,8 @@
     "dev": "npm run dev --workspace server",
     "dev:server": "npm run dev --workspace server",
     "dev:client": "npm run dev --workspace client",
+    "storybook": "npm run storybook --workspace client",
+    "build-storybook": "npm run build-storybook --workspace client",
     "test": "npm test --workspace server && npm test --workspace client",
     "test:client": "npm test --workspace client",
     "test:server": "npm test --workspace server",
