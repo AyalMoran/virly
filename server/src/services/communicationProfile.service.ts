@@ -9,6 +9,7 @@ import {
   isEmptyCommunicationProfile,
   applyUpdate,
   clampUpdate,
+  capMemory,
 } from "../domain/communicationProfile.js";
 
 export function recordToProfile(r: CommunicationProfileRecord): CommunicationProfile {
@@ -53,5 +54,24 @@ export const communicationProfileService = {
     const merged = applyUpdate(existing, clamped, "learned", now.toISOString());
     if (isEmptyCommunicationProfile(merged)) return;
     await getRepositories().communicationProfile.save(userId, merged);
+  },
+
+  async updateFromUser(
+    userId: string,
+    input: CommunicationProfileUpdate & { memory?: string },
+    now: Date
+  ): Promise<CommunicationProfile> {
+    const { memory, appendMemory: _drop, ...dials } = input;
+    const clampedDials = clampUpdate(dials);
+    const existingRecord = await getRepositories().communicationProfile.findByUserId(userId);
+    const existing = existingRecord ? recordToProfile(existingRecord) : emptyCommunicationProfile();
+    let merged = applyUpdate(existing, clampedDials, "user_set", now.toISOString());
+    if (typeof memory === "string") merged = { ...merged, memory: capMemory(memory) };
+    const saved = await getRepositories().communicationProfile.save(userId, merged);
+    return recordToProfile(saved);
+  },
+
+  async reset(userId: string): Promise<void> {
+    await getRepositories().communicationProfile.deleteByUserId(userId);
   },
 };
