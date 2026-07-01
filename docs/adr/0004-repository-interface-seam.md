@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-06-22
-**Source:** [`docs/superpowers/specs/2026-06-22-postgres-migration-design.md`](../superpowers/specs/2026-06-22-postgres-migration-design.md) — "Locked decisions" table, row "Seam shape"; §1 "Architecture"; §2 "Repository interfaces + domain records". Enforcement: `server/src/repositories/no-direct-model-imports.test.ts`. See also [`../backend/index.md`](../backend/index.md) — "The `no-direct-model-imports` guard" section.
+**Source:** [`docs/planning/specs/2026-06-22-postgres-migration-design.md`](../planning/specs/2026-06-22-postgres-migration-design.md) — "Locked decisions" table, row "Seam shape"; §1 "Architecture"; §2 "Repository interfaces + domain records". Enforcement: `server/src/repositories/no-direct-model-imports.test.ts`. See also [`../backend/index.md`](../backend/index.md) — "The `no-direct-model-imports` guard" section.
 
 ---
 

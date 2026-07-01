@@ -235,7 +235,7 @@ The comment in `transfer.service.ts` (`assertAiTransferWithinLimits`, lines
 > bypass where the daily cap was never checked at settlement."*
 
 The same caveat is mirrored in the PostgreSQL migration design spec
-(`docs/superpowers/specs/2026-06-22-postgres-migration-design.md`, §3):
+(`docs/planning/specs/2026-06-22-postgres-migration-design.md`, §3):
 
 > *"Postgres `READ COMMITTED` carries the same write-skew caveat already
 > documented in `transfer.service` for Mongo snapshot isolation. Phase 1

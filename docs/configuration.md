@@ -53,9 +53,9 @@ Variables are grouped by concern. **Required?** reflects whether a missing value
 | Variable (aliases) | Required? | Default | Used by | Fails how if missing |
 |---|---|---|---|---|
 | `VIRLY_DB_DRIVER` | No | `mongo` | `config.ts:102`, `db.ts`, `index.ts` | Defaults to `mongo`; throws at boot if set to an invalid value |
-| `VIRLY_MONGODB_URI` (`MONGODB_URI`) | No default-wise, but a reachable Mongo is required in **every** mode | `mongodb://127.0.0.1:27017/virly` | `config.ts:209`, `db.ts:8` | `db.ts` calls `mongoose.connect` unconditionally in `connectDb()`, so a reachable MongoDB is required even when `VIRLY_DB_DRIVER=postgres` (the Phase-1 hybrid — see [operations](operations.md) and [Postgres Phase 2 spec](superpowers/specs/2026-06-25-postgres-migration-phase2-design.md)). Setting `VIRLY_AI_MEMORY_BACKEND=postgres` moves only the AI checkpointer/store off Mongo; the boot-time Mongo connection still happens. Connection failure aborts/blocks at runtime |
+| `VIRLY_MONGODB_URI` (`MONGODB_URI`) | No default-wise, but a reachable Mongo is required in **every** mode | `mongodb://127.0.0.1:27017/virly` | `config.ts:209`, `db.ts:8` | `db.ts` calls `mongoose.connect` unconditionally in `connectDb()`, so a reachable MongoDB is required even when `VIRLY_DB_DRIVER=postgres` (the Phase-1 hybrid — see [operations](operations.md) and [Postgres Phase 2 spec](planning/specs/2026-06-25-postgres-migration-phase2-design.md)). Setting `VIRLY_AI_MEMORY_BACKEND=postgres` moves only the AI checkpointer/store off Mongo; the boot-time Mongo connection still happens. Connection failure aborts/blocks at runtime |
 | `VIRLY_POSTGRES_URL` (`POSTGRES_URL`, `DATABASE_URL`) | **Yes — when `VIRLY_DB_DRIVER=postgres`** | — | `config.ts:114`, `db/postgres.ts` | `Error: VIRLY_POSTGRES_URL is required when VIRLY_DB_DRIVER=postgres.` thrown at boot |
-| `VIRLY_AI_MEMORY_BACKEND` | No | `mongo` | `config.ts:162`, `ai/v2/memory/setup.ts`, `index.ts` | Selects where the LangGraph checkpointer + long-term store live (`mongo` keeps them on Mongo; `postgres` consolidates them onto the AI Postgres). Reversible by env flip. Throws at boot on an invalid value, or on `postgres` with no AI Postgres URL. See [AI architecture](ai/architecture.md) and the [Postgres Phase 2 spec](superpowers/specs/2026-06-25-postgres-migration-phase2-design.md) |
+| `VIRLY_AI_MEMORY_BACKEND` | No | `mongo` | `config.ts:162`, `ai/v2/memory/setup.ts`, `index.ts` | Selects where the LangGraph checkpointer + long-term store live (`mongo` keeps them on Mongo; `postgres` consolidates them onto the AI Postgres). Reversible by env flip. Throws at boot on an invalid value, or on `postgres` with no AI Postgres URL. See [AI architecture](ai/architecture.md) and the [Postgres Phase 2 spec](planning/specs/2026-06-25-postgres-migration-phase2-design.md) |
 
 ### Auth / JWT
 
@@ -180,7 +180,7 @@ VIRLY_DB_DRIVER=postgres
 VIRLY_POSTGRES_URL=postgresql://user:pass@host:5432/virly
 ```
 
-`VIRLY_POSTGRES_URL` is **required** and the server throws at boot if absent when this driver is selected. See the Postgres migration spec at `docs/superpowers/specs/2026-06-22-postgres-migration-design.md` §10 for schema and migration details.
+`VIRLY_POSTGRES_URL` is **required** and the server throws at boot if absent when this driver is selected. See the Postgres migration spec at `docs/planning/specs/2026-06-22-postgres-migration-design.md` §10 for schema and migration details.
 
 ### RAG / fraud-hold mode
 

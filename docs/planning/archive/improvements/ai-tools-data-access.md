@@ -1,7 +1,7 @@
 # Give the AI tools a shared, authorization-scoped data-access seam
 
 > **✅ Implemented — via the repository seam.** The
-> [Postgres migration](../superpowers/specs/2026-06-22-postgres-migration-design.md)
+> [Postgres migration](../../specs/2026-06-22-postgres-migration-design.md)
 > introduced a single repository layer that every consumer — routes, services,
 > **and AI tools** — now goes through. No file under `server/src/ai/tools/` or
 > `server/src/ai/v2/tools/` imports a Mongoose model anymore; the

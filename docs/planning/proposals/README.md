@@ -1,10 +1,11 @@
-# future-plans — architecture deepening briefs
+# Architecture-deepening briefs (proposals)
 
 > Generated 2026-06-26 by an `/improve-codebase-architecture` pass over the whole
-> repo. **This directory is git-ignored** — these are local planning artifacts,
-> not committed docs. Each file is a self-contained brief describing *one* area of
-> architectural friction, written to be thorough enough that an agent can turn it
-> into a concrete implementation plan without re-deriving the analysis.
+> repo, and moved here from `docs/future-plans/` in the 2026-07-01 docs reorg.
+> These are aspirational proposals, not yet scheduled. Each file is a self-contained
+> brief describing *one* area of architectural friction, written to be thorough
+> enough that an agent can turn it into a concrete implementation plan (in
+> `docs/planning/plans/`) without re-deriving the analysis.
 
 ## How to read a brief
 
@@ -32,14 +33,14 @@ The repo is mature and self-documents its decisions. These are **already done or
 already decided** and were excluded:
 
 - Service-layer extraction out of route handlers — **shipped** (see
-  `docs/improvements/`, all six suggestions implemented).
+  `docs/planning/archive/improvements/`, all six suggestions implemented).
 - The repository *interface* seam and dual-driver parity — **ADR-0004** (the DI
   brief below builds *on top of* this, it does not reopen it).
 - `double precision` money columns — **ADR-0003** (do not propose decimal/cents).
 - HttpOnly-JWT-cookie + CSRF auth — **ADR-0005**.
 - The AI HITL money gate — **ADR-0006**.
 - Moving LangGraph persistence (checkpointer/store) off Mongo — **already
-  designed** in `docs/superpowers/specs/2026-06-25-postgres-migration-phase2-design.md`.
+  designed** in `docs/planning/specs/2026-06-25-postgres-migration-phase2-design.md`.
 - Deleting v1 of the assistant — **ADR-0008** forbids it until a future ADR. Brief
   04 *reduces the cost of keeping both*, which supports that ADR rather than
   reopening it.

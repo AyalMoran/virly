@@ -110,4 +110,4 @@ in the [Fraud area](fraud.md).
 - The AI Postgres is independent of the driver switch: it is always Postgres,
   always reached via `getAiDb()`, and its schema has its own migration history.
 - The Postgres migration that introduced the app-repo seam is summarised in
-  [`../../improvements/README.md`](../../improvements/README.md).
+  [`../../planning/archive/improvements/README.md`](../../planning/archive/improvements/README.md).
