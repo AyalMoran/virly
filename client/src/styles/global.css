@@ -3697,6 +3697,13 @@ select {
   }
 }
 
+/* Tablet: cap and center the single-column content so it is not an enlarged phone (audit finding 7). */
+@media (min-width: 768px) and (max-width: 1079px) {
+  .page-frame {
+    max-width: 680px;
+  }
+}
+
 @media (min-width: 1080px) {
   :root {
     --mobile-nav-offset: 0px;
