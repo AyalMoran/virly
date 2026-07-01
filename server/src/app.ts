@@ -10,6 +10,7 @@ import aiRoutes from "./routes/ai.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import exchangeRateRoutes from "./routes/exchangeRate.routes.js";
 import transactionRoutes from "./routes/transaction.routes.js";
+import communicationProfileRoutes from "./routes/communicationProfile.routes.js";
 import userRoutes from "./routes/user.routes.js";
 import userProfileRoutes from "./routes/userProfile.routes.js";
 import videoSessionRoutes, {
@@ -84,6 +85,7 @@ app.get("/api/health", (_req, res) => {
 
 app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/accounts", userRoutes);
+app.use("/api/accounts", communicationProfileRoutes);
 app.use("/api/users", userProfileRoutes);
 app.use("/api/transactions", transactionRoutes);
 app.use("/api/exchange-rates", exchangeRateRoutes);

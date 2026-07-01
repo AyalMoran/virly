@@ -14,6 +14,7 @@
 import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 
 import { maskEmail } from "../counterpartyMemory.js";
+import type { CommunicationProfile } from "../../domain/communicationProfile.js";
 import { getToolDisplayData } from "../toolResults.js";
 import type { AssistantId } from "../assistants.js";
 import type { AssistantResponseBlock } from "../responseBlocks.js";
@@ -71,6 +72,8 @@ export type V2Configurable = {
   turnOutcome: V2TurnOutcome;
   /** Known counterparties (name/email) injected into the system prompt. */
   knownCounterparties: Array<{ email: string; label: string; aliases: string[] }>;
+  /** Per-user communication style profile; undefined if not yet loaded or feature off. */
+  communicationProfile?: CommunicationProfile;
 };
 
 export function getConfigurable(

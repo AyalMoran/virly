@@ -1,4 +1,7 @@
-
+import type {
+  CommunicationDialState, CommunicationFormality, CommunicationVerbosity,
+  CommunicationComplexity, CommunicationHumor, CommunicationPace,
+} from "../domain/communicationProfile.js";
 
 export const userRoleValues = ["user", "support_agent", "sales_agent", "support_manager", "admin"] as const;
 export type UserRole = (typeof userRoleValues)[number];
@@ -89,6 +92,19 @@ export type PersonalDetailsRecord = {
   dateOfBirth: Date | null;
   address: Record<string, string | null>;
   lastSkippedAt: Date | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type CommunicationProfileRecord = {
+  id: string;
+  userId: string;
+  formality: CommunicationDialState<CommunicationFormality> | null;
+  verbosity: CommunicationDialState<CommunicationVerbosity> | null;
+  complexity: CommunicationDialState<CommunicationComplexity> | null;
+  humor: CommunicationDialState<CommunicationHumor> | null;
+  pace: CommunicationDialState<CommunicationPace> | null;
+  memory: string;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -285,6 +301,16 @@ export interface PersonalDetailsRepository {
   findProvidedByName(input: { firstName: string; lastName?: string; limit: number }, tx?: TxContext): Promise<PersonalDetailsRecord[]>;
 }
 
+export interface CommunicationProfileRepository {
+  findByUserId(userId: string, tx?: TxContext): Promise<CommunicationProfileRecord | null>;
+  save(
+    userId: string,
+    profile: Pick<CommunicationProfileRecord, "formality" | "verbosity" | "complexity" | "humor" | "pace" | "memory">,
+    tx?: TxContext
+  ): Promise<CommunicationProfileRecord>;
+  deleteByUserId(userId: string, tx?: TxContext): Promise<void>;
+}
+
 export interface ExchangeRateRepository {
   latestForBase(baseCurrency: string, tx?: TxContext): Promise<ExchangeRateRecord | null>;
   findForDate(baseCurrency: string, validForDate: string, tx?: TxContext): Promise<ExchangeRateRecord | null>;
@@ -359,6 +385,7 @@ export interface Repositories {
   users: UserRepository;
   transactions: TransactionRepository;
   personalDetails: PersonalDetailsRepository;
+  communicationProfile: CommunicationProfileRepository;
   exchangeRates: ExchangeRateRepository;
   aiConversations: AiConversationRepository;
   aiPendingTransfers: AiPendingTransferRepository;

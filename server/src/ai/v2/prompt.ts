@@ -11,6 +11,8 @@ import { getAssistantPersonality } from "../assistants.js";
 import type { AssistantId } from "../assistants.js";
 import type { PendingConfirmationMemory } from "../state.js";
 import { buildPersonaSection } from "./persona.js";
+import { buildCommunicationProfileSection } from "./communicationProfileSection.js";
+import type { CommunicationProfile } from "../../domain/communicationProfile.js";
 
 export type KnownCounterparty = { email: string; label: string; aliases: string[] };
 
@@ -22,6 +24,8 @@ export type BuildSystemPromptInput = {
   now: Date;
   timezone: string;
   runningSummary?: string;
+  /** Per-user communication style profile; undefined if not yet loaded or feature off. */
+  communicationProfile?: CommunicationProfile;
 };
 
 const LANGUAGE_DIRECTIVE: Record<
@@ -72,6 +76,7 @@ export function buildSystemPrompt(input: BuildSystemPromptInput): string {
     "Talk like a sharp, warm, concise human assistant — this is a chat, not a form.",
     "",
     buildPersonaSection(input.assistantId, input.locale),
+    buildCommunicationProfileSection(input.communicationProfile, input.locale),
     "",
     // [C. WHAT YOU CAN DO]
     "[CAPABILITIES] You have tools that read this user's real account data and that",
