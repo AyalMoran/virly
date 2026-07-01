@@ -21,7 +21,7 @@ Snapshot date: **2026-07-01**. Regenerate the "Status" column from Todoist + `gi
 | `6h25Jf6p4jfmqF66` | Set up scheduled idempotent RAG sync (no `--force`) | `plans/2026-06-30-rag-sync-scheduling.md` | **Planned** |
 | `6h24RpJcM2XCJH2M` | Make users clickable with hover balloon / user card | `plans/2026-06-26-user-hover-card.md` | **Planned** |
 | `6h24jj9pcF5FRVw3` | Author `policy-rag.examples.jsonl` for RAG recall eval | `plans/2026-07-01-policy-rag-eval-dataset.md` | **Planned** (this run) |
-| `6h249JvMvfXqrqvM` | "All transactions from a counterparty" returns only 3, not all | - | Needs plan (ready) - bug; likely a hard tool result cap |
+| `6h249JvMvfXqrqvM` | "All transactions from a counterparty" returns only 3, not all | `plans/2026-07-01-counterparty-all-transactions-cap.md` | **Planned** (this run) - root cause found: `getTransactionsWithCounterparty` hardcodes `limit: 5` + omits `metadata.transactions` |
 | `6h249Qj89VXWqGJv` | Emails masked only for the LLM, not for the user | - | Needs plan (design first) - masking is an intentional PII seam woven through the tool layer |
 | `6h249mpF4hMf9GFM` | Nicer summary card for counterparty summary (bento) | - | Needs plan (ready) - UI, `responseBlocks` + client card |
 | `6h24Rj94qFXr7jHM` | SSE stream in Hebrew/English matching user language/persona | - | Needs plan (design first) - overlaps the language-switcher task |
@@ -59,14 +59,20 @@ Snapshot date: **2026-07-01**. Regenerate the "Status" column from Todoist + `gi
 
 ## Rollup
 
-- 19 tasks total: **1 delivered**, **3 planned** (1 authored this run), **~13 need a plan**, **2 non-code**.
-- Suggested plan order for "ready" tasks (small, high-signal first): transactions-cap bug (`6h249JvMvfXqrqvM`) → counterparty summary card (`6h249mpF4hMf9GFM`) → contacts/recent (`6gfGpV4GVwGxhjPM`) → chat features (`6h2W38WrRpHRhvWc`, split) → startup throttle (`6h2Rpwm7rQG9XH76`) → CI checks (`6h2HPVWRG3cR79Vc`) → presentation docs (`6h2GwjjChx2vrxFc`).
+- 19 tasks total: **1 delivered**, **4 planned** (transactions-cap authored 2026-07-01), **~12 need a plan**, **2 non-code**.
+- Suggested plan order for remaining "ready" tasks (small, high-signal first): counterparty summary card (`6h249mpF4hMf9GFM`) → contacts/recent (`6gfGpV4GVwGxhjPM`) → chat features (`6h2W38WrRpHRhvWc`, split) → startup throttle (`6h2Rpwm7rQG9XH76`) → CI checks (`6h2HPVWRG3cR79Vc`) → presentation docs (`6h2GwjjChx2vrxFc`).
 - "Design first" tasks (email masking, TOON, SSE language, retry guarantee, language switcher, request funds) should each get a `superpowers:brainstorming` spec in `specs/` before a plan.
 
-## Suggestions (draft - not yet in Todoist)
+## Suggestions
 
-Candidates for a Todoist **suggestions** section, to be added once grounded across more of the codebase:
+The Todoist **suggestions** section now exists (id `6h2crfp28pjx6pFc`), created 2026-07-01.
+
+Pushed to Todoist:
+
+- **v2 tool wrappers silently drop their `limit`/`direction` args** (`6h2crgpmCjPHxqCc`) - `getCounterpartyTransactionsTool` and `searchTransactionsTool` declare these Zod args but never forward them to the executor. Grounded while planning `6h249JvMvfXqrqvM`.
+
+Still draft (add to the section once grounded further):
 
 - **Gate the policy-RAG recall eval in CI** once `policy-rag.examples.jsonl` exists and a test knowledge base is available (depends on `6h24jj9pcF5FRVw3`).
 - **Sync `docs/planning/backlog.md` items into Todoist** - the backlog lists work not tracked as tasks (e.g. "Consolidate hitl.ts and graph.ts", "improve persona prompts", "dad-jokes storage per intent").
-- **Audit AI tool-result row caps** - the "only 3 transactions" bug (`6h249JvMvfXqrqvM`) hints at a shared truncation limit; one task to review every tool's list cap and how totals are surfaced to the LLM vs. the user.
+- **Audit AI tool-result row caps** - the "only 3 transactions" bug (`6h249JvMvfXqrqvM`) hinted at a shared truncation limit; its plan fixes the counterparty cap, but a sweep of every read tool's list cap (and how totals are surfaced to the LLM vs. the user) is still worthwhile.
