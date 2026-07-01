@@ -2,10 +2,13 @@ import { getRepositories } from "../repositories/index.js";
 import type { CommunicationProfileRecord } from "../repositories/types.js";
 import {
   type CommunicationProfile,
+  type CommunicationProfileUpdate,
   emptyCommunicationProfile,
   deriveAgeYears,
   seedProfileFromAge,
   isEmptyCommunicationProfile,
+  applyUpdate,
+  clampUpdate,
 } from "../domain/communicationProfile.js";
 
 export function recordToProfile(r: CommunicationProfileRecord): CommunicationProfile {
@@ -40,5 +43,15 @@ export const communicationProfileService = {
 
     const saved = await getRepositories().communicationProfile.save(userId, seeded);
     return recordToProfile(saved);
+  },
+
+  async applyLearned(userId: string, update: CommunicationProfileUpdate, now: Date): Promise<void> {
+    const clamped = clampUpdate(update);
+    if (Object.keys(clamped).length === 0) return;
+    const existingRecord = await getRepositories().communicationProfile.findByUserId(userId);
+    const existing = existingRecord ? recordToProfile(existingRecord) : emptyCommunicationProfile();
+    const merged = applyUpdate(existing, clamped, "learned", now.toISOString());
+    if (isEmptyCommunicationProfile(merged)) return;
+    await getRepositories().communicationProfile.save(userId, merged);
   },
 };
