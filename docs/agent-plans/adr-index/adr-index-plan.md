@@ -3,8 +3,10 @@
 > **Deliverable:** `docs/adr/` (a `README.md` index + a `0000-template.md` + seeded ADRs)
 > **Type:** Decision log
 > **Audience:** Future contributors asking "why is it built this way?"
-> **Status:** Not started
-> **Gap:** Table 2 #10 — no `docs/adr/` exists; key decisions live only inside the Postgres design spec.
+> **Status:** Done - shipped as `docs/adr/` (README index + `0000-template.md` + ADRs 0001-0015).
+> **Gap:** Table 2 #10 - no `docs/adr/` exists; key decisions live only inside the Postgres design spec.
+>
+> **Delivered scope:** 15 ADRs (0001-0015) - the eight seed decisions below plus fraud (0011-0012), the dedicated AI-Postgres/pgvector split (0009, 0014), swappable AI memory (0010), the Support MCP trust boundary (0013), and the per-user Communication Profile (0015, Proposed).
 
 ## Why this doc
 Several load-bearing decisions are recorded only as prose inside one spec or

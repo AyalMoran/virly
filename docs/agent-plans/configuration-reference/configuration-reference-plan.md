@@ -3,7 +3,7 @@
 > **Deliverable:** `docs/configuration.md`
 > **Type:** Reference
 > **Audience:** Anyone running, deploying, or onboarding to the app
-> **Status:** Complete
+> **Status:** Done - shipped as `docs/configuration.md`.
 > **Gap:** Table 2 #4 — env vars are scattered across README, `.env.example`, and the migration spec §10.
 
 ## Why this doc

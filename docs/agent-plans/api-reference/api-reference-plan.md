@@ -3,8 +3,8 @@
 > **Deliverable:** `docs/api/README.md` (+ optional rendered `docs/api/index.html`)
 > **Type:** API documentation
 > **Audience:** Frontend devs, integrators, and agents calling the HTTP API
-> **Status:** Not started
-> **Gap:** Table 2 #3 — a 46 KB `openapi.yaml` exists at repo root but nothing in `docs/` links or renders it.
+> **Status:** Done - shipped as `docs/api/README.md`.
+> **Gap:** Table 2 #3 - a ~59 KB `openapi.yaml` exists at repo root but nothing in `docs/` links or renders it.
 
 ## Why this doc
 The OpenAPI spec is the contract of record but is invisible from the docs tree.
