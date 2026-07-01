@@ -3697,8 +3697,8 @@ select {
   }
 }
 
-/* Tablet: cap and center the single-column content so it is not an enlarged phone (audit finding 7). */
-@media (min-width: 768px) and (max-width: 1079px) {
+/* Tablet: cap and center single-column content below the 900px two-column breakpoint so it is not an enlarged phone (audit finding 7). */
+@media (min-width: 768px) and (max-width: 899px) {
   .page-frame {
     max-width: 680px;
   }
