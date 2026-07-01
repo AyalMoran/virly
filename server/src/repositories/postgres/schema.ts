@@ -181,6 +181,19 @@ export const verificationTokens = pgTable("verification_tokens", {
   uniqueIndex("verification_tokens_user_id_uq").on(t.userId)
 ]);
 
+export const communicationProfiles = pgTable("communication_profiles", {
+  id: text("id").primaryKey(),
+  userId: text("user_id").notNull().unique(),
+  formality: jsonb("formality"),
+  verbosity: jsonb("verbosity"),
+  complexity: jsonb("complexity"),
+  humor: jsonb("humor"),
+  pace: jsonb("pace"),
+  memory: text("memory").notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const videoAuditLogs = pgTable("video_audit_logs", {
   id: id(),
   event: text("event").notNull(),
