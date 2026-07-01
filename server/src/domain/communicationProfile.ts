@@ -1,3 +1,5 @@
+import { z } from "zod";
+
 export type CommunicationFormality = "casual" | "neutral" | "formal";
 export type CommunicationVerbosity = "brief" | "standard" | "detailed";
 export type CommunicationComplexity = "simple" | "standard" | "expert";
@@ -108,4 +110,47 @@ export function deriveAgeYears(dateOfBirth: Date, now: Date): number {
 export function seedProfileFromAge(ageYears: number | null, now: string): CommunicationProfile {
   if (ageYears === null || ageYears < ELDERLY_AGE_THRESHOLD) return emptyCommunicationProfile();
   return applyUpdate(emptyCommunicationProfile(), { complexity: "simple", pace: "step_by_step" }, "seeded", now);
+}
+
+const dialShape = {
+  formality: z.enum(["casual", "neutral", "formal"]).optional(),
+  verbosity: z.enum(["brief", "standard", "detailed"]).optional(),
+  complexity: z.enum(["simple", "standard", "expert"]).optional(),
+  humor: z.enum(["none", "light", "playful"]).optional(),
+  pace: z.enum(["step_by_step", "standard"]).optional(),
+};
+
+// Internal learned-update shape: dials + a single memory line.
+export const communicationProfileUpdateSchema = z
+  .object({ ...dialShape, appendMemory: z.string().max(200).optional() })
+  .strip();
+
+// HTTP PUT shape: dials + the FULL memory text (user edits the whole thing).
+export const communicationProfileUserInputSchema = z
+  .object({ ...dialShape, memory: z.string().max(MAX_COMMUNICATION_MEMORY_CHARS).optional() })
+  .strip();
+
+const MAX_MEMORY_LINE = 160;
+// Reject anything that reads like an instruction, money movement, or tool call.
+const FORBIDDEN_MEMORY = /\b(approve|confirm|transfer|send|pay|withdraw|deposit|ignore|override|password|tool|api|execute)\b|[$€₪]/i;
+
+export function sanitizeMemoryLine(text: string): string | undefined {
+  const clean = (text ?? "").trim().replace(/\s+/g, " ").slice(0, MAX_MEMORY_LINE);
+  if (!clean) return undefined;
+  if (FORBIDDEN_MEMORY.test(clean)) return undefined;
+  return clean;
+}
+
+export function clampUpdate(input: unknown): CommunicationProfileUpdate {
+  const source = (input ?? {}) as Record<string, unknown>;
+  const out: CommunicationProfileUpdate = {};
+  for (const key of DIAL_KEYS) {
+    const parsed = communicationProfileUpdateSchema.shape[key].safeParse(source[key]);
+    if (parsed.success && parsed.data !== undefined) (out as Record<string, unknown>)[key] = parsed.data;
+  }
+  if (typeof source.appendMemory === "string") {
+    const line = sanitizeMemoryLine(source.appendMemory);
+    if (line) out.appendMemory = line;
+  }
+  return out;
 }
