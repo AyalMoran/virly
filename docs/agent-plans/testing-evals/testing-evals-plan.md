@@ -3,7 +3,7 @@
 > **Deliverable:** `docs/testing.md`
 > **Type:** Onboarding / reference
 > **Audience:** Contributors running or adding tests and AI evals
-> **Status:** Not started
+> **Status:** Done - shipped as `docs/testing.md`.
 > **Gap:** Table 2 #8 — unit vs contract (real-DB) tests and the LangSmith evals are undocumented from the docs tree.
 
 ## Why this doc

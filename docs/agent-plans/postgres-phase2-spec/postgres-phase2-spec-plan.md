@@ -3,7 +3,7 @@
 > **Deliverable:** `docs/superpowers/specs/<date>-postgres-migration-phase2-design.md`
 > **Type:** Design spec (matches the Phase 1 spec format)
 > **Audience:** The agent/engineer who will implement Phase 2
-> **Status:** Done — spec at `docs/superpowers/specs/2026-06-25-postgres-migration-phase2-design.md`
+> **Status:** Done - spec shipped at `docs/superpowers/specs/2026-06-25-postgres-migration-phase2-design.md` (Draft - ready for implementation planning).
 > **Gap:** Table 2 #5 — Phase 1 repeatedly references a "separate Phase 2 spec" that does not exist.
 
 ## Why this doc

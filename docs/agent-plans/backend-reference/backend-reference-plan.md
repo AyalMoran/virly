@@ -3,12 +3,12 @@
 > **Deliverable:** `docs/backend/` (an `index.md` + `_inventory.md` + per-area files, mirroring `docs/frontend/`)
 > **Type:** Architecture / module reference
 > **Audience:** Backend contributors and AI agents navigating `server/src`
-> **Status:** Not started
+> **Status:** Done - shipped as `docs/backend/` (`index.md`, `_inventory.md`, and 11 area files).
 > **Gap:** Table 2 #1 — the server is the larger half of the app and has no structured reference.
 
 ## Why this doc
 `docs/frontend/` catalogues every client component, but the server (routes,
-services, repositories, models, middleware, ~40 AI tools) has no equivalent.
+services, repositories, models, middleware, 35 AI tools: 29 v1 + 6 v2) has no equivalent.
 Contributors and agents must read source to understand the layering. This doc
 makes the backend navigable the same way the frontend reference does.
 
@@ -25,7 +25,7 @@ makes the backend navigable the same way the frontend reference does.
 ## Phases
 ### Phase 1 — Inventory (source of truth)
 - [x] Build `docs/backend/_inventory.md`: a table of every route, service, repository, model, and middleware with path, layer, and one-line role — the same "inventory drives the area files" pattern as `docs/frontend/_inventory.md`.
-- [x] Define the areas: **Auth**, **Accounts/Users**, **Transactions/Transfers**, **Exchange rates/FX**, **AI**, **Video sessions**, **Data layer (repositories/seam)**, **Cross-cutting (middleware/utils)**.
+- [x] Define the areas: **Auth**, **Accounts/Users**, **Transactions/Transfers**, **Exchange rates/FX**, **AI**, **Fraud**, **RAG/knowledge**, **MCP support**, **Video sessions**, **Data layer (repositories/seam)**, **Cross-cutting (middleware/utils)**.
 - **Deliverable:** `_inventory.md` reviewed for completeness against `find server/src`.
 
 ### Phase 2 — Layering overview + diagram

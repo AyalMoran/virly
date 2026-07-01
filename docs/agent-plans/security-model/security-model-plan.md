@@ -3,7 +3,7 @@
 > **Deliverable:** `docs/security.md`
 > **Type:** Architecture / reference
 > **Audience:** Reviewers, new contributors, anyone touching auth or the AI surface
-> **Status:** Done
+> **Status:** Done - shipped as `docs/security.md`.
 > **Gap:** Table 2 #7 — CSRF, JWT cookies, route gating, enumeration-safe resend, and rate limiting are undocumented as a cohesive model.
 
 ## Why this doc

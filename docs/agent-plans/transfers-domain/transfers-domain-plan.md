@@ -3,7 +3,7 @@
 > **Deliverable:** `docs/domain/transfers.md`
 > **Type:** Architecture / domain doc
 > **Audience:** Anyone changing transfer, limit, FX, or confirmation logic
-> **Status:** Not started
+> **Status:** Done - shipped as `docs/domain/transfers.md`.
 > **Gap:** Table 2 #6 — the highest-stakes logic is described only piecemeal across README and frontend area docs.
 
 ## Why this doc

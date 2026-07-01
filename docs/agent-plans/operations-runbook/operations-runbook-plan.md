@@ -3,7 +3,7 @@
 > **Deliverable:** `docs/operations.md`
 > **Type:** Runbook
 > **Audience:** Whoever runs, deploys, or recovers the app
-> **Status:** Not started
+> **Status:** Done - shipped as `docs/operations.md`.
 > **Gap:** Table 2 #9 — docker-compose, the Mongo `rs0` replica-set requirement, the TTL sweeper, and cutover live only inside a spec.
 
 ## Why this doc
