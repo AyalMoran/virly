@@ -23,6 +23,8 @@ docs/**/*.log
 .agents
 .claude
 .superpowers
+.worktrees
+.lavish
 .instance
 .vscode
 
