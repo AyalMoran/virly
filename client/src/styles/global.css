@@ -684,6 +684,7 @@ h2 {
 .dashboard-side-column {
   display: grid;
   gap: 24px;
+  min-width: 0;
 }
 
 .figma-balance-card {
@@ -5072,6 +5073,7 @@ select {
  
 .statement {
   position: relative;
+  max-width: 100%;
   overflow: hidden;
   border: 1px solid rgba(53, 133, 142, 0.28);
   border-radius: 20px;
