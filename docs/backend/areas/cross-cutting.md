@@ -41,7 +41,7 @@ repeated here.
 - **Pagination is page/limit, not cursor.** This is deliberate for user-scoped,
   bounded ledgers — see [API reference §4](../../api/README.md#4-pagination) and
   the residual follow-up noted in
-  [`../../improvements/README.md`](../../improvements/README.md).
+  [`../../planning/archive/improvements/README.md`](../../planning/archive/improvements/README.md).
 - **DTO mappers are the boundary between repository records and API responses.**
   Routes return DTOs, never raw records, so the wire shape is decoupled from the
   driver row/document shape.

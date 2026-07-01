@@ -14,7 +14,7 @@ contract; a single env flag selects which one serves a turn.
 
 - Transfer mechanics, limits, idempotency, execution — [Transfers domain](../domain/transfers.md)
 - HTTP endpoints, request/response shapes — [API reference](../api/README.md)
-- Memory storage migration off Mongo — [Postgres migration Phase 2 design](../superpowers/specs/2026-06-25-postgres-migration-phase2-design.md) *(written later this effort)*
+- Memory storage migration off Mongo — [Postgres migration Phase 2 design](../planning/specs/2026-06-25-postgres-migration-phase2-design.md) *(written later this effort)*
 - Tests and evals overview — [Testing](../testing.md)
 - Frontend chat surface — [Frontend: AI assistant](../frontend/areas/ai-assistant.md)
 - v2 eval harness — [`server/src/ai/evals/v2/README.md`](../../server/src/ai/evals/v2/README.md)
@@ -337,7 +337,7 @@ Three persistence components:
 >
 > **Forward link.** The end-state design (single Postgres, no Mongo dependency for
 > AI memory) is documented in the
-> [Postgres migration Phase 2 design](../superpowers/specs/2026-06-25-postgres-migration-phase2-design.md).
+> [Postgres migration Phase 2 design](../planning/specs/2026-06-25-postgres-migration-phase2-design.md).
 
 ---
 

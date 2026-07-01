@@ -9,7 +9,7 @@
 > - [Testing guide](testing.md) — test bring-up (docker-compose.test.yml)
 > - [AI architecture](ai/architecture.md) — RAG pipeline, vector store, fraud scoring design
 > - [Security model](security.md) — MCP trust boundary, fraud hold controls
-> - [Postgres migration design §12](superpowers/specs/2026-06-22-postgres-migration-design.md#12-cutover--rollback-runbook) — original cutover spec
+> - [Postgres migration design §12](planning/specs/2026-06-22-postgres-migration-design.md#12-cutover--rollback-runbook) — original cutover spec
 
 ---
 
@@ -173,7 +173,7 @@ multi-document transactions on replica sets, not on standalone `mongod`.
 
 The repository abstraction (`Repositories.runInTransaction`) wraps
 `session.withTransaction()` in Mongo mode — see the Postgres design spec
-[§3 Transaction / unit-of-work abstraction](superpowers/specs/2026-06-22-postgres-migration-design.md#3-transaction--unit-of-work-abstraction-load-bearing).
+[§3 Transaction / unit-of-work abstraction](planning/specs/2026-06-22-postgres-migration-design.md#3-transaction--unit-of-work-abstraction-load-bearing).
 
 ### 2.2 Production build and run (Dockerfile)
 
