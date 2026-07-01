@@ -4,7 +4,7 @@
 
 **Goal:** Fix all 8 findings from `docs/reviews/2026-07-01-mobile-responsive-audit.md` so the Virly web client passes WCAG AA contrast on its faint labels, stops truncating the bottom-nav "Transactions" label, gives secondary controls a 44px hit area, removes two narrow-viewport layout bleeds, and gives the tablet breakpoint a real layout.
 
-**Architecture:** These are CSS and small markup changes only, concentrated in `client/src/styles/global.css` (plain CSS class names that map 1:1 to component classes) plus three component files. There is no client CSS/layout test harness (client Jest runs in `node` via `renderToStaticMarkup` with no jsdom and no layout engine), so every fix is verified the same way the audit was produced: by measuring computed styles, geometry, and contrast in a real browser at the audited viewports. Each task reproduces the finding by measurement first, applies the fix, then re-measures to confirm.
+**Architecture:** These are CSS and one small markup change only, concentrated in `client/src/styles/global.css` (plain CSS class names that map 1:1 to component classes) plus one component file (`floating-chat-widget-shadcnui.tsx`). There is no client CSS/layout test harness (client Jest runs in `node` via `renderToStaticMarkup` with no jsdom and no layout engine), so every fix is verified the same way the audit was produced: by measuring computed styles, geometry, and contrast in a real browser at the audited viewports. Each task reproduces the finding by measurement first, applies the fix, then re-measures to confirm.
 
 **Tech Stack:** React 19, Vite, Tailwind v4 (`@theme` in `client/src/index.css`), plain CSS in `client/src/styles/global.css`, Radix, framer-motion, shadcn/ui primitives. Verification uses the preview browser MCP tools (`preview_start`, `preview_resize`, `preview_eval`, `preview_inspect`, `preview_screenshot`).
 
@@ -104,11 +104,10 @@ A `preview_eval` returning `{ error: "not found" }` means the target is not moun
 
 | File | Responsibility | Findings touched |
 |---|---|---|
-| `client/src/styles/global.css` | All plain-CSS class styling: statement labels, mobile-nav, tap targets, boot-splash flap, login link, tablet media query | 1, 3, 4, 5, 6, 7, 8 |
-| `client/src/components/AppShell.tsx` | Bottom-nav item definitions (the label strings) | 2 |
+| `client/src/styles/global.css` | All plain-CSS class styling: statement labels, mobile-nav (label color + two-line wrap), tap targets, boot-splash flap, login link, tablet media query | 1, 2, 3, 4, 5, 6, 7, 8 |
 | `client/src/components/ui/floating-chat-widget-shadcnui.tsx` | AI chat header-close button size | 3 |
 
-No new files. No changes to the Tailwind `@theme` block or design-token definitions.
+Two files, no new files, no changes to the Tailwind `@theme` block or design-token definitions. (Finding 2 is now a CSS two-line wrap - the product owner chose to keep the "Transactions" label rather than rename it, so `AppShell.tsx` is untouched.)
 
 ---
 
@@ -353,15 +352,13 @@ git commit -m "fix(client): give modal close, chat close, and currency select 44
 
 ## Task 4: Stop the bottom-nav "Transactions" label truncating (Finding 2)
 
-At 360 and 390 the 12-character "Transactions" label overflows its tab cell and renders as "Transacti...". The robust fix that keeps every tab on a single line and does not change nav geometry is to rename the bottom-nav label to "Activity" (the audit's first-listed recommendation and a conventional banking-nav term). The route stays `/transactions` and the Transactions page title is unchanged, so no test that asserts the page heading is affected.
-
-> Reviewer note: this is a user-facing copy change scoped to the bottom-nav label only. If the product owner prefers to keep the literal word "Transactions", the alternative is a CSS-only change: in `client/src/styles/global.css` change `.mobile-nav-item > span:last-child` from `white-space: nowrap; text-overflow: ellipsis;` to a two-line clamp (`white-space: normal; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;`). That preserves the word but makes the nav bar a touch taller and leaves only one tab wrapping. The rename is preferred for a cleaner single-line bar.
+At 360 and 390 the 12-character "Transactions" label overflows its tab cell and renders as "Transacti...". Decision (confirmed with the product owner): keep the word "Transactions" so the label mirrors the `/transactions` route and the page heading, and fix the fit by letting the label wrap to two lines via CSS instead of renaming. The `.mobile-nav-item` already has `min-height: 54px`, which accommodates an icon plus two label lines, and all tab cells share it, so the tabs stay aligned (the bar grows ~12px taller only on the narrowest phones). No `AppShell.tsx` or route change.
 
 **Files:**
-- Modify: `client/src/components/AppShell.tsx:68` (the navItems entry for `/transactions`)
+- Modify: `client/src/styles/global.css` (the `.mobile-nav-item > span:last-child` rule, near line 3438)
 
 **Interfaces:**
-- Owns the label string in `AppShell.tsx` navItems. Does not touch the route path or the `TransactionsPage` heading.
+- Owns the `.mobile-nav-item > span:last-child` rule. Distinct from Task 2's `.mobile-nav-item` color edit, so the two do not collide.
 
 - [ ] **Step 1: Reproduce the truncation by measurement**
 
@@ -379,38 +376,70 @@ Expected: `scrollWidth` (~56) `> clientWidth` (~48), confirming the label is cli
 
 - [ ] **Step 2: Apply the fix**
 
-In `client/src/components/AppShell.tsx`, the navItems array contains:
+In `client/src/styles/global.css`, the `.mobile-nav-item > span:last-child` rule currently reads:
 
-```tsx
-{ to: "/transactions", label: "Transactions", icon: <CreditCard /> },
+```css
+.mobile-nav-item > span:last-child {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 ```
 
-Change the label to `"Activity"`:
+Replace the single-line ellipsis with a two-line clamp:
 
-```tsx
-{ to: "/transactions", label: "Activity", icon: <CreditCard /> },
+```css
+.mobile-nav-item > span:last-child {
+  max-width: 100%;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  line-height: 1.05;
+}
 ```
 
-- [ ] **Step 3: Confirm the label now fits**
+- [ ] **Step 3: Confirm the full word now shows on two lines**
 
-Reload at 360x800 and re-run the Step 1 `preview_eval` (matching on the active tab's text now being "Activity", so match `startsWith('Activ')`).
-Expected: `scrollWidth <= clientWidth` (no clip). Repeat at 390x844.
+Reload at 360x800 and `preview_eval`:
 
-- [ ] **Step 4: Confirm the route and page title are intact**
+```js
+(() => {
+  const el = [...document.querySelectorAll('.mobile-nav-item span:last-child')]
+    .find(n => n.textContent.trim().startsWith('Transac'));
+  return el ? { text: el.textContent, scrollWidth: el.scrollWidth, clientWidth: el.clientWidth, lines: Math.round(el.scrollHeight / parseFloat(getComputedStyle(el).lineHeight)) } : 'not found';
+})()
+```
 
-`preview_click` the renamed tab; confirm the URL becomes `/transactions` and the page still shows the "Transactions" heading. Then:
+Expected: `text` is the full "Transactions" (no ellipsis), `scrollWidth <= clientWidth` (no horizontal clip), and `lines` is 2. Repeat at 390x844.
+
+- [ ] **Step 4: Confirm the tab bar stays aligned and there is no page scroll**
+
+`preview_eval` to check all tab cells share a height and the page did not gain horizontal scroll:
+
+```js
+({
+  heights: [...document.querySelectorAll('.mobile-nav-item')].map(n => Math.round(n.getBoundingClientRect().height)),
+  noPageScroll: document.documentElement.scrollWidth === document.documentElement.clientWidth,
+})
+```
+
+Expected: every value in `heights` is equal (tabs aligned), and `noPageScroll: true`. `preview_screenshot` the bottom nav at 360 to confirm the two-line "Transactions" reads cleanly and the other tabs are vertically centered. Then:
 
 ```bash
-npm run test:client -- TransactionsPage
+npm run test:client -- AppShell
+npx tsc -p client/tsconfig.json --noEmit
 ```
 
-Expected: PASS (the "renders the Transactions title" test asserts the page heading, which is unchanged).
+Expected: PASS (no test asserts the nav label; the route and page heading are untouched). If there is no AppShell test file, run `npm run test:client` and expect PASS.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-git add client/src/components/AppShell.tsx
-git commit -m "fix(client): rename bottom-nav Transactions label to Activity to stop truncation"
+git add client/src/styles/global.css
+git commit -m "fix(client): wrap bottom-nav labels to two lines so Transactions stops truncating"
 ```
 
 ---
@@ -643,9 +672,9 @@ git commit -m "fix(client): give login Create account link a 44px hit area"
 
 ---
 
-## Task 8 (optional): Cap and center content on tablet at 768px (Finding 7)
+## Task 8: Cap and center content on tablet at 768px (Finding 7)
 
-This is the single "optional" finding: at 768px the app stretches the mobile single-column layout with no dedicated breakpoint, so the tablet is an enlarged phone. The lowest-risk improvement the audit endorses is to cap and center the content width in the 768-1079px band (below the existing 1080px desktop sidebar breakpoint), giving a comfortable measure instead of a full-width stretch. Skip this task if the product owner prefers to keep the current stretch or wants the richer two-column dashboard instead (noted below).
+This was the audit's single "optional" finding; the product owner chose to include it. At 768px the app stretches the mobile single-column layout with no dedicated breakpoint, so the tablet is an enlarged phone. The lowest-risk improvement the audit endorses is to cap and center the content width in the 768-1079px band (below the existing 1080px desktop sidebar breakpoint), giving a comfortable measure instead of a full-width stretch. The richer two-column dashboard alternative was deliberately not chosen for this pass (noted below).
 
 **Files:**
 - Modify: `client/src/styles/global.css` (add one media query; `.page-frame` already has `width: min(1180px, 100%); margin: 0 auto;` so capping its `max-width` centers it via the existing auto margins)
@@ -756,7 +785,7 @@ The contrast appendix's "balance caption at risk" note is covered by Task 1 (the
 
 **2. Placeholder scan.** Every code step shows exact current CSS and exact replacement text with the target selector and value. The one genuinely browser-dependent finding (5) is written as reproduce-measure-fix with a concrete guard plus an explicit "if it still overflows, constrain the ancestor named in Step 1" branch, not a vague TODO.
 
-**3. Type/selector consistency.** Selector names are quoted from the live files: `.statement-microlabel`, `.statement-ledger-head > span`, `.statement-figures span`, `.statement-asof`, `.mobile-nav-item`, `.tr-close`, `.cheque-currency select`, `#transfer-currency`, `.boot-flap-board`, `.boot-flap-cell`, `.boot-flap-char`, `.boot-splash-panel`, `.signin-signup a`, `.dashboard-main-column`, `.page-frame`. The chat header-close is matched by `aria-label="Close chat"` and the send button by `aria-label="Send message"`, both verified present. The nav label edit is in `AppShell.tsx` navItems; the chat button edit is in `floating-chat-widget-shadcnui.tsx`. The two contrast tints both resolve to `rgba(23, 61, 66, 0.78)`, computed >= 4.5:1 on their respective backgrounds.
+**3. Type/selector consistency.** Selector names are quoted from the live files: `.statement-microlabel`, `.statement-ledger-head > span`, `.statement-figures span`, `.statement-asof`, `.mobile-nav-item`, `.tr-close`, `.cheque-currency select`, `#transfer-currency`, `.boot-flap-board`, `.boot-flap-cell`, `.boot-flap-char`, `.boot-splash-panel`, `.signin-signup a`, `.dashboard-main-column`, `.page-frame`, `.mobile-nav-item > span:last-child`. The chat header-close is matched by `aria-label="Close chat"` and the send button by `aria-label="Send message"`, both verified present. Finding 2 is a CSS two-line wrap on `.mobile-nav-item > span:last-child` (distinct from Task 2's `.mobile-nav-item` color edit); the chat button edit is in `floating-chat-widget-shadcnui.tsx`. The two contrast tints both resolve to `rgba(23, 61, 66, 0.78)`, computed >= 4.5:1 on their respective backgrounds.
 
 ---
 
