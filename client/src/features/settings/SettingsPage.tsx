@@ -16,6 +16,9 @@ import { useAuth } from "../auth/AuthProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import type { PersonalDetails } from "../../lib/types";
 import { validateDateOfBirth, validateRequiredText } from "../../lib/validation";
+import { CommunicationProfileTab } from "./CommunicationProfileTab";
+
+type SettingsTab = "profile" | "ai";
 
 type DetailsForm = {
   firstName: string;
@@ -85,6 +88,7 @@ export function SettingsPage() {
   const auth = useAuth();
   const { formatAmount } = useCurrency();
   const navigate = useNavigate();
+  const [tab, setTab] = useState<SettingsTab>("profile");
   const [details, setDetails] = useState<PersonalDetails | null>(null);
   const [form, setForm] = useState<DetailsForm>(emptyDetailsForm);
   const [errors, setErrors] = useState<DetailsErrors>({});
@@ -237,6 +241,27 @@ export function SettingsPage() {
   return (
     <PageStack>
       <PageHeader eyebrow="" title="Settings" />
+      <nav className="settings-tabs" aria-label="Settings sections">
+        <button
+          type="button"
+          className={`settings-tab${tab === "profile" ? " settings-tab--active" : ""}`}
+          aria-current={tab === "profile" ? "page" : undefined}
+          onClick={() => setTab("profile")}
+        >
+          Profile
+        </button>
+        <button
+          type="button"
+          className={`settings-tab${tab === "ai" ? " settings-tab--active" : ""}`}
+          aria-current={tab === "ai" ? "page" : undefined}
+          onClick={() => setTab("ai")}
+        >
+          AI Assistant
+        </button>
+      </nav>
+      {tab === "ai" ? (
+        <CommunicationProfileTab />
+      ) : (
       <ResponsiveGrid className="settings-grid" variant="sidebar">
         <Card className="settings-details-card">
           <div className="settings-card-header">
@@ -425,6 +450,7 @@ export function SettingsPage() {
           </Card>
         </div>
       </ResponsiveGrid>
+      )}
     </PageStack>
   );
 }
