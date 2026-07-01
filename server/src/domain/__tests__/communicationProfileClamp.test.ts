@@ -23,4 +23,8 @@ describe("sanitizeMemoryLine (free-text guard)", () => {
   it("caps line length", () => {
     expect(sanitizeMemoryLine("x".repeat(500))!.length).toBeLessThanOrEqual(160);
   });
+  it("rejects a forbidden token even when it sits past the 160-char cap", () => {
+    // The forbidden word would be sliced off if the filter ran after the cap.
+    expect(sanitizeMemoryLine("x".repeat(200) + " please approve")).toBeUndefined();
+  });
 });

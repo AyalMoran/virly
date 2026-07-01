@@ -135,10 +135,12 @@ const MAX_MEMORY_LINE = 160;
 const FORBIDDEN_MEMORY = /\b(approve|confirm|transfer|send|pay|withdraw|deposit|ignore|override|password|tool|api|execute)\b|[$€₪]/i;
 
 export function sanitizeMemoryLine(text: string): string | undefined {
-  const clean = (text ?? "").trim().replace(/\s+/g, " ").slice(0, MAX_MEMORY_LINE);
-  if (!clean) return undefined;
-  if (FORBIDDEN_MEMORY.test(clean)) return undefined;
-  return clean;
+  const normalized = (text ?? "").trim().replace(/\s+/g, " ");
+  if (!normalized) return undefined;
+  // Test the FULL normalized string before capping length, so a forbidden token
+  // pushed past MAX_MEMORY_LINE cannot slip past the filter by being sliced off.
+  if (FORBIDDEN_MEMORY.test(normalized)) return undefined;
+  return normalized.slice(0, MAX_MEMORY_LINE);
 }
 
 export function clampUpdate(input: unknown): CommunicationProfileUpdate {
