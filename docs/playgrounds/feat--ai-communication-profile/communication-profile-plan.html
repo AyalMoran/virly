@@ -1,0 +1,391 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Per-user Communication Profile - Implementation Plan</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --background:40 33% 98%;
+    --foreground:222 31% 12%;
+    --card:0 0% 100%;
+    --primary:168 76% 34%;
+    --primary-fg:0 0% 100%;
+    --destructive:5 45% 44%;
+    --muted:180 14% 91%;
+    --muted-fg:218 12% 42%;
+    --border:180 14% 84%;
+    --amber:38 78% 42%;
+    --radius:0.75rem;
+    --bg:hsl(var(--background));
+    --fg:hsl(var(--foreground));
+    --cardc:hsl(var(--card));
+    --pri:hsl(var(--primary));
+    --pri-soft:hsl(168 60% 96%);
+    --pri-line:hsl(168 45% 82%);
+    --mut:hsl(var(--muted));
+    --mutfg:hsl(var(--muted-fg));
+    --bd:hsl(var(--border));
+    --dest:hsl(var(--destructive));
+    --amb:hsl(var(--amber));
+  }
+  *{box-sizing:border-box;min-width:0;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);color:var(--fg);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55;-webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:2.2rem 1.25rem 4rem;}
+  code,.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.86em;}
+  a{color:var(--pri);text-decoration:none;}
+  a:hover{text-decoration:underline;}
+  h1,h2,h3{line-height:1.2;margin:0;}
+  p{margin:0 0 .7rem;}
+
+  /* hero */
+  .hero{border:1px solid var(--bd);border-radius:var(--radius);background:
+    linear-gradient(180deg,var(--pri-soft),var(--cardc));padding:1.6rem 1.6rem 1.4rem;box-shadow:0 1px 2px hsl(222 31% 12% / .04);}
+  .kicker{display:inline-flex;align-items:center;gap:.5rem;font-size:.72rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--pri);}
+  .kicker .dot{width:.5rem;height:.5rem;border-radius:50%;background:var(--pri);}
+  h1{font-size:clamp(1.6rem,3.4vw,2.25rem);font-weight:800;letter-spacing:-.02em;margin:.55rem 0 .4rem;}
+  .lede{font-size:1.02rem;color:hsl(222 20% 26%);max-width:64ch;}
+  .chips{display:flex;flex-wrap:wrap;gap:.5rem;margin-top:1.1rem;}
+  .chip{display:inline-flex;align-items:center;gap:.4rem;font-size:.76rem;font-weight:600;
+    border:1px solid var(--bd);background:var(--cardc);border-radius:999px;padding:.28rem .7rem;color:hsl(222 22% 24%);}
+  .chip b{color:var(--pri);font-weight:700;}
+  .chip.warn{border-color:hsl(38 60% 70%);background:hsl(38 78% 96%);color:hsl(38 60% 28%);}
+
+  section{margin-top:2.4rem;}
+  .sec-head{display:flex;align-items:baseline;gap:.7rem;margin-bottom:1rem;flex-wrap:wrap;}
+  .sec-num{font-size:.78rem;font-weight:800;color:var(--pri);border:1px solid var(--pri-line);
+    background:var(--pri-soft);border-radius:.5rem;padding:.1rem .5rem;}
+  h2{font-size:1.32rem;font-weight:800;letter-spacing:-.01em;}
+  .sec-sub{color:var(--mutfg);font-size:.95rem;margin:-.4rem 0 0;}
+
+  .card{border:1px solid var(--bd);border-radius:var(--radius);background:var(--cardc);
+    box-shadow:0 1px 2px hsl(222 31% 12% / .04);}
+  .pad{padding:1.15rem 1.2rem;}
+
+  /* axis reframe */
+  .axes{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr));gap:1rem;align-items:stretch;}
+  .axis{position:relative;overflow:hidden;}
+  .axis .tag{font-size:.72rem;font-weight:800;letter-spacing:.06em;text-transform:uppercase;color:var(--mutfg);}
+  .axis h3{font-size:1.05rem;margin:.3rem 0 .1rem;}
+  .axis .who{color:var(--pri);}
+  .axis .how{color:hsl(268 42% 46%);}
+  .axis p{font-size:.9rem;color:hsl(222 18% 30%);margin:.5rem 0 .8rem;}
+  .pill-row{display:flex;flex-wrap:wrap;gap:.4rem;}
+  .pill{font-size:.76rem;font-weight:600;border-radius:999px;padding:.22rem .6rem;border:1px solid var(--bd);background:var(--bg);}
+  .pill.p{border-color:var(--pri-line);background:var(--pri-soft);color:hsl(168 60% 24%);}
+  .pill.h{border-color:hsl(268 40% 84%);background:hsl(268 60% 97%);color:hsl(268 42% 38%);}
+  .times{display:flex;align-items:center;justify-content:center;font-size:1.6rem;font-weight:800;color:var(--mutfg);}
+  @media(max-width:620px){.times{padding:.2rem 0;}}
+  .trap{margin-top:1rem;border-left:3px solid var(--dest);background:hsl(5 45% 97%);border-radius:.4rem;
+    padding:.7rem .9rem;font-size:.9rem;color:hsl(5 40% 32%);}
+  .trap b{color:var(--dest);}
+
+  /* diagram */
+  .mermaid{width:100%;overflow-x:auto;}
+  .legend{display:flex;flex-wrap:wrap;gap:.8rem;margin-top:.8rem;font-size:.82rem;color:var(--mutfg);}
+  .legend span{display:inline-flex;align-items:center;gap:.4rem;}
+  .sw{width:.85rem;height:.85rem;border-radius:.2rem;border:1px solid var(--bd);display:inline-block;}
+
+  /* safety */
+  .safety{border:1px solid var(--pri-line);background:linear-gradient(180deg,var(--pri-soft),var(--cardc));}
+  .safety h3{font-size:1.05rem;color:hsl(168 60% 22%);margin-bottom:.5rem;}
+  .safety ul{margin:.2rem 0 0;padding-left:1.1rem;}
+  .safety li{font-size:.92rem;margin-bottom:.4rem;color:hsl(222 20% 24%);}
+  .safety li b{color:hsl(168 62% 24%);}
+
+  /* phases */
+  .phase-flow{display:flex;flex-wrap:wrap;align-items:stretch;gap:.55rem;margin-bottom:1.3rem;}
+  .pf{flex:1 1 150px;min-width:0;border:1px solid var(--bd);border-radius:.6rem;background:var(--cardc);padding:.6rem .7rem;}
+  .pf .n{font-size:.68rem;font-weight:800;letter-spacing:.05em;color:var(--mutfg);text-transform:uppercase;}
+  .pf .t{font-size:.9rem;font-weight:700;margin-top:.15rem;}
+  .pf .c{font-size:.74rem;color:var(--mutfg);margin-top:.15rem;}
+  .ship{display:inline-block;margin-top:.4rem;font-size:.66rem;font-weight:800;color:var(--pri);
+    background:var(--pri-soft);border:1px solid var(--pri-line);border-radius:999px;padding:.1rem .45rem;letter-spacing:.03em;}
+
+  .phase{margin-bottom:1rem;}
+  .phase-hd{display:flex;align-items:center;gap:.7rem;padding:.7rem 1rem;border:1px solid var(--bd);
+    border-radius:var(--radius) var(--radius) 0 0;background:hsl(180 20% 97%);border-bottom:none;flex-wrap:wrap;}
+  .phase-hd .idx{font-weight:800;color:var(--pri);font-size:.9rem;background:var(--pri-soft);
+    border:1px solid var(--pri-line);border-radius:.45rem;padding:.05rem .5rem;}
+  .phase-hd h3{font-size:1rem;font-weight:800;}
+  .phase-hd .meta{margin-left:auto;font-size:.76rem;color:var(--mutfg);}
+  .tasks{border:1px solid var(--bd);border-radius:0 0 var(--radius) var(--radius);overflow:hidden;}
+  .task{display:grid;grid-template-columns:2.1rem 1fr;gap:.7rem;padding:.6rem .9rem;border-top:1px solid var(--bd);align-items:start;}
+  .task:first-child{border-top:none;}
+  .task .id{font-size:.72rem;font-weight:800;color:var(--pri);background:var(--pri-soft);border:1px solid var(--pri-line);
+    border-radius:.4rem;text-align:center;padding:.12rem 0;height:fit-content;}
+  .task .body .tt{font-size:.92rem;font-weight:650;}
+  .task .body .files{font-size:.76rem;color:var(--mutfg);margin-top:.15rem;word-break:break-word;}
+  .task .body .files code{background:var(--mut);border-radius:.3rem;padding:.03rem .3rem;color:hsl(222 22% 30%);}
+
+  /* two-col */
+  .cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:1rem;}
+  .listcard h3{font-size:1rem;margin-bottom:.6rem;}
+  .listcard ul{margin:0;padding-left:1.05rem;}
+  .listcard li{font-size:.9rem;margin-bottom:.5rem;color:hsl(222 18% 26%);}
+  .listcard li b{color:var(--fg);}
+  .q li{color:hsl(38 40% 30%);}
+  .q li b{color:hsl(38 55% 32%);}
+
+  /* provenance */
+  .prov{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,220px),1fr));gap:.9rem;}
+  .stat{border:1px solid var(--bd);border-radius:var(--radius);background:var(--cardc);padding:1rem;text-align:center;}
+  .stat .big{font-size:1.7rem;font-weight:800;color:var(--pri);line-height:1;}
+  .stat .lab{font-size:.8rem;color:var(--mutfg);margin-top:.35rem;}
+  .foot{margin-top:2.4rem;padding-top:1.2rem;border-top:1px solid var(--bd);font-size:.82rem;color:var(--mutfg);}
+  .foot code{background:var(--mut);border-radius:.3rem;padding:.05rem .35rem;}
+  .branch{display:inline-flex;gap:.4rem;flex-wrap:wrap;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <!-- HERO -->
+  <header class="hero">
+    <span class="kicker"><span class="dot"></span> ADR-0015 &middot; Proposed &middot; Virly AI assistant</span>
+    <h1>Per-user Communication Profile</h1>
+    <p class="lede">A durable, per-user tone layer for the v2 assistant: it <b>seeds</b> from the user's details,
+      <b>learns</b> conservatively from their messages, is <b>viewable and editable</b> in Settings, and can
+      <b>never</b> touch money or safety behavior.</p>
+    <div class="chips">
+      <span class="chip"><b>23</b> tasks</span>
+      <span class="chip"><b>5</b> phases</span>
+      <span class="chip">scope: <b>v2 only</b></span>
+      <span class="chip">extends <b>ADR-0007</b> persona layer</span>
+      <span class="chip">behind the <b>repository seam</b> (ADR-0004)</span>
+      <span class="chip warn">main is protected &middot; ADR on its own branch</span>
+    </div>
+  </header>
+
+  <!-- 1. THE REFRAME -->
+  <section>
+    <div class="sec-head"><span class="sec-num">01</span><h2>The reframe: two orthogonal axes</h2></div>
+    <p class="sec-sub">"Adapt for an elderly user" is not a new character. It is a modulation of an existing one.</p>
+    <div class="axes" style="margin-top:1rem">
+      <div class="card pad axis">
+        <span class="tag">Axis 1 &middot; unchanged</span>
+        <h3 class="who">WHO speaks</h3>
+        <p>The persona: identity, voice, phrase pack. Selected by <code>assistantId</code>. The four personas stay exactly as they are.</p>
+        <div class="pill-row">
+          <span class="pill p">Oshri</span><span class="pill p">Chaya</span><span class="pill p">Yehuda</span><span class="pill p">Yohai</span>
+        </div>
+      </div>
+      <div class="times">&times;</div>
+      <div class="card pad axis">
+        <span class="tag">Axis 2 &middot; new</span>
+        <h3 class="how">HOW they speak to you</h3>
+        <p>The Communication Profile: tone dials <i>plus</i> a short, character-capped free-text memory of the user's preferences and relevant context. Modulates whichever persona is active - a warm Chaya who also keeps it simple. Fully user-editable.</p>
+        <div class="pill-row">
+          <span class="pill h">formality</span><span class="pill h">verbosity</span><span class="pill h">complexity</span><span class="pill h">humor</span><span class="pill h">pace</span>
+        </div>
+      </div>
+    </div>
+    <div class="trap">
+      <b>The trap we avoid:</b> adding an "elderly persona" as persona #5. That conflates the two axes into an
+      O(N&times;M) explosion and re-opens ADR-0007's per-persona safety review. Tone is a new axis, not a new value on the old one.
+    </div>
+  </section>
+
+  <!-- 2. LIFECYCLE -->
+  <section>
+    <div class="sec-head"><span class="sec-num">02</span><h2>How a profile lives: seed, inject, learn, correct</h2></div>
+    <p class="sec-sub">One durable record per user, riding the same long-term-memory rails the assistant already runs.</p>
+    <div class="card pad" style="margin-top:1rem">
+      <div class="mermaid">
+flowchart TD
+  PD["User details<br/>age, residence, ..."]
+  SEED["Seed initial tone<br/>from details<br/><b>provenance: seeded</b>"]
+  STORE[("communication_profiles<br/>repository seam &middot; mongo + postgres")]
+  INJECT["[HOW TO TALK TO THIS USER]<br/>block, injected after the persona"]
+  REPLY["Assistant reply<br/>tone adapted to this user"]
+  DETECT["Learn from messages<br/>explicit + repeated signals + interests<br/>respectful: preferences, not personality"]
+  SETTINGS["AI Assistant settings tab<br/>whole profile user-editable"]
+  SERIOUS{{"SERIOUS_TONE_RULE + [MONEY] rules"}}
+
+  PD -->|"seed once, on first read"| SEED
+  SEED --> STORE
+  STORE -->|"hydrate every turn"| INJECT
+  INJECT --> REPLY
+  REPLY -->|"'keep it short' etc."| DETECT
+  DETECT -->|"applyLearned &middot; never clobbers user_set"| STORE
+  SETTINGS -->|"user_set &middot; highest precedence"| STORE
+  SERIOUS -.->|"always outrank the block"| INJECT
+
+  classDef seed fill:#e6f4f0,stroke:#12987d,color:#123b2c;
+  classDef store fill:#ffffff,stroke:#5b8f83,color:#15202b,stroke-width:2px;
+  classDef safe fill:#fdeceb,stroke:#a5433c,color:#7a322d;
+  classDef user fill:#f2ecfb,stroke:#7a5ba6,color:#3f2f5c;
+  class PD,SEED seed;
+  class STORE store;
+  class SERIOUS safe;
+  class SETTINGS user;
+      </div>
+      <div class="legend">
+        <span><span class="sw" style="background:#e6f4f0;border-color:#12987d"></span> seed from details</span>
+        <span><span class="sw" style="background:#f2ecfb;border-color:#7a5ba6"></span> explicit user control</span>
+        <span><span class="sw" style="background:#fdeceb;border-color:#a5433c"></span> safety, always wins</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3. SAFETY -->
+  <section>
+    <div class="sec-head"><span class="sec-num">03</span><h2>The safety boundary (extended from ADR-0007)</h2></div>
+    <div class="card pad safety">
+      <h3>The profile changes voice, never implementation.</h3>
+      <ul>
+        <li><b>Allow-listed in the type and the write path.</b> A Zod <code>.strip()</code> schema + a typed clamp mean a statement like
+          <code>"always approve my transfers"</code> maps to no dial and is dropped - it can never become a written instruction, tool, confirmation, or limit.</li>
+        <li><b>Deferral by wording, not position.</b> The <code>[MONEY]</code> rules render textually <i>after</i> the block, so the block cannot lean on prompt order - it explicitly defers to <code>SERIOUS_TONE_RULE</code>, <code>[MONEY]</code>, <code>[STYLE]</code>, and <code>[LANGUAGE]</code> in its own text.</li>
+        <li><b>Separate record, separate writer.</b> Kept off <code>UserPreferences</code> (which carries the money-adjacent <code>confirmAboveAmount</code> and a blind spread-merge writer).</li>
+        <li><b>Details are a prior, not a lock.</b> Age, residence and other details seed an initial tone; <code>learned</code> and <code>user_set</code> outrank <code>seeded</code>, so real behavior and explicit edits override the seed over time. Never a silent, patronizing downgrade.</li>
+        <li><b>Respectful and transparent.</b> Because the user reads and edits everything, the assistant records only communication <i>preferences</i> and useful, self-disclosed <i>context</i> (e.g. "interested in loan options for soldiers") - never a personality judgment, evaluation, or anything that could insult or disrespect.</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 4. THE BUILD -->
+  <section>
+    <div class="sec-head"><span class="sec-num">04</span><h2>The build: 5 phases, 23 TDD tasks</h2></div>
+    <p class="sec-sub">Each phase ends at an independently shippable, testable increment.</p>
+
+    <div class="phase-flow" style="margin-top:1rem">
+      <div class="pf"><div class="n">Phase 0</div><div class="t">Domain core</div><div class="c">pure, no I/O</div></div>
+      <div class="pf"><div class="n">Phase 1</div><div class="t">Persistence</div><div class="c">repo seam + parity</div></div>
+      <div class="pf"><div class="n">Phase 2</div><div class="t">Read &amp; inject</div><div class="c">seeded, read-only</div><div class="ship">shippable</div></div>
+      <div class="pf"><div class="n">Phase 3</div><div class="t">Learning</div><div class="c">conservative</div><div class="ship">shippable</div></div>
+      <div class="pf"><div class="n">Phase 4</div><div class="t">Settings tab</div><div class="c">whole profile editable</div><div class="ship">shippable</div></div>
+    </div>
+
+    <!-- Phase 0 -->
+    <div class="phase">
+      <div class="phase-hd"><span class="idx">0</span><h3>Domain core (pure)</h3><span class="meta">Tasks 1-5</span></div>
+      <div class="tasks">
+        <div class="task"><div class="id">1</div><div class="body"><div class="tt">Profile types, constants, empty factory</div><div class="files"><code>domain/communicationProfile.ts</code></div></div></div>
+        <div class="task"><div class="id">2</div><div class="body"><div class="tt">Provenance-aware merge (applyUpdate)</div><div class="files">user_set &gt; learned &gt; seeded; free text char-capped</div></div></div>
+        <div class="task"><div class="id">3</div><div class="body"><div class="tt">Seed from user details</div><div class="files">age, residence, ...; interests learned later</div></div></div>
+        <div class="task"><div class="id">4</div><div class="body"><div class="tt">Allow-list clamp (Zod)</div><div class="files">the safety enforcement point</div></div></div>
+        <div class="task"><div class="id">5</div><div class="body"><div class="tt">The <code>[HOW TO TALK TO THIS USER]</code> prompt block</div><div class="files"><code>ai/v2/communicationProfileSection.ts</code></div></div></div>
+      </div>
+    </div>
+
+    <!-- Phase 1 -->
+    <div class="phase">
+      <div class="phase-hd"><span class="idx">1</span><h3>Persistence via the repository seam</h3><span class="meta">Tasks 6-10</span></div>
+      <div class="tasks">
+        <div class="task"><div class="id">6</div><div class="body"><div class="tt">Repository record and interface</div><div class="files"><code>repositories/types.ts</code></div></div></div>
+        <div class="task"><div class="id">7</div><div class="body"><div class="tt">Mongoose model + Mongo singleton driver</div><div class="files">mirrors <code>mongoPersonalDetailsRepository</code></div></div></div>
+        <div class="task"><div class="id">8</div><div class="body"><div class="tt">Postgres schema, migration, driver</div><div class="files"><code>asPgTx(tx)</code> + <code>newObjectId()</code>; jsonb dials</div></div></div>
+        <div class="task"><div class="id">9</div><div class="body"><div class="tt">Register the driver in both sets</div><div class="files">mongo + postgres index bundles</div></div></div>
+        <div class="task"><div class="id">10</div><div class="body"><div class="tt">Contract parity test</div><div class="files"><code>describeContract</code>; both DBs</div></div></div>
+      </div>
+    </div>
+
+    <!-- Phase 2 -->
+    <div class="phase">
+      <div class="phase-hd"><span class="idx">2</span><h3>AI read and inject (seeded, read-only)</h3><span class="meta">Tasks 11-15 &middot; shippable</span></div>
+      <div class="tasks">
+        <div class="task"><div class="id">11</div><div class="body"><div class="tt">Service read + seed-on-first-read</div><div class="files"><code>getOrSeedForUser(userId, now)</code></div></div></div>
+        <div class="task"><div class="id">12</div><div class="body"><div class="tt">Thread the profile through the v2 config</div><div class="files"><code>V2Configurable</code>, <code>BuildSystemPromptInput</code> (optional)</div></div></div>
+        <div class="task"><div class="id">13</div><div class="body"><div class="tt">Inject the block after the persona</div><div class="files"><code>prompt.ts</code> line 74; <code>agent.ts</code></div></div></div>
+        <div class="task"><div class="id">14</div><div class="body"><div class="tt">Seed + hydrate at both v2 entry points</div><div class="files"><code>hitl.ts</code>: invokeV2Resumable + streamAssistantV2</div></div></div>
+        <div class="task"><div class="id">15</div><div class="body"><div class="tt">Studio parity + deterministic safety test</div><div class="files">note "instruction" is inert; money rule intact</div></div></div>
+      </div>
+    </div>
+
+    <!-- Phase 3 -->
+    <div class="phase">
+      <div class="phase-hd"><span class="idx">3</span><h3>Conservative learned update</h3><span class="meta">Tasks 16-18 &middot; shippable</span></div>
+      <div class="tasks">
+        <div class="task"><div class="id">16</div><div class="body"><div class="tt">Respectful signal + interest detector</div><div class="files">explicit + repeated/implicit; preferences &amp; context, never personality</div></div></div>
+        <div class="task"><div class="id">17</div><div class="body"><div class="tt">applyLearned service method</div><div class="files">clamp + merge as <code>learned</code>; never clobbers user_set</div></div></div>
+        <div class="task"><div class="id">18</div><div class="body"><div class="tt">Post-turn write-back at both entry points</div><div class="files">local <code>new Date()</code>; resume path excluded</div></div></div>
+      </div>
+    </div>
+
+    <!-- Phase 4 -->
+    <div class="phase">
+      <div class="phase-hd"><span class="idx">4</span><h3>Settings view / edit / reset</h3><span class="meta">Tasks 19-23 &middot; shippable</span></div>
+      <div class="tasks">
+        <div class="task"><div class="id">19</div><div class="body"><div class="tt">Service update-from-user and reset</div><div class="files"><code>user_set</code> provenance; reset re-seeds next turn</div></div></div>
+        <div class="task"><div class="id">20</div><div class="body"><div class="tt">HTTP routes with the Zod allow-list</div><div class="files"><code>/api/accounts/communication-profile</code>; requireAuth + CSRF</div></div></div>
+        <div class="task"><div class="id">21</div><div class="body"><div class="tt">Client types and API methods</div><div class="files"><code>lib/types.ts</code>, <code>lib/api.ts</code></div></div></div>
+        <div class="task"><div class="id">22</div><div class="body"><div class="tt">Dedicated "AI Assistant" settings tab</div><div class="files">whole profile editable; ready for a future settings sidebar</div></div></div>
+        <div class="task"><div class="id">23</div><div class="body"><div class="tt">Full-suite verification</div><div class="files">typecheck, unit, client, contract, optional live eval</div></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 5. RISKS + OPEN QUESTIONS -->
+  <section>
+    <div class="sec-head"><span class="sec-num">05</span><h2>Risks, trade-offs &amp; open questions</h2></div>
+    <div class="cols">
+      <div class="card pad listcard">
+        <h3>Known trade-offs (accepted)</h3>
+        <ul>
+          <li><b>Repo-seam cost.</b> A new record means interface + mongo + postgres + contract work - the price of durable, always-available, contract-tested data over the resolvability-fragile AI Store.</li>
+          <li><b>Prompt cache.</b> The block sits in the cacheable prefix, so it changes the cache key per user and per edit.</li>
+          <li><b>CI vs live.</b> The strongest tone guarantee (the model actually flattening on serious turns) is only proven by opt-in live evals; CI leans on deterministic present / positioned / allow-list assertions.</li>
+        </ul>
+      </div>
+      <div class="card pad listcard">
+        <h3>Decided in this review</h3>
+        <ul>
+          <li><b>Whole profile is user-editable,</b> with the free-text part capped by character count - not a list of discrete "notes".</li>
+          <li><b>Learn now, not later:</b> explicit statements plus strong repeated/implicit signals and interest areas.</li>
+          <li><b>Seed from more than age:</b> residence and other details too; interests are learned from what the user asks about.</li>
+          <li><b>Respect boundary:</b> preferences and relevant context only, never personality inferences.</li>
+          <li><b>Its own Settings tab,</b> built to slot into a future multi-category settings sidebar.</li>
+        </ul>
+      </div>
+    </div>
+    <div class="trap" style="border-left-color:hsl(38 78% 42%);background:hsl(38 78% 96%);color:hsl(38 52% 30%)">
+      <b>One line to confirm:</b> remembering a user is "interested in loan options for soldiers" (useful, self-disclosed context) sits right next to "never infer things about the person". The line I am drawing: factual, self-disclosed preferences and interests are fair game; subjective judgments about the individual are not. Say so if you would draw it elsewhere.
+    </div>
+  </section>
+
+  <!-- 6. PROVENANCE -->
+  <section>
+    <div class="sec-head"><span class="sec-num">06</span><h2>How this plan was built</h2></div>
+    <div class="prov">
+      <div class="stat"><div class="big">14</div><div class="lab">agents verified every file:line seam (gather + adversarial re-check)</div></div>
+      <div class="stat"><div class="big">4</div><div class="lab">critics reviewed the plan: type-consistency, placeholders, spec-coverage, seam-correctness</div></div>
+      <div class="stat"><div class="big">4</div><div class="lab">compile-breaking defects caught &amp; fixed before you saw it</div></div>
+      <div class="stat"><div class="big">100%</div><div class="lab">ADR-0015 decisions mapped 1:1 to a task; no scope creep</div></div>
+    </div>
+  </section>
+
+  <footer class="foot">
+    <p class="branch">
+      <span><b>ADR:</b> <code>docs/adr-0015-communication-profile</code> (35e9b28)</span> &nbsp;&middot;&nbsp;
+      <span><b>Plan:</b> <code>feat/ai-communication-profile</code> (cf533ce)</span>
+    </p>
+    <p style="margin-top:.5rem">Design source: matched Virly's own design tokens (<code>client/src/index.css</code> - teal primary <code>hsl(168 76% 34%)</code>).
+      Both branches are ready for you to PR; nothing pushed.</p>
+  </footer>
+
+</div>
+<script>
+  mermaid.initialize({
+    startOnLoad:true,
+    theme:'base',
+    themeVariables:{
+      fontFamily:'ui-sans-serif, system-ui, sans-serif',
+      fontSize:'14px',
+      primaryColor:'#ffffff',
+      primaryTextColor:'#15202b',
+      primaryBorderColor:'#5b8f83',
+      lineColor:'#6b7d84',
+      tertiaryColor:'#f4f8f7'
+    },
+    flowchart:{ curve:'basis', useMaxWidth:true, htmlLabels:true, padding:8 }
+  });
+</script>
+</body>
+</html>
