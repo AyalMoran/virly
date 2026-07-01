@@ -39,3 +39,54 @@ export function emptyCommunicationProfile(): CommunicationProfile {
 export function isEmptyCommunicationProfile(p: CommunicationProfile): boolean {
   return !p.formality && !p.verbosity && !p.complexity && !p.humor && !p.pace && p.memory.trim() === "";
 }
+
+export type CommunicationProfileUpdate = {
+  formality?: CommunicationFormality;
+  verbosity?: CommunicationVerbosity;
+  complexity?: CommunicationComplexity;
+  humor?: CommunicationHumor;
+  pace?: CommunicationPace;
+  appendMemory?: string; // one concise line to append to the free-text memory
+};
+
+// Keep the newest lines that fit under the cap (drop oldest first).
+export function capMemory(text: string): string {
+  if (text.length <= MAX_COMMUNICATION_MEMORY_CHARS) return text;
+  const lines = text.split("\n");
+  while (lines.length > 1 && lines.join("\n").length > MAX_COMMUNICATION_MEMORY_CHARS) lines.shift();
+  return lines.join("\n").slice(-MAX_COMMUNICATION_MEMORY_CHARS);
+}
+
+function appendMemoryLine(memory: string, line: string): string {
+  const clean = line.trim().replace(/\s+/g, " ");
+  if (!clean) return memory;
+  const bullet = `- ${clean}`;
+  return capMemory(memory ? `${memory}\n${bullet}` : bullet);
+}
+
+function setDial<T extends string>(
+  existing: CommunicationDialState<T> | null,
+  value: T | undefined,
+  provenance: CommunicationProvenance,
+  now: string
+): CommunicationDialState<T> | null {
+  if (value === undefined) return existing;
+  if (existing && provenanceRank(provenance) < provenanceRank(existing.provenance)) return existing;
+  return { value, provenance, updatedAt: now };
+}
+
+export function applyUpdate(
+  existing: CommunicationProfile,
+  update: CommunicationProfileUpdate,
+  provenance: CommunicationProvenance,
+  now: string
+): CommunicationProfile {
+  return {
+    formality: setDial(existing.formality, update.formality, provenance, now),
+    verbosity: setDial(existing.verbosity, update.verbosity, provenance, now),
+    complexity: setDial(existing.complexity, update.complexity, provenance, now),
+    humor: setDial(existing.humor, update.humor, provenance, now),
+    pace: setDial(existing.pace, update.pace, provenance, now),
+    memory: update.appendMemory ? appendMemoryLine(existing.memory, update.appendMemory) : existing.memory,
+  };
+}
