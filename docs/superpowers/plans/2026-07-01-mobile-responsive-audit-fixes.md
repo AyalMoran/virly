@@ -680,7 +680,7 @@ This was the audit's single "optional" finding; the product owner chose to inclu
 - Modify: `client/src/styles/global.css` (add one media query; `.page-frame` already has `width: min(1180px, 100%); margin: 0 auto;` so capping its `max-width` centers it via the existing auto margins)
 
 **Interfaces:**
-- Owns the new `@media (min-width: 768px) and (max-width: 1079px)` block it adds. Does not alter the base `.page-frame` rule or the >=1080px desktop rules.
+- Owns the new `@media (min-width: 768px) and (max-width: 899px)` block it adds. Does not alter the base `.page-frame` rule or the >=1080px desktop rules.
 
 - [ ] **Step 1: Reproduce the stretched tablet by measurement**
 
@@ -689,11 +689,11 @@ Expected: a single content column roughly 697px wide filling most of the 768 wid
 
 - [ ] **Step 2: Apply the cap-and-center media query**
 
-In `client/src/styles/global.css`, add a new rule (place it near the other `@media (min-width: ...)` blocks, for example just before the `@media (min-width: 1080px)` block):
+In `client/src/styles/global.css`, add a new rule (place it near the other `@media (min-width: ...)` blocks, for example just before the `@media (min-width: 1080px)` block). The band stops at 899px, deliberately below the 900px breakpoint where the transfer and settings pages (`.responsive-grid-sidebar`) switch to a two-column layout inside `.page-frame` - capping those at 680px would cramp them, so the cap applies only to the single-column band:
 
 ```css
-/* Tablet: cap and center the single-column content so it is not an enlarged phone (audit finding 7). */
-@media (min-width: 768px) and (max-width: 1079px) {
+/* Tablet: cap and center single-column content below the 900px two-column breakpoint so it is not an enlarged phone (audit finding 7). */
+@media (min-width: 768px) and (max-width: 899px) {
   .page-frame {
     max-width: 680px;
   }
@@ -704,12 +704,12 @@ In `client/src/styles/global.css`, add a new rule (place it near the other `@med
 
 - [ ] **Step 3: Re-measure to confirm the cap**
 
-Reload `/dashboard` at 768x1024. `preview_eval` `window.__box('.page-frame')`.
-Expected: `w` ~680 and roughly symmetric left/right gutters (`left` ~44, `right` ~724). At 767 or narrower the cap must not apply (measure at 760x1024: `.page-frame` returns to full width). At 1080+ the desktop layout must be unchanged (measure at 1280x1024: the two-column dashboard is intact).
+Reload `/dashboard` at 800x1024. `preview_eval` `window.__box('.page-frame')`.
+Expected: `w` ~680 and roughly symmetric left/right gutters. At 767 or narrower the cap must not apply (measure at 760x1024: `.page-frame` returns to full width). At 900+ the cap must not apply either (measure at 960x1024: `.page-frame` returns to full width, and the transfer/settings two-column layout keeps a comfortable measure). At 1080+ the desktop layout must be unchanged.
 
-- [ ] **Step 4: Screenshot the three bands**
+- [ ] **Step 4: Screenshot the bands**
 
-`preview_screenshot` at 760, 768, and 1280 to confirm: phone layout unchanged below 768, capped-and-centered at 768-1079, desktop two-column at 1080+.
+`preview_screenshot` at 760, 800, 960, and 1280 to confirm: phone layout unchanged below 768, capped-and-centered at 768-899, full width again at 900-1079 (two-column transfer/settings comfortable), desktop two-column at 1080+.
 
 - [ ] **Step 5: Guard the suite and commit**
 
