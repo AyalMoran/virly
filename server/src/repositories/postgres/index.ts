@@ -6,6 +6,7 @@ import type { PgDatabase } from "../../db/postgres.js";
 import { postgresUserRepository } from "./user.repository.js";
 import { postgresTransactionRepository } from "./transaction.repository.js";
 import { postgresPersonalDetailsRepository } from "./personalDetails.repository.js";
+import { postgresCommunicationProfileRepository } from "./communicationProfile.repository.js";
 import { postgresExchangeRateRepository } from "./exchangeRate.repository.js";
 import { postgresAiConversationRepository } from "./aiConversation.repository.js";
 import { postgresAiPendingTransferRepository } from "./aiPendingTransfer.repository.js";
@@ -20,6 +21,7 @@ export function createPostgresRepositories(_db?: PgDatabase): Repositories {
     users: postgresUserRepository,
     transactions: postgresTransactionRepository,
     personalDetails: postgresPersonalDetailsRepository,
+    communicationProfile: postgresCommunicationProfileRepository,
     exchangeRates: postgresExchangeRateRepository,
     aiConversations: postgresAiConversationRepository,
     aiPendingTransfers: postgresAiPendingTransferRepository,
