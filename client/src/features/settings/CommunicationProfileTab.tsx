@@ -93,7 +93,7 @@ export function CommunicationProfileTab() {
               {error}
             </p>
           )}
-          {success && <p className="settings-success">{success}</p>}
+          {success && <p role="alert" className="settings-success">{success}</p>}
           <div className="settings-comms-dials">
             {DIALS.map((dial) => (
               <label key={dial.key}>
@@ -107,7 +107,7 @@ export function CommunicationProfileTab() {
                   <option value="">Auto</option>
                   {dial.options.map((o) => (
                     <option key={o} value={o}>
-                      {o.replace("_", " ")}
+                      {o.replace(/_/g, " ")}
                     </option>
                   ))}
                 </select>

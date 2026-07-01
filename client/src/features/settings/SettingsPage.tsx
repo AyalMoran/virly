@@ -262,194 +262,194 @@ export function SettingsPage() {
       {tab === "ai" ? (
         <CommunicationProfileTab />
       ) : (
-      <ResponsiveGrid className="settings-grid" variant="sidebar">
-        <Card className="settings-details-card">
-          <div className="settings-card-header">
-            <div>
-              <h2>Personal details</h2>
-              <p>Keep your customer profile up to date.</p>
+        <ResponsiveGrid className="settings-grid" variant="sidebar">
+          <Card className="settings-details-card">
+            <div className="settings-card-header">
+              <div>
+                <h2>Personal details</h2>
+                <p>Keep your customer profile up to date.</p>
+              </div>
+              {!isEditingDetails && !isLoadingDetails ? (
+                <Button type="button" variant="secondary" onClick={handleEditDetails}>
+                  Edit
+                </Button>
+              ) : null}
             </div>
-            {!isEditingDetails && !isLoadingDetails ? (
-              <Button type="button" variant="secondary" onClick={handleEditDetails}>
-                Edit
-              </Button>
+
+            {isLoadingDetails ? <Skeleton rows={6} /> : null}
+
+            {!isLoadingDetails && errors.form ? (
+              <ErrorBanner message={errors.form} />
             ) : null}
+
+            {!isLoadingDetails && successMessage ? (
+              <SuccessBanner message={successMessage} />
+            ) : null}
+
+            {!isLoadingDetails && !isEditingDetails ? (
+              <dl className="profile-list settings-profile-list">
+                <div>
+                  <dt>Full name</dt>
+                  <dd>
+                    {details?.firstName || details?.lastName
+                      ? `${details.firstName ?? ""} ${details.lastName ?? ""}`.trim()
+                      : "Not provided"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Date of birth</dt>
+                  <dd>{formatPersonalDate(details?.dateOfBirth)}</dd>
+                </div>
+                <div>
+                  <dt>Country</dt>
+                  <dd>{displayValue(details?.address.country)}</dd>
+                </div>
+                <div>
+                  <dt>State / region</dt>
+                  <dd>{displayValue(details?.address.stateRegion)}</dd>
+                </div>
+                <div>
+                  <dt>City</dt>
+                  <dd>{displayValue(details?.address.city)}</dd>
+                </div>
+                <div>
+                  <dt>Street</dt>
+                  <dd>{displayValue(details?.address.street)}</dd>
+                </div>
+                <div>
+                  <dt>Address line 2</dt>
+                  <dd>{displayValue(details?.address.addressLine2)}</dd>
+                </div>
+                <div>
+                  <dt>Postal code</dt>
+                  <dd>{displayValue(details?.address.postalCode)}</dd>
+                </div>
+              </dl>
+            ) : null}
+
+            {!isLoadingDetails && isEditingDetails ? (
+              <form className="settings-details-form" onSubmit={handleSaveDetails} noValidate>
+                <div className="settings-form-grid two-columns">
+                  <Field
+                    label="First name"
+                    name="firstName"
+                    value={form.firstName}
+                    autoComplete="given-name"
+                    error={errors.firstName}
+                    onChange={(event) => updateField("firstName", event.target.value)}
+                  />
+                  <Field
+                    label="Last name"
+                    name="lastName"
+                    value={form.lastName}
+                    autoComplete="family-name"
+                    error={errors.lastName}
+                    onChange={(event) => updateField("lastName", event.target.value)}
+                  />
+                </div>
+
+                <Field
+                  label="Date of birth"
+                  name="dateOfBirth"
+                  type="date"
+                  value={form.dateOfBirth}
+                  autoComplete="bday"
+                  error={errors.dateOfBirth}
+                  onChange={(event) => updateField("dateOfBirth", event.target.value)}
+                />
+
+                <div className="settings-form-grid two-columns">
+                  <Field
+                    label="Country"
+                    name="country"
+                    value={form.country}
+                    autoComplete="country-name"
+                    error={errors.country}
+                    onChange={(event) => updateField("country", event.target.value)}
+                  />
+                  <Field
+                    label="State / region"
+                    name="stateRegion"
+                    value={form.stateRegion}
+                    autoComplete="address-level1"
+                    onChange={(event) => updateField("stateRegion", event.target.value)}
+                  />
+                </div>
+
+                <div className="settings-form-grid two-columns">
+                  <Field
+                    label="City"
+                    name="city"
+                    value={form.city}
+                    autoComplete="address-level2"
+                    error={errors.city}
+                    onChange={(event) => updateField("city", event.target.value)}
+                  />
+                  <Field
+                    label="Postal code"
+                    name="postalCode"
+                    value={form.postalCode}
+                    autoComplete="postal-code"
+                    error={errors.postalCode}
+                    onChange={(event) => updateField("postalCode", event.target.value)}
+                  />
+                </div>
+
+                <Field
+                  label="Street"
+                  name="street"
+                  value={form.street}
+                  autoComplete="address-line1"
+                  error={errors.street}
+                  onChange={(event) => updateField("street", event.target.value)}
+                />
+                <Field
+                  label="Address line 2"
+                  name="addressLine2"
+                  value={form.addressLine2}
+                  autoComplete="address-line2"
+                  onChange={(event) => updateField("addressLine2", event.target.value)}
+                />
+
+                <div className="button-row">
+                  <Button type="submit" disabled={isSavingDetails}>
+                    {isSavingDetails ? "Saving..." : "Save changes"}
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    disabled={isSavingDetails}
+                    onClick={handleCancelDetails}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </form>
+            ) : null}
+          </Card>
+
+          <div className="settings-side-stack">
+            <Card>
+              <h2>Account</h2>
+              <dl className="profile-list">
+                <div>
+                  <dt>Email</dt>
+                  <dd>{auth.user?.email}</dd>
+                </div>
+                <div>
+                  <dt>Balance</dt>
+                  <dd>{formatAmount(auth.user?.balance ?? 0)}</dd>
+                </div>
+              </dl>
+            </Card>
+            <Card>
+              <h2>Session</h2>
+              <Button type="button" variant="danger" onClick={handleLogout}>
+                Sign out
+              </Button>
+            </Card>
           </div>
-
-          {isLoadingDetails ? <Skeleton rows={6} /> : null}
-
-          {!isLoadingDetails && errors.form ? (
-            <ErrorBanner message={errors.form} />
-          ) : null}
-
-          {!isLoadingDetails && successMessage ? (
-            <SuccessBanner message={successMessage} />
-          ) : null}
-
-          {!isLoadingDetails && !isEditingDetails ? (
-            <dl className="profile-list settings-profile-list">
-              <div>
-                <dt>Full name</dt>
-                <dd>
-                  {details?.firstName || details?.lastName
-                    ? `${details.firstName ?? ""} ${details.lastName ?? ""}`.trim()
-                    : "Not provided"}
-                </dd>
-              </div>
-              <div>
-                <dt>Date of birth</dt>
-                <dd>{formatPersonalDate(details?.dateOfBirth)}</dd>
-              </div>
-              <div>
-                <dt>Country</dt>
-                <dd>{displayValue(details?.address.country)}</dd>
-              </div>
-              <div>
-                <dt>State / region</dt>
-                <dd>{displayValue(details?.address.stateRegion)}</dd>
-              </div>
-              <div>
-                <dt>City</dt>
-                <dd>{displayValue(details?.address.city)}</dd>
-              </div>
-              <div>
-                <dt>Street</dt>
-                <dd>{displayValue(details?.address.street)}</dd>
-              </div>
-              <div>
-                <dt>Address line 2</dt>
-                <dd>{displayValue(details?.address.addressLine2)}</dd>
-              </div>
-              <div>
-                <dt>Postal code</dt>
-                <dd>{displayValue(details?.address.postalCode)}</dd>
-              </div>
-            </dl>
-          ) : null}
-
-          {!isLoadingDetails && isEditingDetails ? (
-            <form className="settings-details-form" onSubmit={handleSaveDetails} noValidate>
-              <div className="settings-form-grid two-columns">
-                <Field
-                  label="First name"
-                  name="firstName"
-                  value={form.firstName}
-                  autoComplete="given-name"
-                  error={errors.firstName}
-                  onChange={(event) => updateField("firstName", event.target.value)}
-                />
-                <Field
-                  label="Last name"
-                  name="lastName"
-                  value={form.lastName}
-                  autoComplete="family-name"
-                  error={errors.lastName}
-                  onChange={(event) => updateField("lastName", event.target.value)}
-                />
-              </div>
-
-              <Field
-                label="Date of birth"
-                name="dateOfBirth"
-                type="date"
-                value={form.dateOfBirth}
-                autoComplete="bday"
-                error={errors.dateOfBirth}
-                onChange={(event) => updateField("dateOfBirth", event.target.value)}
-              />
-
-              <div className="settings-form-grid two-columns">
-                <Field
-                  label="Country"
-                  name="country"
-                  value={form.country}
-                  autoComplete="country-name"
-                  error={errors.country}
-                  onChange={(event) => updateField("country", event.target.value)}
-                />
-                <Field
-                  label="State / region"
-                  name="stateRegion"
-                  value={form.stateRegion}
-                  autoComplete="address-level1"
-                  onChange={(event) => updateField("stateRegion", event.target.value)}
-                />
-              </div>
-
-              <div className="settings-form-grid two-columns">
-                <Field
-                  label="City"
-                  name="city"
-                  value={form.city}
-                  autoComplete="address-level2"
-                  error={errors.city}
-                  onChange={(event) => updateField("city", event.target.value)}
-                />
-                <Field
-                  label="Postal code"
-                  name="postalCode"
-                  value={form.postalCode}
-                  autoComplete="postal-code"
-                  error={errors.postalCode}
-                  onChange={(event) => updateField("postalCode", event.target.value)}
-                />
-              </div>
-
-              <Field
-                label="Street"
-                name="street"
-                value={form.street}
-                autoComplete="address-line1"
-                error={errors.street}
-                onChange={(event) => updateField("street", event.target.value)}
-              />
-              <Field
-                label="Address line 2"
-                name="addressLine2"
-                value={form.addressLine2}
-                autoComplete="address-line2"
-                onChange={(event) => updateField("addressLine2", event.target.value)}
-              />
-
-              <div className="button-row">
-                <Button type="submit" disabled={isSavingDetails}>
-                  {isSavingDetails ? "Saving..." : "Save changes"}
-                </Button>
-                <Button
-                  type="button"
-                  variant="ghost"
-                  disabled={isSavingDetails}
-                  onClick={handleCancelDetails}
-                >
-                  Cancel
-                </Button>
-              </div>
-            </form>
-          ) : null}
-        </Card>
-
-        <div className="settings-side-stack">
-          <Card>
-            <h2>Account</h2>
-            <dl className="profile-list">
-              <div>
-                <dt>Email</dt>
-                <dd>{auth.user?.email}</dd>
-              </div>
-              <div>
-                <dt>Balance</dt>
-                <dd>{formatAmount(auth.user?.balance ?? 0)}</dd>
-              </div>
-            </dl>
-          </Card>
-          <Card>
-            <h2>Session</h2>
-            <Button type="button" variant="danger" onClick={handleLogout}>
-              Sign out
-            </Button>
-          </Card>
-        </div>
-      </ResponsiveGrid>
+        </ResponsiveGrid>
       )}
     </PageStack>
   );
