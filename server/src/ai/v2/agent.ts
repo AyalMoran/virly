@@ -31,7 +31,8 @@ export function buildAgentNode(model: ChatOpenAI) {
       now: cfg.now,
       timezone: cfg.timezone,
       // Phase 6: the summary lives in checkpointed state, maintained by `summarize`.
-      runningSummary: state.runningSummary
+      runningSummary: state.runningSummary,
+      communicationProfile: cfg.communicationProfile
     });
 
     // Send only the boundary-safe recent window; older turns are represented by
