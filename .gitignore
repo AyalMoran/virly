@@ -24,6 +24,7 @@ docs/**/*.log
 .claude
 .superpowers
 .worktrees
+.lavish
 .instance
 .vscode
 
