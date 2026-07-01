@@ -73,7 +73,7 @@ Errors thrown anywhere bubble to `next(error)` and are normalised by the
 > **Routes are thin controllers, services own logic + authorization,
 > repositories own data access.** A route that queries a model directly, or a
 > service that imports Express, is a layering violation. The
-> [improvements folder](../improvements/README.md) records the (now-shipped)
+> [improvements folder](../planning/archive/improvements/README.md) records the (now-shipped)
 > migration that moved inline model access out of the route handlers and behind
 > services and the repository seam.
 
@@ -197,7 +197,7 @@ Eleven areas, one file each under `areas/`. The
 - **Security** — trust boundaries for the held-transfer token link and the
   Support MCP server: [`../security.md`](../security.md)
 - **Improvements** — the (shipped) service/repository migration rationale:
-  [`../improvements/README.md`](../improvements/README.md)
+  [`../planning/archive/improvements/README.md`](../planning/archive/improvements/README.md)
 - **Frontend reference** — the client equivalent of this doc:
   [`../frontend/index.md`](../frontend/index.md)
 - **Architecture decisions** — ADR log for key decisions (DB driver, auth, AI graph, personas):

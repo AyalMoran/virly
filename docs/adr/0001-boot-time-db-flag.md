@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-06-22
-**Source:** [`docs/superpowers/specs/2026-06-22-postgres-migration-design.md`](../superpowers/specs/2026-06-22-postgres-migration-design.md) — "Locked decisions" table, row "Reversibility model"
+**Source:** [`docs/planning/specs/2026-06-22-postgres-migration-design.md`](../planning/specs/2026-06-22-postgres-migration-design.md) — "Locked decisions" table, row "Reversibility model"
 
 ---
 
@@ -13,7 +13,7 @@ and could be reversed cheaply if PostgreSQL proved problematic in production.
 The options were: (a) a dual-write phase where both stores are kept live and
 in sync, or (b) a single-live-DB model where exactly one store is active at a
 time, selected at boot. See the full migration design for rationale and the
-cutover/rollback runbook: [`../superpowers/specs/2026-06-22-postgres-migration-design.md`](../superpowers/specs/2026-06-22-postgres-migration-design.md).
+cutover/rollback runbook: [`../planning/specs/2026-06-22-postgres-migration-design.md`](../planning/specs/2026-06-22-postgres-migration-design.md).
 
 ## Decision
 

@@ -2,7 +2,7 @@
 
 **Status:** Accepted
 **Date:** 2026-06-22
-**Source:** [`docs/superpowers/specs/2026-06-22-postgres-migration-design.md`](../superpowers/specs/2026-06-22-postgres-migration-design.md) — §4 "PostgreSQL schema mapping", money/numeric fields note; "Out of scope" §13
+**Source:** [`docs/planning/specs/2026-06-22-postgres-migration-design.md`](../planning/specs/2026-06-22-postgres-migration-design.md) — §4 "PostgreSQL schema mapping", money/numeric fields note; "Out of scope" §13
 
 ---
 
