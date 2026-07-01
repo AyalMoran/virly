@@ -3,7 +3,7 @@
 > **Deliverable:** `docs/ai/architecture.md` (+ optional `docs/ai/diagrams/`)
 > **Type:** Architecture doc
 > **Audience:** Anyone touching the assistant — backend, prompt, or eval work
-> **Status:** Not started
+> **Status:** Done - shipped as `docs/ai/architecture.md` (verified against live code 2026-06-27).
 > **Gap:** Table 2 #2 — the most complex subsystem has no architecture doc.
 
 ## Why this doc
@@ -15,8 +15,8 @@ with a money-movement gate.
 
 ## Source material (already in the repo)
 - Entry/routing: `server/src/routes/ai.routes.ts`, `ai/router.ts`, `ai/runAssistant.ts`
-- v1 pipeline: `ai/graph.ts`, `ai/llm.ts`, `ai/assistants.ts`, `ai/responseBlocks.ts`, `ai/responseStyle.ts`, `ai/policy.ts`, `ai/tools/*` (~25 tools), `ai/state.ts`
-- v2 agent: `ai/v2/{agent,graph,turn,hitl,model,persona,prompt,streamEvents}.ts`, `ai/v2/nodes/{prepare,transferGate,executeTransfer,finalize,persist}.ts`, `ai/v2/tools/*`
+- v1 pipeline: `ai/graph.ts`, `ai/llm.ts`, `ai/assistants.ts`, `ai/responseBlocks.ts`, `ai/responseStyle.ts`, `ai/policy.ts`, `ai/tools/*` (29 tools), `ai/state.ts`
+- v2 agent: `ai/v2/{agent,graph,turn,hitl,model,persona,prompt,streamEvents}.ts`, `ai/v2/nodes/{prepare,transferGate,executeTransfer,finalize,persist,summarize}.ts`, `ai/v2/tools/*`
 - Memory: `ai/v2/memory/{checkpointer,store,summary,loop}.ts` (uses `@langchain/langgraph-checkpoint-mongodb`)
 - HITL state: `services/aiPendingTransfer.service.ts`
 - Evals (link, don't duplicate): `ai/evals/`, `ai/evals/v2/README.md`, `ai/evals/langsmith/README.md`
