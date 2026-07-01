@@ -53,3 +53,4 @@ decisions that aren't reflected in the code.
 | [0012](./0012-fraud-hold-email-confirmation-fail-open.md) | Hold high-risk transfers for email confirmation, FAIL-OPEN | Accepted |
 | [0013](./0013-support-mcp-server-os-trust-boundary.md) | Read-only Support MCP server with an OS-level trust boundary | Accepted |
 | [0014](./0014-self-managed-ai-postgres-tables.md) | Self-managed AI-Postgres tables via CREATE TABLE IF NOT EXISTS | Accepted |
+| [0015](./0015-per-user-communication-profile.md) | Per-user Communication Profile: a learned tone axis orthogonal to persona | Proposed |
