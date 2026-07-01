@@ -763,7 +763,7 @@ export function FloatingChatWidget() {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="min-h-10 min-w-10 shrink-0 rounded-full hover:bg-background/50"
+                  className="min-h-11 min-w-11 shrink-0 rounded-full hover:bg-background/50"
                   onClick={() => setIsOpen(false)}
                   aria-label="Close chat"
                 >
