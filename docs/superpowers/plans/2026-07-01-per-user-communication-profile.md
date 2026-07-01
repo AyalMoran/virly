@@ -428,7 +428,7 @@ export const communicationProfileUserInputSchema = z
 
 const MAX_MEMORY_LINE = 160;
 // Reject anything that reads like an instruction, money movement, or tool call.
-const FORBIDDEN_MEMORY = /\b(approve|confirm|transfer|send|pay|withdraw|deposit|ignore|override|password|tool|api|execute)\b|[$€₪]|\d{3,}/i;
+const FORBIDDEN_MEMORY = /\b(approve|confirm|transfer|send|pay|withdraw|deposit|ignore|override|password|tool|api|execute)\b|[$€₪]/i;
 
 export function sanitizeMemoryLine(text: string): string | undefined {
   const clean = (text ?? "").trim().replace(/\s+/g, " ").slice(0, MAX_MEMORY_LINE);
@@ -1269,8 +1269,9 @@ describe("extractCommunicationSignal", () => {
  *     prompted to emit ONLY communication preferences and useful context, never a
  *     judgment about the person, never an instruction. Its output is clamped by
  *     clampUpdate (dials enum-checked, memory line sanitized) so nothing unsafe or
- *     disrespectful survives. Mirrors buildSummarizationNode: injected model,
- *     JSON out, degrade to null on any error.
+ *     disrespectful survives. Follows buildSummarizationNode's discipline (injected
+ *     model, the repo's tuple message form, degrade to null on any error); it reads
+ *     res.content directly because it needs the raw JSON string to parse.
  */
 import type { ChatOpenAI } from "@langchain/openai";
 import { clampUpdate, type CommunicationProfileUpdate } from "../../domain/communicationProfile.js";
@@ -1313,9 +1314,9 @@ export async function extractCommunicationSignal(
 ): Promise<CommunicationProfileUpdate | null> {
   try {
     const res = await model.invoke([
-      { role: "system", content: SYSTEM },
-      { role: "user", content: `User: ${userMessage}\nAssistant: ${assistantText}` },
-    ]);
+      ["system", SYSTEM],
+      ["human", `User: ${userMessage}\nAssistant: ${assistantText}`],
+    ]); // tuple message form, matching summarize.ts and the rest of the repo
     const raw = typeof res.content === "string" ? res.content : JSON.stringify(res.content);
     const parsed = JSON.parse(raw.slice(raw.indexOf("{"), raw.lastIndexOf("}") + 1));
     // Guard: drop appendMemory that reads as a personality judgment before clamping.
@@ -1418,9 +1419,9 @@ try {
     const explicit = detectExplicitSignal(input.message ?? "");
     if (explicit) await communicationProfileService.applyLearned(input.userId, explicit, new Date());
     // Constrained respectful extractor - only when a model is configured; best-effort.
-    const model = getCommunicationExtractorModel(); // returns a ChatOpenAI or null when no key/model
+    const model = isV2ModelConfigured() ? createV2ChatModel() : null; // both already imported in hitl.ts:51
     if (model) {
-      const assistantText = extractAssistantText(out); // the final assistant message text for this turn
+      const assistantText = out.responseMessage?.trim() ?? ""; // finalize already populated it
       const learned = await extractCommunicationSignal(model, input.message ?? "", assistantText);
       if (learned) await communicationProfileService.applyLearned(input.userId, learned, new Date());
     }
@@ -1436,7 +1437,7 @@ Add imports:
 import { detectExplicitSignal, extractCommunicationSignal } from "./communicationProfileLearn.js";
 ```
 
-`getCommunicationExtractorModel()` builds a `ChatOpenAI` from `config` (the same construction the summarize node uses) or returns `null` when no API key/model is set, so CI and DB-free/no-key runs learn nothing. `extractAssistantText(out)` reads the final assistant message from the bound `out` state. Define both small helpers locally in `hitl.ts` (or import the model factory the summarize node already uses).
+`isV2ModelConfigured()` and `createV2ChatModel()` already exist in `server/src/ai/v2/model.ts` and are already imported by `hitl.ts` (line 51, used to build the summarize node) - reuse them, do NOT invent a new factory. When no API key/model is set the model is `null`, so CI and DB-free/no-key runs learn nothing. The assistant text is just `out.responseMessage?.trim() ?? ""` - the finalize node already populated `out.responseMessage`; do not re-scan `out.messages`.
 
 - [ ] **Step 2: Add the write-back in `streamAssistantV2`** (~351-353). This path does not bind `out`; pass the accumulated `finalText` as `assistantText` instead. Keep the explicit + extractor layers identical.
 
@@ -1514,7 +1515,7 @@ describe("updateFromUser / reset", () => {
   },
 ```
 
-Note: the user owns the memory text wholesale here (they can prune anything the assistant learned); `capMemory` enforces the char cap, and the route's Zod schema (Task 20) also caps it.
+Note: the user owns the memory text wholesale here (they can prune anything the assistant learned); `capMemory` enforces the char cap, and the route's Zod schema (Task 20) also caps it. The instruction/money filter (`sanitizeMemoryLine`/`FORBIDDEN_MEMORY`) is a LEARNED-path guard only; user-typed memory is trusted (it is the user's own profile) and relies on the char cap plus the block's inert rendering and its deferral to the `[MONEY]` rules, not the filter.
 
 - [ ] **Step 3: Run test to verify it passes**
 
