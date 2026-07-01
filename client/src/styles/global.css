@@ -3425,6 +3425,7 @@ select {
   font-size: clamp(0.62rem, 2.4vw, 0.74rem);
   line-height: 1.05;
   text-align: center;
+  color: rgba(23, 61, 66, 0.78);
 }
 
 .mobile-nav-item .icon {
