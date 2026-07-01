@@ -131,6 +131,20 @@ describe("updateFromUser / reset", () => {
     expect(out.verbosity).toEqual({ value: "detailed", provenance: "user_set", updatedAt: NOW.toISOString() });
     expect(out.memory).toBe("I prefer very short answers");
   });
+  it("clears an omitted dial back to null and preserves memory when not provided", async () => {
+    communicationProfile.findByUserId.mockResolvedValue({
+      id: "x", userId: "u",
+      formality: { value: "formal", provenance: "user_set", updatedAt: "2026-07-01T00:00:00.000Z" },
+      verbosity: { value: "brief", provenance: "user_set", updatedAt: "2026-07-01T00:00:00.000Z" },
+      complexity: null, humor: null, pace: null, memory: "keep me", createdAt: NOW, updatedAt: NOW,
+    });
+    communicationProfile.save.mockImplementation(async (_u: string, p: unknown) => ({ id: "x", userId: "u", ...(p as object), createdAt: NOW, updatedAt: NOW } as CommunicationProfileRecord));
+    // User keeps formality, clears verbosity (omits it), and does not touch memory.
+    const out = await communicationProfileService.updateFromUser("u", { formality: "formal" }, NOW);
+    expect(out.formality).toEqual({ value: "formal", provenance: "user_set", updatedAt: NOW.toISOString() });
+    expect(out.verbosity).toBeNull();
+    expect(out.memory).toBe("keep me");
+  });
   it("reset deletes the stored profile", async () => {
     await communicationProfileService.reset("u");
     expect(communicationProfile.deleteByUserId).toHaveBeenCalledWith("u");

@@ -3,6 +3,7 @@ import type { CommunicationProfileRecord } from "../repositories/types.js";
 import {
   type CommunicationProfile,
   type CommunicationProfileUpdate,
+  type CommunicationDialState,
   emptyCommunicationProfile,
   deriveAgeYears,
   seedProfileFromAge,
@@ -65,8 +66,21 @@ export const communicationProfileService = {
     const clampedDials = clampUpdate(dials);
     const existingRecord = await getRepositories().communicationProfile.findByUserId(userId);
     const existing = existingRecord ? recordToProfile(existingRecord) : emptyCommunicationProfile();
-    let merged = applyUpdate(existing, clampedDials, "user_set", now.toISOString());
-    if (typeof memory === "string") merged = { ...merged, memory: capMemory(memory) };
+    // The Settings tab submits the user's COMPLETE intended dial state, so this is an
+    // authoritative replace: a dial present in the payload becomes user_set; a dial the
+    // user cleared back to "Auto" (absent) resets to null. Memory is set wholesale only
+    // when provided, otherwise the existing memory is preserved.
+    const nowIso = now.toISOString();
+    const asUserDial = <T extends string>(value: T | undefined): CommunicationDialState<T> | null =>
+      value === undefined ? null : { value, provenance: "user_set", updatedAt: nowIso };
+    const merged: CommunicationProfile = {
+      formality: asUserDial(clampedDials.formality),
+      verbosity: asUserDial(clampedDials.verbosity),
+      complexity: asUserDial(clampedDials.complexity),
+      humor: asUserDial(clampedDials.humor),
+      pace: asUserDial(clampedDials.pace),
+      memory: typeof memory === "string" ? capMemory(memory) : existing.memory,
+    };
     const saved = await getRepositories().communicationProfile.save(userId, merged);
     return recordToProfile(saved);
   },
