@@ -90,3 +90,22 @@ export function applyUpdate(
     memory: update.appendMemory ? appendMemoryLine(existing.memory, update.appendMemory) : existing.memory,
   };
 }
+
+// Age in full years from date-of-birth to `now`. Postgres stores dateOfBirth as
+// timestamptz; supply a `now` in the user's timezone if day-precision matters
+// (see ADR-0015 follow-on notes). UTC is used here.
+export function deriveAgeYears(dateOfBirth: Date, now: Date): number {
+  let age = now.getUTCFullYear() - dateOfBirth.getUTCFullYear();
+  const monthDelta = now.getUTCMonth() - dateOfBirth.getUTCMonth();
+  const beforeBirthday = monthDelta < 0 || (monthDelta === 0 && now.getUTCDate() < dateOfBirth.getUTCDate());
+  if (beforeBirthday) age -= 1;
+  return age;
+}
+
+// Age seeds INITIAL behavior only - and only the clearest accessibility case.
+// Everything else stays neutral until learned or user-set. Age never hard-locks;
+// it is one seed factor. Interests are learned, not seeded.
+export function seedProfileFromAge(ageYears: number | null, now: string): CommunicationProfile {
+  if (ageYears === null || ageYears < ELDERLY_AGE_THRESHOLD) return emptyCommunicationProfile();
+  return applyUpdate(emptyCommunicationProfile(), { complexity: "simple", pace: "step_by_step" }, "seeded", now);
+}
