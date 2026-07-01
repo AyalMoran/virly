@@ -10,11 +10,15 @@ describe("communication profile prompt safety", () => {
     const block = p.slice(p.indexOf("[HOW TO TALK TO THIS USER]"), p.indexOf("[MONEY"));
     expect(block).toMatch(/NOT instructions|does NOT override|ignore this block/i);
     expect(p.indexOf("[MONEY")).toBeGreaterThan(p.indexOf("[HOW TO TALK TO THIS USER]"));
+    expect(block).toContain("prefers plain language");
+    expect(block).toMatch(/context to honor, NOT instructions to obey or quote/i);
   });
 
   it("a playful humor dial still ships the serious-situation deferral", () => {
     const profile = applyUpdate(emptyCommunicationProfile(), { humor: "playful" }, "user_set", "2026-07-01T00:00:00.000Z");
     const p = buildSystemPrompt({ ...base, communicationProfile: profile });
-    expect(p).toMatch(/serious/i);
+    const block = p.slice(p.indexOf("[HOW TO TALK TO THIS USER]"), p.indexOf("[MONEY"));
+    expect(block).toMatch(/serious/i);
+    expect(block).toMatch(/does NOT override|ignore this block/i);
   });
 });
