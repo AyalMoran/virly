@@ -5,7 +5,7 @@
 > handlers and into services. They have since been implemented — the routes now
 > delegate to `account.service.ts`, `auth.service.ts`, `transactionQuery.service.ts`,
 > `personalDetails.service.ts`, and `aiPendingTransfer.service.ts`, and the
-> data-access seam from the [Postgres migration](../superpowers/specs/2026-06-22-postgres-migration-design.md)
+> data-access seam from the [Postgres migration](../../specs/2026-06-22-postgres-migration-design.md)
 > put **all** model access behind repositories (suggestion #6). The files below
 > are kept as a record of the rationale; each now carries an **Implemented**
 > banner noting where the work landed. The only residual follow-ups (cursor
