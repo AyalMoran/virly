@@ -1,0 +1,16 @@
+/*
+ * Deterministic screenshots: collapse every CSS animation/transition to its
+ * end state and hide the text caret, so each story renders an identical, stable
+ * frame on every run. Pairs with the global <MotionConfig reducedMotion="always">
+ * decorator that freezes framer-motion (JS) animations.
+ */
+*,
+*::before,
+*::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0s !important;
+  transition-delay: 0s !important;
+  caret-color: transparent !important;
+}
