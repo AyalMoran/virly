@@ -41,6 +41,7 @@ import type {
 import { config } from "../../config.js";
 import type { CommunicationProfile } from "../../domain/communicationProfile.js";
 import { communicationProfileService } from "../../services/communicationProfile.service.js";
+import { detectExplicitSignal, extractCommunicationSignal } from "./communicationProfileLearn.js";
 import { buildAgentNode } from "./agent.js";
 import { aiToolCalls } from "./messages.js";
 import { createMongoCheckpointer, getPostgresCheckpointer } from "./memory/checkpointer.js";
@@ -270,6 +271,24 @@ export async function invokeV2Resumable(
     await upsertInteractedCounterparties(longTermStore, input.userId, memory);
   }
 
+  // Layer 3: respectful post-turn communication profile learning. Best-effort -
+  // a learning failure must never fail the turn.
+  try {
+    if (input.userId) {
+      const explicit = detectExplicitSignal(input.message ?? "");
+      if (explicit) await communicationProfileService.applyLearned(input.userId, explicit, new Date());
+      // Constrained respectful extractor - only when a model is configured; best-effort.
+      const model = isV2ModelConfigured() ? createV2ChatModel() : null;
+      if (model) {
+        const assistantText = out.responseMessage?.trim() ?? ""; // finalize already populated it
+        const learned = await extractCommunicationSignal(model, input.message ?? "", assistantText);
+        if (learned) await communicationProfileService.applyLearned(input.userId, learned, new Date());
+      }
+    }
+  } catch {
+    // best-effort: a learning failure must not fail the turn
+  }
+
   return {
     message: responseMessage,
     responseMessage,
@@ -378,6 +397,24 @@ export async function* streamAssistantV2(
     await upsertInteractedCounterparties(longTermStore, input.userId, memory);
   }
 
+  // Layer 3: respectful post-turn communication profile learning. Best-effort -
+  // a learning failure must never fail the turn.
+  try {
+    if (input.userId) {
+      const explicit = detectExplicitSignal(input.message ?? "");
+      if (explicit) await communicationProfileService.applyLearned(input.userId, explicit, new Date());
+      // Constrained respectful extractor - only when a model is configured; best-effort.
+      const model = isV2ModelConfigured() ? createV2ChatModel() : null;
+      if (model) {
+        const assistantText = finalText.trim(); // accumulated from stream updates
+        const learned = await extractCommunicationSignal(model, input.message ?? "", assistantText);
+        if (learned) await communicationProfileService.applyLearned(input.userId, learned, new Date());
+      }
+    }
+  } catch {
+    // best-effort: a learning failure must not fail the turn
+  }
+
   yield {
     event: "result",
     data: {
@@ -427,6 +464,8 @@ export async function resumeV2Confirmation(
     knownCounterparties: []
   };
 
+  // No post-turn learning here: resumeV2Confirmation carries an empty message
+  // (the user's input was Confirm/Deny, not a natural-language turn).
   const out = (await graph.invoke(new Command({ resume: args.payload }), {
     configurable: { ...configurable, thread_id: args.conversationId }
   })) as V2AgentStateType;
