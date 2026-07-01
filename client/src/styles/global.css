@@ -2275,6 +2275,8 @@ textarea::placeholder {
 }
 
 .signin-signup a {
+  display: inline-block;
+  padding-block: 14px;
   color: #f9ffe8;
   font-weight: 900;
 }
