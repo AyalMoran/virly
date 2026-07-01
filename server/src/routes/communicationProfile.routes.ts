@@ -1,5 +1,4 @@
 import { Router } from "express";
-import type { ZodError } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { communicationProfileService } from "../services/communicationProfile.service.js";
 import {
@@ -24,7 +23,7 @@ router.put("/communication-profile", requireAuth, async (req, res, next) => {
   try {
     const result = communicationProfileUserInputSchema.safeParse(req.body);
     if (!result.success) {
-      res.status(400).json({ message: "Invalid input.", errors: (result.error as ZodError).errors });
+      res.status(400).json({ message: "Invalid input." });
       return;
     }
     const profile = await communicationProfileService.updateFromUser(
