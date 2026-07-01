@@ -39,6 +39,8 @@ import type {
 } from "../state.js";
 
 import { config } from "../../config.js";
+import type { CommunicationProfile } from "../../domain/communicationProfile.js";
+import { communicationProfileService } from "../../services/communicationProfile.service.js";
 import { buildAgentNode } from "./agent.js";
 import { aiToolCalls } from "./messages.js";
 import { createMongoCheckpointer, getPostgresCheckpointer } from "./memory/checkpointer.js";
@@ -141,7 +143,8 @@ function configurableFor(
   options: RunAssistantOptions,
   turnOutcome: V2TurnOutcome,
   memoryKnownCounterparties: V2Configurable["knownCounterparties"],
-  pendingConfirmation: V2Configurable["pendingConfirmation"]
+  pendingConfirmation: V2Configurable["pendingConfirmation"],
+  communicationProfile?: CommunicationProfile
 ): V2Configurable {
   return {
     userId: input.userId ?? "",
@@ -159,7 +162,8 @@ function configurableFor(
     transferResponseService: respondToAiPendingTransfer,
     pendingConfirmation,
     turnOutcome,
-    knownCounterparties: memoryKnownCounterparties
+    knownCounterparties: memoryKnownCounterparties,
+    communicationProfile
   };
 }
 
@@ -211,12 +215,23 @@ export async function invokeV2Resumable(
     input.userId ?? "",
     buildKnownCounterparties(memory)
   );
+  let communicationProfile: CommunicationProfile | undefined;
+  try {
+    if (input.userId)
+      communicationProfile = await communicationProfileService.getOrSeedForUser(
+        input.userId,
+        new Date()
+      );
+  } catch {
+    communicationProfile = undefined; // degrade gracefully - never block the turn
+  }
   const configurable = configurableFor(
     input,
     options,
     turnOutcome,
     knownCounterparties,
-    memory.pendingConfirmation ?? null
+    memory.pendingConfirmation ?? null,
+    communicationProfile
   );
 
   const out = (await graph.invoke(
@@ -306,12 +321,23 @@ export async function* streamAssistantV2(
     input.userId ?? "",
     buildKnownCounterparties(memory)
   );
+  let communicationProfile: CommunicationProfile | undefined;
+  try {
+    if (input.userId)
+      communicationProfile = await communicationProfileService.getOrSeedForUser(
+        input.userId,
+        new Date()
+      );
+  } catch {
+    communicationProfile = undefined; // degrade gracefully - never block the turn
+  }
   const configurable = configurableFor(
     input,
     options,
     turnOutcome,
     knownCounterparties,
-    memory.pendingConfirmation ?? null
+    memory.pendingConfirmation ?? null,
+    communicationProfile
   );
 
   let finalText = "";
