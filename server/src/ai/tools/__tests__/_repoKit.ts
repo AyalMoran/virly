@@ -187,6 +187,11 @@ export function makeRepos(
       deleteForUser: noop as Repositories["verificationTokens"]["deleteForUser"],
       deleteExpired: noop as Repositories["verificationTokens"]["deleteExpired"]
     },
+    communicationProfile: {
+      findByUserId: noop as Repositories["communicationProfile"]["findByUserId"],
+      save: noop as Repositories["communicationProfile"]["save"],
+      deleteByUserId: noop as Repositories["communicationProfile"]["deleteByUserId"]
+    },
     runInTransaction: async (fn) => fn(undefined),
     ...overrides
   };

@@ -189,6 +189,25 @@ export type PersonalDetailsResponse = {
   personalDetails: PersonalDetails;
 };
 
+export type CommunicationDialState<T extends string> = { value: T; provenance: "seeded" | "learned" | "user_set"; updatedAt: string };
+export type CommunicationProfile = {
+  formality: CommunicationDialState<"casual" | "neutral" | "formal"> | null;
+  verbosity: CommunicationDialState<"brief" | "standard" | "detailed"> | null;
+  complexity: CommunicationDialState<"simple" | "standard" | "expert"> | null;
+  humor: CommunicationDialState<"none" | "light" | "playful"> | null;
+  pace: CommunicationDialState<"step_by_step" | "standard"> | null;
+  memory: string;
+};
+export type CommunicationProfileResponse = { communicationProfile: CommunicationProfile };
+export type CommunicationProfileUserInput = {
+  formality?: "casual" | "neutral" | "formal";
+  verbosity?: "brief" | "standard" | "detailed";
+  complexity?: "simple" | "standard" | "expert";
+  humor?: "none" | "light" | "playful";
+  pace?: "step_by_step" | "standard";
+  memory?: string;
+};
+
 export type TransferRequest = {
   recipientEmail: string;
   amount: number;

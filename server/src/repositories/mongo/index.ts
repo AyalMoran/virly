@@ -6,6 +6,7 @@ import { runInTransaction } from "./transaction.js";
 import { mongoUserRepository } from "./user.repository.js";
 import { mongoTransactionRepository } from "./transaction.repository.js";
 import { mongoPersonalDetailsRepository } from "./personalDetails.repository.js";
+import { mongoCommunicationProfileRepository } from "./communicationProfile.repository.js";
 import { mongoExchangeRateRepository } from "./exchangeRate.repository.js";
 import { mongoAiConversationRepository } from "./aiConversation.repository.js";
 import { mongoAiPendingTransferRepository } from "./aiPendingTransfer.repository.js";
@@ -19,6 +20,7 @@ export function createMongoRepositories(): Repositories {
     users: mongoUserRepository,
     transactions: mongoTransactionRepository,
     personalDetails: mongoPersonalDetailsRepository,
+    communicationProfile: mongoCommunicationProfileRepository,
     exchangeRates: mongoExchangeRateRepository,
     aiConversations: mongoAiConversationRepository,
     aiPendingTransfers: mongoAiPendingTransferRepository,

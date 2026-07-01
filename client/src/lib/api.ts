@@ -9,6 +9,8 @@ import type {
   ApiErrorBody,
   AuthSuccessResponse,
   AgentVideoSession,
+  CommunicationProfileResponse,
+  CommunicationProfileUserInput,
   CreateVideoSessionRequest,
   DisplayCurrency,
   ExchangeRatesResponse,
@@ -298,6 +300,15 @@ export const api = {
         method: "POST"
       }
     );
+  },
+  communicationProfile() {
+    return request<CommunicationProfileResponse>("/api/accounts/communication-profile");
+  },
+  updateCommunicationProfile(body: CommunicationProfileUserInput) {
+    return request<CommunicationProfileResponse>("/api/accounts/communication-profile", { method: "PUT", body: JSON.stringify(body) });
+  },
+  resetCommunicationProfile() {
+    return request<CommunicationProfileResponse>("/api/accounts/communication-profile/reset", { method: "POST" });
   },
   transactions(params: { page?: number; limit?: number; counterparty?: string }) {
     const search = new URLSearchParams();
