@@ -182,8 +182,8 @@ export const verificationTokens = pgTable("verification_tokens", {
 ]);
 
 export const communicationProfiles = pgTable("communication_profiles", {
-  id: text("id").primaryKey(),
-  userId: text("user_id").notNull().unique(),
+  id: id(),
+  userId: char("user_id", { length: 24 }).notNull().unique(),
   formality: jsonb("formality"),
   verbosity: jsonb("verbosity"),
   complexity: jsonb("complexity"),

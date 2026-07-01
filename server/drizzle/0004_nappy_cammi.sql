@@ -1,6 +1,6 @@
 CREATE TABLE "communication_profiles" (
-	"id" text PRIMARY KEY NOT NULL,
-	"user_id" text NOT NULL,
+	"id" char(24) PRIMARY KEY NOT NULL,
+	"user_id" char(24) NOT NULL,
 	"formality" jsonb,
 	"verbosity" jsonb,
 	"complexity" jsonb,
