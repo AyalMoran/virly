@@ -4,6 +4,7 @@ import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, ToolContext } from "../state.js";
 import {
   getTransactionLimitAllowingAll,
+  metadataFromTransactionRows,
   transactionMemoryUpdatesFromRows
 } from "./transactionHelpers.js";
 
@@ -84,7 +85,7 @@ export async function getTransactionsWithCounterparty(
       })
       .join("; ")}.`,
     metadata: {
-      recordCount: transactions.length,
+      ...metadataFromTransactionRows(summaries),
       counterpartyEmail: counterparty.email,
       maskedLabel: counterparty.maskedLabel
     },
