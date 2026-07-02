@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Todoist Planning Batch - 8 Implementation Plans</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js"></script>
+<style>
+  :root{
+    --background:40 33% 98%;
+    --foreground:222 31% 12%;
+    --card:0 0% 100%;
+    --primary:168 76% 34%;
+    --muted:180 14% 91%;
+    --muted-fg:218 12% 42%;
+    --border:180 14% 84%;
+    --amber:38 78% 42%;
+    --radius:0.75rem;
+    --bg:hsl(var(--background));
+    --fg:hsl(var(--foreground));
+    --cardc:hsl(var(--card));
+    --pri:hsl(var(--primary));
+    --pri-soft:hsl(168 60% 96%);
+    --mut:hsl(var(--muted));
+    --mutfg:hsl(var(--muted-fg));
+    --bd:hsl(var(--border));
+    --amb:hsl(var(--amber));
+  }
+  *{box-sizing:border-box;min-width:0;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:var(--bg);color:var(--fg);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    line-height:1.55;-webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:2.2rem 1.25rem 4rem;}
+  .kicker{color:var(--mutfg);font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;}
+  h1{font-size:1.9rem;margin:.3rem 0 .6rem;}
+  h2{font-size:1.25rem;margin:2.2rem 0 .8rem;border-bottom:1px solid var(--bd);padding-bottom:.35rem;}
+  .lede{color:var(--mutfg);max-width:70ch;}
+  .chips{display:flex;gap:.5rem;flex-wrap:wrap;margin:1rem 0 0;}
+  .chip{background:var(--pri-soft);color:var(--pri);border:1px solid var(--bd);border-radius:999px;padding:.15rem .7rem;font-size:.78rem;font-weight:600;}
+  .chip.amber{color:var(--amb);background:hsl(38 78% 95%);}
+  table{border-collapse:collapse;width:100%;font-size:.9rem;}
+  th,td{border:1px solid var(--bd);padding:.5rem .65rem;text-align:left;vertical-align:top;}
+  th{background:var(--mut);}
+  code{background:var(--mut);border-radius:4px;padding:.08rem .35rem;font-size:.85em;}
+  .card{background:var(--cardc);border:1px solid var(--bd);border-radius:var(--radius);padding:1.1rem 1.25rem;margin:.8rem 0;}
+  .card h3{margin:.1rem 0 .4rem;font-size:1.02rem;}
+  .card p{margin:.3rem 0;color:var(--mutfg);font-size:.92rem;}
+  .finding{border-left:4px solid var(--amb);padding-left:.85rem;}
+  ul{padding-left:1.2rem;}
+  li{margin:.25rem 0;}
+  .mermaid{background:var(--cardc);border:1px solid var(--bd);border-radius:var(--radius);padding:1rem;margin:1rem 0;}
+  footer{margin-top:3rem;color:var(--mutfg);font-size:.8rem;border-top:1px solid var(--bd);padding-top:1rem;}
+  a{color:var(--pri);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="kicker">Branch playground - gnhf/using-superpowers-wr-648f22</p>
+  <h1>Todoist Planning Batch: 8 Implementation Plans</h1>
+  <p class="lede">
+    This branch is docs-only. It audits all 19 tasks in the Virly Todoist project into
+    <code>docs/planning/todoist-task-index.md</code> and authors code-grounded, TDD implementation plans
+    for every "ready" task. Nine tasks are now planned; the only ready task left unplanned is the
+    per-module presentation docs.
+  </p>
+  <div class="chips">
+    <span class="chip">docs only</span>
+    <span class="chip">8 plans</span>
+    <span class="chip">1 task index</span>
+    <span class="chip amber">1 root-caused perf bug</span>
+  </div>
+
+  <h2>What changed</h2>
+  <table>
+    <tr><th>Plan</th><th>Todoist task</th><th>One-liner</th></tr>
+    <tr>
+      <td><code>2026-07-01-policy-rag-eval-dataset.md</code></td>
+      <td><code>6h24jj9pcF5FRVw3</code></td>
+      <td>Author <code>policy-rag.examples.jsonl</code> for RAG recall evaluation.</td>
+    </tr>
+    <tr>
+      <td><code>2026-07-01-counterparty-all-transactions-cap.md</code></td>
+      <td><code>6h249JvMvfXqrqvM</code></td>
+      <td>Fix the hardcoded <code>limit: 5</code> in <code>getTransactionsWithCounterparty</code>.</td>
+    </tr>
+    <tr>
+      <td><code>2026-06-26-user-hover-card.md</code> (updated)</td>
+      <td><code>6h24RpJcM2XCJH2M</code></td>
+      <td>Modernized to the current client harness: Jest via <code>@swc/jest</code>, co-located <code>__tests__/</code>, <code>@storybook/react-vite</code>.</td>
+    </tr>
+    <tr>
+      <td><code>2026-07-02-startup-throttle-fix.md</code></td>
+      <td><code>6h2Rpwm7rQG9XH76</code></td>
+      <td>Root-caused: <code>VIRLY_THROTTLE_MS=6000</code> delays every API call by 6s (see below).</td>
+    </tr>
+    <tr>
+      <td><code>2026-07-02-counterparty-summary-block.md</code></td>
+      <td><code>6h249mpF4hMf9GFM</code></td>
+      <td>New <code>counterparty_summary</code> response block + client bento card.</td>
+    </tr>
+    <tr>
+      <td><code>2026-07-02-chat-session-features.md</code></td>
+      <td><code>6h2W38WrRpHRhvWc</code></td>
+      <td>New chat / resend / edit-and-resend; all client-only, server already supports each.</td>
+    </tr>
+    <tr>
+      <td><code>2026-07-02-saved-contacts.md</code></td>
+      <td><code>6gfGpV4GVwGxhjPM</code></td>
+      <td>Persistent contacts through the full repository seam + transfer-page recipient book.</td>
+    </tr>
+    <tr>
+      <td><code>2026-07-02-ci-checks-and-playground.md</code></td>
+      <td><code>6h2HPVWRG3cR79Vc</code></td>
+      <td>Adds <code>build</code>/<code>storybook</code> CI jobs and an advisory playground PR check.</td>
+    </tr>
+  </table>
+
+  <h2>Notable findings baked into the plans</h2>
+  <div class="card finding">
+    <h3>The "startup throttle" is a global 6-second delay on every request</h3>
+    <p>
+      <code>server/.env</code> (gitignored) sets <code>VIRLY_THROTTLE_MS=6000</code>, and a dev latency
+      simulator middleware in <code>server/src/app.ts</code> applies it to EVERY response, not just boot.
+      The plan reproduces it E2E, extracts a production-guarded throttle module with a loud boot warning,
+      and removes the stale value.
+    </p>
+  </div>
+  <div class="card finding">
+    <h3>The client is typechecked nowhere in CI</h3>
+    <p>
+      Client Jest runs through <code>@swc/jest</code>, which strips types without checking them; only
+      <code>tsc -b</code> inside the client build checks them, and CI never builds the client. The CI plan
+      closes this with a <code>build</code> job.
+    </p>
+  </div>
+  <div class="card finding">
+    <h3>Counterparty summaries reach users as prose only</h3>
+    <p>
+      <code>buildBlocksFromResult</code> in <code>server/src/ai/v2/blocks.ts</code> has no case for
+      <code>getCounterpartySummary</code>, so the tool's structured totals are flattened into a sentence.
+      The bento-card plan adds the missing block type end to end.
+    </p>
+  </div>
+
+  <h2>Suggested execution order</h2>
+  <div class="mermaid">
+flowchart LR
+  A[startup-throttle-fix] --> B[counterparty-cap fix]
+  B --> C[ci-checks-and-playground]
+  C --> D[chat-session-features]
+  D --> E[counterparty-summary-block]
+  E --> F[saved-contacts]
+  F --> G[rag-sync-scheduling]
+  G --> H[user-hover-card]
+  H --> I[policy-rag-eval-dataset]
+  style A fill:#fdf3e0,stroke:#c9912e
+  style B fill:#fdf3e0,stroke:#c9912e
+</div>
+  <p class="lede">
+    Impact first: the throttle fix is a one-day change every user feels, and the counterparty cap is an
+    already-root-caused correctness bug in the assistant.
+  </p>
+
+  <h2>Reference</h2>
+  <ul>
+    <li><code>docs/planning/todoist-task-index.md</code> - the roadmap this branch maintains.</li>
+    <li><code>docs/planning/plans/</code> - all plans in this batch.</li>
+    <li>Todoist project <code>6h24mGHhRhH7FQ4c</code> (Virly), suggestions section <code>6h2crfp28pjx6pFc</code>.</li>
+  </ul>
+
+  <footer>
+    Generated for branch <code>gnhf/using-superpowers-wr-648f22</code> - docs-only planning batch, 2026-07-02.
+  </footer>
+</div>
+<script>mermaid.initialize({ startOnLoad: true, theme: "neutral" });</script>
+</body>
+</html>
