@@ -1,6 +1,6 @@
 import type { RequestHandler } from "express";
 
-type ThrottleEnv = Pick<NodeJS.ProcessEnv, "VIRLY_THROTTLE_MS" | "NODE_ENV">;
+type ThrottleEnv = Partial<Pick<NodeJS.ProcessEnv, "VIRLY_THROTTLE_MS" | "NODE_ENV">>;
 
 /**
  * Dev-only latency simulator control. Reads VIRLY_THROTTLE_MS directly from the

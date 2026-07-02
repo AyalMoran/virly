@@ -5,6 +5,11 @@ import helmet from "helmet";
 import morgan from "morgan";
 import { config, isProduction } from "./config.js";
 import { parseCookies } from "./middleware/cookies.js";
+import {
+  devThrottleMiddleware,
+  resolveDevThrottleMs,
+  warnDevThrottleActive
+} from "./middleware/devThrottle.js";
 import { errorHandler } from "./middleware/error-handler.js";
 import aiRoutes from "./routes/ai.routes.js";
 import authRoutes from "./routes/auth.routes.js";
@@ -66,14 +71,16 @@ morgan.token("url", (req) => {
 });
 app.use(morgan("dev"));
 
-// Dev latency simulator: when VIRLY_THROTTLE_MS is set, delay every response by
-// that many ms — handy for previewing the client's boot/loading states against
-// a slow (e.g. cold-starting) API. Off unless the env var is present.
-const throttleMs = Number(process.env.VIRLY_THROTTLE_MS) || 0;
+// Dev latency simulator: see middleware/devThrottle.ts. Hard-disabled in
+// production and warns loudly at boot when active, so a leftover env value
+// can never silently slow every request again.
+const throttleMs = resolveDevThrottleMs({
+  VIRLY_THROTTLE_MS: process.env.VIRLY_THROTTLE_MS,
+  NODE_ENV: process.env.NODE_ENV
+});
 if (throttleMs > 0) {
-  app.use((_req, _res, next) => {
-    setTimeout(next, throttleMs);
-  });
+  warnDevThrottleActive(throttleMs);
+  app.use(devThrottleMiddleware(throttleMs));
 }
 
 app.get("/", (_req, res) => {
