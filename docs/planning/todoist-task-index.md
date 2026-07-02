@@ -3,7 +3,7 @@
 Audit of every task in the **Virly** Todoist project (id `6h24mGHhRhH7FQ4c`), mapping each to its implementation plan and status.
 This is the roadmap for the "create an implementation plan for each task" effort: it records which tasks already have plans, which are already delivered, and which still need one, so plan-writing never duplicates work.
 
-Snapshot date: **2026-07-01**. Regenerate the "Status" column from Todoist + `git log` when it drifts.
+Snapshot date: **2026-07-02**. Regenerate the "Status" column from Todoist + `git log` when it drifts.
 
 ## Legend
 
@@ -23,10 +23,10 @@ Snapshot date: **2026-07-01**. Regenerate the "Status" column from Todoist + `gi
 | `6h24jj9pcF5FRVw3` | Author `policy-rag.examples.jsonl` for RAG recall eval | `plans/2026-07-01-policy-rag-eval-dataset.md` | **Planned** (this run) |
 | `6h249JvMvfXqrqvM` | "All transactions from a counterparty" returns only 3, not all | `plans/2026-07-01-counterparty-all-transactions-cap.md` | **Planned** (this run) - root cause found: `getTransactionsWithCounterparty` hardcodes `limit: 5` + omits `metadata.transactions` |
 | `6h249Qj89VXWqGJv` | Emails masked only for the LLM, not for the user | - | Needs plan (design first) - masking is an intentional PII seam woven through the tool layer |
-| `6h249mpF4hMf9GFM` | Nicer summary card for counterparty summary (bento) | - | Needs plan (ready) - UI, `responseBlocks` + client card |
+| `6h249mpF4hMf9GFM` | Nicer summary card for counterparty summary (bento) | `plans/2026-07-02-counterparty-summary-block.md` | **Planned** (2026-07-02) - new `counterparty_summary` block type + client bento card; no tool change needed |
 | `6h24Rj94qFXr7jHM` | SSE stream in Hebrew/English matching user language/persona | - | Needs plan (design first) - overlaps the language-switcher task |
 | `6h24RprvGp9m692v` | Add retry / stream arrival guarantee | - | Needs plan (design first) - also in `backlog.md` |
-| `6h2W38WrRpHRhvWc` | Chat features: new chat, edit-and-resend, resend message | - | Needs plan (ready) - three sub-features, split into a plan each |
+| `6h2W38WrRpHRhvWc` | Chat features: new chat, edit-and-resend, resend message | `plans/2026-07-02-chat-session-features.md` | **Planned** (2026-07-02) - one plan, not three: all client-only, the server already supports each (optional `conversationId`, append-only thread, confirmation supersession) |
 | `6h2RwXw22Gpj2CC6` | Move to TOON format instead of JSON | - | Needs plan (design first) - first verify TOON is a supported structured-output format + measure token delta |
 
 ## Feature (section `feature`, `6h2Vr4wM3GqVvv86`)
@@ -34,7 +34,7 @@ Snapshot date: **2026-07-01**. Regenerate the "Status" column from Todoist + `gi
 | Todoist ID | Task | Plan | Status |
 |---|---|---|---|
 | `6gwM3WVJXHcX57Fv` | Add language switcher (Hebrew/English, whole site) | - | Needs plan (design first) - task itself asks to brainstorm scope (exclude heavy placeholder components?) |
-| `6gfGpV4GVwGxhjPM` | Add contacts and "recent" (להוסיף אנשי קשר ו-recent) | - | Needs plan (ready) - recipients list on transfer/dashboard |
+| `6gfGpV4GVwGxhjPM` | Add contacts and "recent" (להוסיף אנשי קשר ו-recent) | `plans/2026-07-02-saved-contacts.md` | **Planned** (2026-07-02) - full repository-seam contacts (both drivers + contract tests) + transfer-page recipient book; recents stay derived |
 | `6gfGpmqghHHR55qM` | Add an option to request funds | - | Needs plan (design first) - new transfer direction; touches money-movement + HITL |
 
 ## Study (section `study`, `6h2Vr7Qq6X5Q372c`)
@@ -49,18 +49,19 @@ Snapshot date: **2026-07-01**. Regenerate the "Status" column from Todoist + `gi
 
 | Todoist ID | Task | Plan | Status |
 |---|---|---|---|
-| `6h2Rpwm7rQG9XH76` | Startup throttle seems to affect every API call (pages take seconds) | - | Needs plan (ready) - perf bug; reproduce, find the throttle/middleware, fix |
+| `6h2Rpwm7rQG9XH76` | Startup throttle seems to affect every API call (pages take seconds) | `plans/2026-07-02-startup-throttle-fix.md` | **Planned** (2026-07-02) - root cause found: `VIRLY_THROTTLE_MS=6000` in `server/.env` + global dev-latency middleware in `app.ts`; plan adds a production guard + boot warning |
 
 ## CI/CD (section `cicd`, `6gfGmxrWJ67CPMfv`)
 
 | Todoist ID | Task | Plan | Status |
 |---|---|---|---|
-| `6h2HPVWRG3cR79Vc` | Add more CI checks; clarify what "playground" is and how to wire it | - | Needs plan (ready) - see memory: playground is a local advisory hook, not a CI job |
+| `6h2HPVWRG3cR79Vc` | Add more CI checks; clarify what "playground" is and how to wire it | `plans/2026-07-02-ci-checks-and-playground.md` | **Planned** (2026-07-02) - adds `build`/`storybook` jobs (client is typechecked nowhere in CI today) + advisory playground PR check + `docs/playgrounds/README.md` |
 
 ## Rollup
 
-- 19 tasks total: **1 delivered**, **4 planned** (transactions-cap authored 2026-07-01), **~12 need a plan**, **2 non-code**.
-- Suggested plan order for remaining "ready" tasks (small, high-signal first): counterparty summary card (`6h249mpF4hMf9GFM`) → contacts/recent (`6gfGpV4GVwGxhjPM`) → chat features (`6h2W38WrRpHRhvWc`, split) → startup throttle (`6h2Rpwm7rQG9XH76`) → CI checks (`6h2HPVWRG3cR79Vc`) → presentation docs (`6h2GwjjChx2vrxFc`).
+- 19 tasks total: **1 delivered**, **9 planned** (5 authored 2026-07-02: counterparty card, chat features, contacts, throttle, CI/playground), **7 need a plan**, **2 non-code**.
+- Only one "ready" task still lacks a plan: presentation docs (`6h2GwjjChx2vrxFc`).
+- Suggested execution order for the planned-but-unshipped work (impact first): startup throttle fix (one-day, users feel it) → counterparty cap fix (`2026-07-01-counterparty-all-transactions-cap.md`) → CI checks → chat features → counterparty summary card → contacts → RAG sync scheduling → user hover card → policy-RAG eval dataset.
 - "Design first" tasks (email masking, TOON, SSE language, retry guarantee, language switcher, request funds) should each get a `superpowers:brainstorming` spec in `specs/` before a plan.
 
 ## Suggestions
