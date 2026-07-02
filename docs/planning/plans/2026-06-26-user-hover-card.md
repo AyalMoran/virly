@@ -16,17 +16,20 @@ don't refetch. The card body is a **pure, hook-free** `UserHoverCardContent` com
 `summarizeRelationship` helper. `TransactionList` (and `QuickContacts`) swap their inline
 counterparty links for `CounterpartyLink`.
 
-**Tech Stack:** React 19 + TypeScript, `@radix-ui/react-hover-card`, `react-router-dom`
-`Link`, Vite. Client tests: `tsx --test` + `renderToStaticMarkup` (no jsdom). Storybook
-for the interactive piece.
+**Tech Stack:** React 18 + TypeScript, `@radix-ui/react-hover-card`, `react-router-dom`
+`Link`, Vite. Client tests: Jest (native ESM via `@swc/jest`, `testEnvironment: "node"`) +
+`renderToStaticMarkup` (no jsdom). Storybook for the interactive piece.
 
 ## Global Constraints
 
-- Client unit tests run via `npm run test:client`
-  (`tsx --tsconfig client/tsconfig.json --test "client/tests/**/*.test.tsx"`), using
-  `renderToStaticMarkup` — **no jsdom, no hooks exercised at runtime in tests**. So:
-  pure/presentational pieces are unit-tested; the hook-driven hover/fetch wrapper is
-  covered by Storybook + a type-check/build, not the node harness.
+- Client unit tests run via `npm run test:client` (native-ESM Jest with `@swc/jest`,
+  `testEnvironment: "node"`, no jsdom), using `renderToStaticMarkup`.
+  Test files live in co-located `__tests__/` folders and match `*.test.ts(x)`.
+  Jest globals (`describe`/`it`/`test`/`expect`) need no import; add
+  `import { jest } from "@jest/globals"` only when a spy or mock fn is needed.
+  No jsdom is present and no hooks are exercised at runtime, so pure/presentational pieces
+  are unit-tested while the hook-driven hover/fetch wrapper is covered by Storybook plus a
+  type-check/build, not the unit harness.
 - Wrap any rendered `<Link>` in `<MemoryRouter>` in tests (router context required).
 - No backend change — reuse `api.userProfile(email)`.
 - Accessible: the card opens on hover AND keyboard focus; Escape dismisses; the trigger
@@ -58,11 +61,13 @@ module cache dedupes repeat hovers of the same person across a session.
 | `client/src/lib/user-profile-cache.ts` (create) | `fetchUserProfileCached(email)` memoized over `api.userProfile`. |
 | `client/src/components/UserHoverCardContent.tsx` (create) | Pure, hook-free card body (loading / error / loaded). |
 | `client/src/components/CounterpartyLink.tsx` (create) | Radix HoverCard wrapper around `<Link>`; lazy fetch on open. |
-| `client/src/components/CounterpartyLink.stories.tsx` (create) | Storybook story (loaded / loading / error / no-history). |
+| `client/src/components/__stories__/CounterpartyLink.stories.tsx` (create) | Storybook story (loaded / loading / error / no-history). |
 | `client/src/components/TransactionList.tsx` (modify) | Use `CounterpartyLink` for the counterparty. |
 | `client/src/components/QuickContacts.tsx` (modify) | Use `CounterpartyLink` for the profile link (optional). |
 | `client/src/styles/global.css` (modify) | `.user-hover-card` styles. |
-| `client/tests/userHoverCard.test.tsx` (create) | Unit tests for the helper + pure content component. |
+| `client/src/features/users/__tests__/relationship-summary.test.ts` (create) | Unit tests for the pure `summarizeRelationship` helper. |
+| `client/src/components/__tests__/UserHoverCardContent.test.tsx` (create) | Unit tests for the pure content component. |
+| `client/src/lib/__tests__/user-profile-cache.test.ts` (create) | Unit tests for the memoized fetch cache. |
 
 ---
 
@@ -70,7 +75,7 @@ module cache dedupes repeat hovers of the same person across a session.
 
 **Files:**
 - Create: `client/src/features/users/relationship-summary.ts`
-- Test: `client/tests/userHoverCard.test.tsx`
+- Test: `client/src/features/users/__tests__/relationship-summary.test.ts`
 
 **Interfaces:**
 - Consumes: `UserProfileResponse`, `UserRelationshipSummary` (`client/src/lib/types`).
@@ -80,12 +85,10 @@ module cache dedupes repeat hovers of the same person across a session.
 
 - [ ] **Step 1: Write the failing test**
 
-```tsx
-// client/tests/userHoverCard.test.tsx
-import assert from "node:assert/strict";
-import test from "node:test";
-import { summarizeRelationship } from "../src/features/users/relationship-summary";
-import type { UserProfileResponse } from "../src/lib/types";
+```ts
+// client/src/features/users/__tests__/relationship-summary.test.ts
+import { summarizeRelationship } from "../relationship-summary";
+import type { UserProfileResponse } from "../../../lib/types";
 
 function profile(over: Partial<UserProfileResponse["relationship"]> = {}): UserProfileResponse {
   return {
@@ -107,28 +110,30 @@ function profile(over: Partial<UserProfileResponse["relationship"]> = {}): UserP
   };
 }
 
-test("net positive is labelled 'Net sent'", () => {
-  const d = summarizeRelationship(profile());
-  assert.equal(d.name, "Dan");
-  assert.equal(d.netLabel, "Net sent");
-  assert.equal(d.netAmount, 200);
-  assert.equal(d.transactionCount, 4);
-});
+describe("summarizeRelationship", () => {
+  test("net positive is labelled 'Net sent'", () => {
+    const d = summarizeRelationship(profile());
+    expect(d.name).toBe("Dan");
+    expect(d.netLabel).toBe("Net sent");
+    expect(d.netAmount).toBe(200);
+    expect(d.transactionCount).toBe(4);
+  });
 
-test("net negative is labelled 'Net received'", () => {
-  const d = summarizeRelationship(profile({ netAmount: -50 }));
-  assert.equal(d.netLabel, "Net received");
-});
+  test("net negative is labelled 'Net received'", () => {
+    const d = summarizeRelationship(profile({ netAmount: -50 }));
+    expect(d.netLabel).toBe("Net received");
+  });
 
-test("zero net is 'Even'", () => {
-  const d = summarizeRelationship(profile({ netAmount: 0 }));
-  assert.equal(d.netLabel, "Even");
-});
+  test("zero net is 'Even'", () => {
+    const d = summarizeRelationship(profile({ netAmount: 0 }));
+    expect(d.netLabel).toBe("Even");
+  });
 
-test("falls back to email when displayName is empty", () => {
-  const p = profile();
-  p.user.displayName = "";
-  assert.equal(summarizeRelationship(p).name, "dan@example.com");
+  test("falls back to email when displayName is empty", () => {
+    const p = profile();
+    p.user.displayName = "";
+    expect(summarizeRelationship(p).name).toBe("dan@example.com");
+  });
 });
 ```
 
@@ -178,7 +183,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add client/src/features/users/relationship-summary.ts client/tests/userHoverCard.test.tsx
+git add client/src/features/users/relationship-summary.ts client/src/features/users/__tests__/relationship-summary.test.ts
 git commit -m "feat(users): pure summarizeRelationship helper for the hover card"
 ```
 
@@ -188,7 +193,7 @@ git commit -m "feat(users): pure summarizeRelationship helper for the hover card
 
 **Files:**
 - Create: `client/src/components/UserHoverCardContent.tsx`
-- Test: `client/tests/userHoverCard.test.tsx` (extend)
+- Test: `client/src/components/__tests__/UserHoverCardContent.test.tsx`
 
 **Interfaces:**
 - Consumes: `RelationshipDisplay` (Task 1), `react-router-dom` `Link`.
@@ -199,24 +204,29 @@ git commit -m "feat(users): pure summarizeRelationship helper for the hover card
 
 - [ ] **Step 1: Write the failing test**
 
-Add to `client/tests/userHoverCard.test.tsx`:
+Create `client/src/components/__tests__/UserHoverCardContent.test.tsx`:
 
 ```tsx
+// client/src/components/__tests__/UserHoverCardContent.test.tsx
+import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { MemoryRouter } from "react-router-dom";
-import { createElement as h } from "react";
-import { UserHoverCardContent } from "../src/components/UserHoverCardContent";
+import { UserHoverCardContent } from "../UserHoverCardContent";
 
 const fmt = (n: number) => `₪${n}`;
 
-test("loaded card shows name, net label, totals, and a profile link", () => {
-  const html = renderToStaticMarkup(
-    h(MemoryRouter, null,
-      h(UserHoverCardContent, {
-        email: "dan@example.com",
-        state: "loaded",
-        formatAmount: fmt,
-        summary: {
+function render(ui: React.ReactElement): string {
+  return renderToStaticMarkup(<MemoryRouter>{ui}</MemoryRouter>);
+}
+
+describe("UserHoverCardContent", () => {
+  test("loaded card shows name, net label, totals, and a profile link", () => {
+    const html = render(
+      <UserHoverCardContent
+        email="dan@example.com"
+        state="loaded"
+        formatAmount={fmt}
+        summary={{
           name: "Dan",
           netLabel: "Net sent",
           netAmount: 200,
@@ -225,33 +235,29 @@ test("loaded card shows name, net label, totals, and a profile link", () => {
           transactionCount: 4,
           lastInteraction: "2026-06-20T10:00:00Z",
           verified: true
-        }
-      })
-    )
-  );
-  assert.match(html, /Dan/);
-  assert.match(html, /Net sent/);
-  assert.match(html, /₪200/);
-  assert.match(html, /\/users\/dan%40example\.com|\/users\/dan@example\.com/);
-  assert.match(html, /View full profile/i);
-});
+        }}
+      />
+    );
+    expect(html).toMatch(/Dan/);
+    expect(html).toMatch(/Net sent/);
+    expect(html).toMatch(/₪200/);
+    expect(html).toMatch(/\/users\/dan%40example\.com|\/users\/dan@example\.com/);
+    expect(html).toMatch(/View full profile/i);
+  });
 
-test("loading state renders a loading affordance", () => {
-  const html = renderToStaticMarkup(
-    h(MemoryRouter, null,
-      h(UserHoverCardContent, { email: "x@y.com", state: "loading", formatAmount: fmt })
-    )
-  );
-  assert.match(html, /loading|…/i);
-});
+  test("loading state renders a loading affordance", () => {
+    const html = render(
+      <UserHoverCardContent email="x@y.com" state="loading" formatAmount={fmt} />
+    );
+    expect(html).toMatch(/loading|…/i);
+  });
 
-test("error state renders a fallback", () => {
-  const html = renderToStaticMarkup(
-    h(MemoryRouter, null,
-      h(UserHoverCardContent, { email: "x@y.com", state: "error", formatAmount: fmt })
-    )
-  );
-  assert.match(html, /couldn.?t|unavailable|try/i);
+  test("error state renders a fallback", () => {
+    const html = render(
+      <UserHoverCardContent email="x@y.com" state="error" formatAmount={fmt} />
+    );
+    expect(html).toMatch(/couldn.?t|unavailable|try/i);
+  });
 });
 ```
 
@@ -331,7 +337,7 @@ matching the existing `.card`/`.relationship-stat` look.
 - [ ] **Step 6: Commit**
 
 ```bash
-git add client/src/components/UserHoverCardContent.tsx client/src/styles/global.css client/tests/userHoverCard.test.tsx
+git add client/src/components/UserHoverCardContent.tsx client/src/styles/global.css client/src/components/__tests__/UserHoverCardContent.test.tsx
 git commit -m "feat(users): pure UserHoverCardContent presentational component"
 ```
 
@@ -341,7 +347,7 @@ git commit -m "feat(users): pure UserHoverCardContent presentational component"
 
 **Files:**
 - Create: `client/src/lib/user-profile-cache.ts`
-- Test: `client/tests/userHoverCard.test.tsx` (extend)
+- Test: `client/src/lib/__tests__/user-profile-cache.test.ts`
 
 **Interfaces:**
 - Consumes: `api.userProfile` (`client/src/lib/api`).
@@ -352,12 +358,13 @@ git commit -m "feat(users): pure UserHoverCardContent presentational component"
 
 - [ ] **Step 1: Write the failing test**
 
-```tsx
+```ts
+// client/src/lib/__tests__/user-profile-cache.test.ts
 import {
   fetchUserProfileCached,
   __resetUserProfileCache,
   __setProfileFetcher
-} from "../src/lib/user-profile-cache";
+} from "../user-profile-cache";
 
 test("dedupes repeat fetches for the same email", async () => {
   __resetUserProfileCache();
@@ -376,7 +383,7 @@ test("dedupes repeat fetches for the same email", async () => {
   });
   await fetchUserProfileCached("dan@example.com");
   await fetchUserProfileCached("dan@example.com");
-  assert.equal(calls, 1);
+  expect(calls).toBe(1);
 });
 ```
 
@@ -420,8 +427,13 @@ export function __setProfileFetcher(fn: (email: string) => Promise<UserProfileRe
 }
 ```
 
-> Confirm `api.userProfile` is exported as a member of an `api` object (it is — see
-> `client/src/lib/api.ts:313`). Adjust the import if the export shape differs.
+> `api.userProfile` is a method on the exported `api` object (see the `api` object in
+> `client/src/lib/api.ts`); adjust the import if the export shape differs.
+> The module-level `__setProfileFetcher` / `__resetUserProfileCache` test hooks are used
+> deliberately instead of `jest.mock`: under native-ESM Jest this repo mocks by stubbing an
+> injected seam or a global rather than `jest.mock` (see
+> `client/src/lib/__tests__/api.test.ts`, which swaps `globalThis.fetch`), which keeps the
+> cache testable without ESM mock-hoisting friction.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -431,7 +443,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add client/src/lib/user-profile-cache.ts client/tests/userHoverCard.test.tsx
+git add client/src/lib/user-profile-cache.ts client/src/lib/__tests__/user-profile-cache.test.ts
 git commit -m "feat(users): memoized user-profile fetch for hover cards"
 ```
 
@@ -442,7 +454,7 @@ git commit -m "feat(users): memoized user-profile fetch for hover cards"
 **Files:**
 - Modify: `client/package.json` (add `@radix-ui/react-hover-card`)
 - Create: `client/src/components/CounterpartyLink.tsx`
-- Create: `client/src/components/CounterpartyLink.stories.tsx`
+- Create: `client/src/components/__stories__/CounterpartyLink.stories.tsx`
 
 **Interfaces:**
 - Consumes: `UserHoverCardContent` (Task 2), `summarizeRelationship` (Task 1),
@@ -525,22 +537,34 @@ export function CounterpartyLink({
 - [ ] **Step 3: Add a Storybook story (covers the interactive states)**
 
 ```tsx
-// client/src/components/CounterpartyLink.stories.tsx
-import type { Meta, StoryObj } from "@storybook/react";
+// client/src/components/__stories__/CounterpartyLink.stories.tsx
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { MemoryRouter } from "react-router-dom";
-import { __setProfileFetcher } from "../lib/user-profile-cache";
-import { CounterpartyLink } from "./CounterpartyLink";
-// NOTE: wrap in MemoryRouter + the app's CurrencyProvider in a decorator; inject a
-// fake fetcher via __setProfileFetcher so the story is offline/deterministic.
+import { CurrencyProvider } from "../../features/currency/CurrencyProvider";
+import { __setProfileFetcher } from "../../lib/user-profile-cache";
+import { CounterpartyLink } from "../CounterpartyLink";
 
-const meta: Meta<typeof CounterpartyLink> = {
-  title: "Users/CounterpartyLink",
+// Wrap in MemoryRouter + CurrencyProvider (CounterpartyLink calls useCurrency), and inject
+// a fake fetcher via __setProfileFetcher so the story is offline/deterministic.
+const meta = {
+  title: "Shared UI/CounterpartyLink",
   component: CounterpartyLink,
-  decorators: [(Story) => <MemoryRouter><Story /></MemoryRouter>]
-};
-export default meta;
+  parameters: { layout: "centered" },
+  decorators: [
+    (Story) => (
+      <MemoryRouter>
+        <CurrencyProvider initialCurrency="ILS" initialRates={null}>
+          <Story />
+        </CurrencyProvider>
+      </MemoryRouter>
+    )
+  ]
+} satisfies Meta<typeof CounterpartyLink>;
 
-export const WithHistory: StoryObj<typeof CounterpartyLink> = {
+export default meta;
+type Story = StoryObj<typeof meta>;
+
+export const WithHistory: Story = {
   render: () => {
     __setProfileFetcher(async (email) => ({
       user: { id: "1", email, displayName: "Dan", isVerified: true },
@@ -556,8 +580,12 @@ export const WithHistory: StoryObj<typeof CounterpartyLink> = {
 };
 ```
 
-> Match the story format to the existing stories (`TransferCheque.stories.tsx`,
-> `AssistantMarkdown.stories.tsx`) — including how they provide `CurrencyProvider`.
+> Match the CSF format to the existing `__stories__/` stories (e.g.
+> `features/users/__stories__/RelationshipSummaryCard.stories.tsx`,
+> `components/__stories__/QuickContacts.stories.tsx`): import from `@storybook/react-vite`,
+> type the default export with `satisfies Meta<typeof CounterpartyLink>`, and use
+> `type Story = StoryObj<typeof meta>`. You can reuse `relationshipFixture` from
+> `.storybook/fixtures` in place of the inline relationship object if you prefer.
 
 - [ ] **Step 4: Type-check / build the client**
 
@@ -567,7 +595,7 @@ Expected: no type errors.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add client/package.json client/package-lock.json package-lock.json client/src/components/CounterpartyLink.tsx client/src/components/CounterpartyLink.stories.tsx
+git add client/package.json package-lock.json client/src/components/CounterpartyLink.tsx client/src/components/__stories__/CounterpartyLink.stories.tsx
 git commit -m "feat(users): CounterpartyLink hover card via Radix HoverCard"
 ```
 
@@ -578,14 +606,14 @@ git commit -m "feat(users): CounterpartyLink hover card via Radix HoverCard"
 **Files:**
 - Modify: `client/src/components/TransactionList.tsx`
 - Modify: `client/src/components/QuickContacts.tsx`
-- Modify: `client/tests/transactionList.test.tsx` (keep green)
+- Modify: `client/src/components/__tests__/TransactionList.test.tsx` (keep green)
 
 **Interfaces:**
 - Consumes: `CounterpartyLink` (Task 4).
 
 - [ ] **Step 1: Replace the inline counterparty link in `TransactionList`**
 
-In `client/src/components/TransactionList.tsx`, swap the inline `<Link className="counterparty-link" …>` (lines ~252–258) for:
+In `client/src/components/TransactionList.tsx`, swap the inline `<Link className="counterparty-link" …>` (around lines 74-80, wrapped in `<strong>`) for:
 
 ```tsx
 import { CounterpartyLink } from "./CounterpartyLink";
@@ -619,7 +647,7 @@ Expected: PASS, no type errors.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add client/src/components/TransactionList.tsx client/src/components/QuickContacts.tsx client/tests/transactionList.test.tsx
+git add client/src/components/TransactionList.tsx client/src/components/QuickContacts.tsx client/src/components/__tests__/TransactionList.test.tsx
 git commit -m "feat(users): show hover cards for counterparties in lists"
 ```
 
