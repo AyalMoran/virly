@@ -203,8 +203,39 @@ export function buildTransactionFilterCriteria(
   return criteria;
 }
 
+/** App-wide ceiling on how many transaction rows any list tool returns. */
+export const MAX_TRANSACTION_LIST_LIMIT = 50;
+
+// "all / everything / entire / full" (EN) and "הכל / כל ה..." (HE) mean
+// "as many as we allow". "completed" is deliberately excluded so a request
+// for "completed transactions" is not read as "all".
+const ALL_TRANSACTIONS_PATTERN_EN = /\b(all|every|everything|entire|full)\b/i;
+const ALL_TRANSACTIONS_PATTERN_HE = /(הכל|כל ה)/;
+
+export function messageRequestsAllTransactions(message: string): boolean {
+  return (
+    ALL_TRANSACTIONS_PATTERN_EN.test(message) ||
+    ALL_TRANSACTIONS_PATTERN_HE.test(message)
+  );
+}
+
 export function getTransactionLimit(context: ToolContext, defaultLimit = 10) {
-  return getLimitFromMessage(context.message, defaultLimit, 50);
+  return getLimitFromMessage(context.message, defaultLimit, MAX_TRANSACTION_LIST_LIMIT);
+}
+
+/**
+ * Like getTransactionLimit, but maps an explicit "all" request to the app-wide
+ * maximum. Used by counterparty-transactions listing where "show me all with X"
+ * must return everything (capped), not the small default.
+ */
+export function getTransactionLimitAllowingAll(
+  context: ToolContext,
+  defaultLimit = 10
+): number {
+  if (messageRequestsAllTransactions(context.message)) {
+    return MAX_TRANSACTION_LIST_LIMIT;
+  }
+  return getTransactionLimit(context, defaultLimit);
 }
 
 export async function toSafeTransactionRows(

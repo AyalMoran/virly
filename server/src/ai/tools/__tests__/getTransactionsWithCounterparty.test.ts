@@ -32,7 +32,13 @@ function makeTxRecord(overrides: Partial<TransactionRecord> = {}): TransactionRe
   };
 }
 
-function makeRepos(transactions: TransactionRecord[]) {
+let lastCounterpartyLimit: number | undefined;
+
+beforeEach(() => {
+  lastCounterpartyLimit = undefined;
+});
+
+function makeRepos(all: TransactionRecord[]) {
   const base = createMongoRepositories();
   return {
     ...base,
@@ -46,7 +52,10 @@ function makeRepos(transactions: TransactionRecord[]) {
     },
     transactions: {
       ...base.transactions,
-      recentWithCounterparty: async () => transactions
+      recentWithCounterparty: async (input: { limit: number }) => {
+        lastCounterpartyLimit = input.limit;
+        return all.slice(0, input.limit);
+      }
     }
   };
 }
@@ -184,5 +193,56 @@ describe("getTransactionsWithCounterparty - transactions found", () => {
     const result = await getTransactionsWithCounterparty(ctx);
     const summaries = result.data as Array<{ reason: string | null }>;
     expect(summaries[0].reason).toBe("dinner");
+  });
+});
+
+describe("getTransactionsWithCounterparty - honors the requested count", () => {
+  const alice = {
+    email: "alice@example.com",
+    maskedLabel: "a***@example.com",
+    userLabel: "Alice",
+    firstMentionedAtTurn: 1,
+    lastReferencedAtTurn: 1
+  };
+
+  it("requests up to the max and returns all when the user asks for 'all'", async () => {
+    const ctx = makeContext({
+      message: "show me all transactions with alice",
+      resolvedCounterparty: alice
+    });
+    const txs = Array.from({ length: 12 }, (_, i) => makeTxRecord({ id: `tx${i + 1}` }));
+    setRepositories(makeRepos(txs) as ReturnType<typeof createMongoRepositories>);
+
+    const result = await getTransactionsWithCounterparty(ctx);
+
+    expect(lastCounterpartyLimit).toBe(50);
+    const meta = (result.displayData as { metadata: { recordCount: number } }).metadata;
+    expect(meta.recordCount).toBe(12);
+  });
+
+  it("defaults to 10 when no count is specified", async () => {
+    const ctx = makeContext({
+      message: "transactions with alice",
+      resolvedCounterparty: alice
+    });
+    const txs = Array.from({ length: 12 }, (_, i) => makeTxRecord({ id: `tx${i + 1}` }));
+    setRepositories(makeRepos(txs) as ReturnType<typeof createMongoRepositories>);
+
+    await getTransactionsWithCounterparty(ctx);
+
+    expect(lastCounterpartyLimit).toBe(10);
+  });
+
+  it("honors an explicit smaller number", async () => {
+    const ctx = makeContext({
+      message: "show me the last 3 transactions with alice",
+      resolvedCounterparty: alice
+    });
+    const txs = Array.from({ length: 12 }, (_, i) => makeTxRecord({ id: `tx${i + 1}` }));
+    setRepositories(makeRepos(txs) as ReturnType<typeof createMongoRepositories>);
+
+    await getTransactionsWithCounterparty(ctx);
+
+    expect(lastCounterpartyLimit).toBe(3);
   });
 });
