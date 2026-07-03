@@ -155,11 +155,11 @@ adapter is an interface from day one so M2 is a drop-in.
   webhook is a documented future trigger that calls the same code path.
 
 ### Evals — `server/src/ai/evals/`
-A `policy-rag.examples.jsonl` authored against the REAL knowledge base: each line
-is `{ "question", "expectedSourceRefs" }`. `npm run eval:policy-rag` asserts the
-expected doc appears in top-k (recall@k) — the "how I measure retrieval quality"
-story. The runner ships; the example set is created from the actual documents
-(not committed sample content).
+`policy-rag.examples.jsonl` is authored against the REAL knowledge base and passes at recall@5 = 1.0 (38/38 questions, one per knowledge document).
+Each line is `{ "question", "expectedSourceRefs" }`.
+Run `VIRLY_RAG_ENABLED=true npm --workspace server run eval:policy-rag` (exits 0 at threshold 1.0).
+The example set is committed; the knowledge documents themselves are not (they live in the Drive folder configured via `VIRLY_RAG_DRIVE_FOLDER_ID`).
+See `server/src/ai/evals/README.md` for how to extend coverage when documents change.
 
 ---
 
