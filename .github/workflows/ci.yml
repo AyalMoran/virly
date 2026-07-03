@@ -72,3 +72,17 @@ jobs:
       # tsc -b is the ONLY client typecheck anywhere in CI (Jest uses @swc/jest,
       # which strips types without checking them); vite build catches bundling.
       - run: npm run build --workspace client
+
+  storybook:
+    name: storybook build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      # Stories are typechecked by tsc -b (the build job); this catches
+      # story BUNDLING breakage (bad imports, addon config, fixtures).
+      - run: npm run build-storybook --workspace client
