@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Feature: scheduled idempotent RAG sync</title>
+<style>
+  :root{--bg:#f7f9f3;--fg:#173d42;--mut:#4a6a6c;--bd:#cfe0d8;--pri:#2f8f86;--card:#fff;--code:#eef3ee;--radius:12px;}
+  *{box-sizing:border-box;min-width:0;} html,body{margin:0;padding:0;}
+  body{background:var(--bg);color:var(--fg);line-height:1.55;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1000px;margin:0 auto;padding:2.2rem 1.25rem 4rem;}
+  .kicker{color:var(--mut);font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;}
+  h1{font-size:1.8rem;margin:.3rem 0 .6rem;} h2{font-size:1.15rem;margin:2rem 0 .7rem;border-bottom:1px solid var(--bd);padding-bottom:.3rem;}
+  .lede{color:var(--mut);max-width:70ch;}
+  .chips{display:flex;gap:.5rem;flex-wrap:wrap;margin:1rem 0 0;}
+  .chip{background:#e7f2ee;color:var(--pri);border:1px solid var(--bd);border-radius:999px;padding:.15rem .7rem;font-size:.78rem;font-weight:600;}
+  code{background:var(--code);border-radius:4px;padding:.08rem .35rem;font-size:.85em;}
+  .card{background:var(--card);border:1px solid var(--bd);border-radius:var(--radius);padding:1.1rem 1.25rem;margin:.8rem 0;}
+  ul{padding-left:1.2rem;} li{margin:.25rem 0;} .win{color:var(--pri);font-weight:700;}
+  footer{margin-top:3rem;color:var(--mut);font-size:.8rem;border-top:1px solid var(--bd);padding-top:1rem;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Branch playground - feat/rag-sync-scheduling</p>
+  <h1>Scheduled idempotent RAG sync</h1>
+  <p class="lede">Todoist <code>6h25Jf6p4jfmqF66</code>: run the existing <code>rag:sync --source=drive</code> automatically every 6 hours from inside the server, skip overlapping runs, and email an alert on failure. Opt-in, off by default.</p>
+  <div class="chips">
+    <span class="chip">server only</span>
+    <span class="chip">no --force</span>
+    <span class="chip">advisory-lock guarded</span>
+    <span class="chip">opt-in</span>
+  </div>
+
+  <h2>Design</h2>
+  <div class="card"><ul>
+    <li><strong>Reusable runner:</strong> the orchestration was pulled out of the one-off CLI into <code>src/ai/rag/sync-runner.ts</code>, so the scheduler calls it directly (no shelling out to <code>npm run</code>). The CLI now just parses args and calls the runner.</li>
+    <li><strong>Overlap guard:</strong> a session-level Postgres <em>advisory lock</em> (in <code>db/vector.ts</code>) means "skip if a sync is already running" - and unlike an in-process boolean, it also protects against a second server instance or a manual <code>npm run rag:sync</code> colliding with the scheduled run. No new dependency.</li>
+    <li><strong>Scheduler:</strong> <code>src/ai/rag/sync-scheduler.ts</code> fires every <code>VIRLY_RAG_SYNC_INTERVAL_MS</code> (default 6h, floor 5min), always <code>--source=drive</code>, never <code>--force</code>.</li>
+    <li><strong>Alerting:</strong> a failed run emails <code>VIRLY_RAG_SYNC_ALERT_EMAIL</code> via Resend (falls back to logs if unset).</li>
+  </ul></div>
+
+  <h2>Config (all opt-in, off by default)</h2>
+  <ul>
+    <li><code>VIRLY_RAG_SYNC_ENABLED=false</code></li>
+    <li><code>VIRLY_RAG_SYNC_INTERVAL_MS=21600000</code> (6h; floor 5min)</li>
+    <li><code>VIRLY_RAG_SYNC_ALERT_EMAIL=</code></li>
+  </ul>
+
+  <h2>Verification</h2>
+  <ul>
+    <li>TDD: runner, scheduler, and ops-alert email tests written failing-first. 11 new tests, all green.</li>
+    <li>Full server suite <span class="win">1813 passed / 0 failed</span>; <code>tsc</code> clean.</li>
+    <li>Live probes (advisory-lock DB probe, boot smoke) skipped - covered by injectable-fake unit tests + the build gate.</li>
+  </ul>
+
+  <footer>Generated for branch <code>feat/rag-sync-scheduling</code> - plan: docs/planning/plans/2026-06-30-rag-sync-scheduling.md</footer>
+</div>
+</body>
+</html>
