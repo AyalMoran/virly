@@ -56,3 +56,19 @@ jobs:
           CONTRACT_PG_URL: postgres://virly:virly@localhost:5432/virly
           CONTRACT_VECTOR_URL: postgres://virly:virly@localhost:5432/virly
         run: npm run test:contract --workspace server
+
+  build:
+    name: build (server + client)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      # Compiles the server to dist/ (unit job only typechecks with --noEmit).
+      - run: npm run build --workspace server
+      # tsc -b is the ONLY client typecheck anywhere in CI (Jest uses @swc/jest,
+      # which strips types without checking them); vite build catches bundling.
+      - run: npm run build --workspace client
