@@ -598,6 +598,18 @@ npm run rag:sync -- --source=drive --category=loan-packages
 _Validated against `server/scripts/sync-knowledge-base.ts:1-14` (header comment
 and arg parsing), lines 37-61 (source resolution), and lines 69-76 (env checks)._
 
+**Scheduled sync (in-process).** When `VIRLY_RAG_SYNC_ENABLED=true`, the server
+runs `rag:sync --source=drive` on a timer (`VIRLY_RAG_SYNC_INTERVAL_MS`, default
+6h) from `server/src/ai/rag/sync-scheduler.ts`.
+It never passes `--force` (the corpus is already idempotent).
+Overlapping runs are skipped via a pgvector advisory lock, and a failed run emails `VIRLY_RAG_SYNC_ALERT_EMAIL` (falling back to `console.error`).
+Do NOT lower the interval below its 5-minute floor to chase freshness: if near-real-time is ever needed, add a Google Drive push webhook instead (polling-for-real-time antipattern).
+`--force` stays reserved for a deliberate one-off full re-embed, e.g. after changing `VIRLY_RAG_EMBEDDING_MODEL` or the embedding dimensions.
+
+**Enable in production:** set `VIRLY_RAG_SYNC_ENABLED=true` plus the Drive sync
+env (`VIRLY_RAG_DRIVE_FOLDER_ID`, a service account, `VIRLY_AI_PG_URL`,
+`OPENAI_API_KEY`) and `VIRLY_RAG_SYNC_ALERT_EMAIL` on the Render service.
+
 **Run order for a fresh environment:**
 
 ```sh
