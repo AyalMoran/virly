@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { AssistantBlocks } from "../AssistantBlocks";
 import {
   assistantAccountSummaryBlock,
+  assistantCounterpartySummaryBlock,
   assistantEmptyStateBlock,
   assistantNoticeBlock,
   assistantPendingTransfersBlock,
@@ -64,6 +65,11 @@ export const Notice: Story = {
 
 export const Empty: Story = {
   args: { blocks: [assistantEmptyStateBlock] },
+};
+
+/** Bento relationship summary for "what's my history with X". */
+export const CounterpartySummary: Story = {
+  args: { blocks: [assistantCounterpartySummaryBlock] },
 };
 
 /* ----- Confirmation gate (prepared action awaiting the user) ------------- */
