@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>CI: expand checks + document playgrounds</title>
+<style>
+  :root{--bg:#f7f9f3;--fg:#173d42;--mut:#4a6a6c;--bd:#cfe0d8;--pri:#2f8f86;--card:#fff;--code:#eef3ee;--radius:12px;}
+  *{box-sizing:border-box;min-width:0;} html,body{margin:0;padding:0;}
+  body{background:var(--bg);color:var(--fg);line-height:1.55;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1000px;margin:0 auto;padding:2.2rem 1.25rem 4rem;}
+  .kicker{color:var(--mut);font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;}
+  h1{font-size:1.8rem;margin:.3rem 0 .6rem;} h2{font-size:1.15rem;margin:2rem 0 .7rem;border-bottom:1px solid var(--bd);padding-bottom:.3rem;}
+  .lede{color:var(--mut);max-width:70ch;}
+  .chips{display:flex;gap:.5rem;flex-wrap:wrap;margin:1rem 0 0;}
+  .chip{background:#e7f2ee;color:var(--pri);border:1px solid var(--bd);border-radius:999px;padding:.15rem .7rem;font-size:.78rem;font-weight:600;}
+  code{background:var(--code);border-radius:4px;padding:.08rem .35rem;font-size:.85em;}
+  table{border-collapse:collapse;width:100%;font-size:.9rem;margin:.4rem 0;}
+  th,td{border:1px solid var(--bd);padding:.5rem .65rem;text-align:left;} th{background:#e9f1ec;}
+  .card{background:var(--card);border:1px solid var(--bd);border-radius:var(--radius);padding:1.1rem 1.25rem;margin:.8rem 0;}
+  footer{margin-top:3rem;color:var(--mut);font-size:.8rem;border-top:1px solid var(--bd);padding-top:1rem;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Branch playground - ci/expand-checks-and-playground</p>
+  <h1>Expand CI + document playgrounds</h1>
+  <p class="lede">Todoist <code>6h2HPVWRG3cR79Vc</code>: "add more CI checks; figure out what 'playground' is and how to wire it into a workflow."</p>
+  <div class="chips">
+    <span class="chip">CI infra</span>
+    <span class="chip">no app code</span>
+    <span class="chip">no linter added</span>
+  </div>
+
+  <h2>The gap</h2>
+  <div class="card"><p>CI ran only <code>unit</code> + <code>contract</code>. The client was <strong>typechecked nowhere</strong> - client Jest uses <code>@swc/jest</code>, which strips types without checking them; only <code>tsc -b</code> (in the client build, which CI never ran) checks them. The server was never compiled and Storybook was never built.</p></div>
+
+  <h2>Jobs added</h2>
+  <table>
+    <tr><th>Job</th><th>What it catches</th></tr>
+    <tr><td><code>build</code></td><td>server <code>tsc</code> compile + client <code>tsc -b &amp;&amp; vite build</code> (the only client typecheck in CI)</td></tr>
+    <tr><td><code>storybook</code></td><td>story bundling breakage (bad imports, addon config, fixtures)</td></tr>
+    <tr><td><code>playground</code></td><td>advisory PR annotation when a branch has no <code>docs/playgrounds/&lt;slug&gt;/</code> page - never fails</td></tr>
+  </table>
+
+  <h2>Playground, explained</h2>
+  <p class="lede">A playground is a per-branch, self-contained HTML explainer under <code>docs/playgrounds/&lt;branch-slug&gt;/</code> (slug = branch with <code>/</code> -> <code>--</code>). It's the PR description's interactive big sibling. Enforced advisory-only, twice: a local Claude hook on push/PR, and now the CI <code>playground</code> job. New <code>docs/playgrounds/README.md</code> is the canonical answer; <code>docs/testing.md</code> and the local <code>.claude/CLAUDE.md</code> describe the expanded matrix.</p>
+
+  <h2>Verification</h2>
+  <p class="lede">Both new build commands proven locally before adding the jobs: <code>npm run build</code> exit 0, <code>npm run build-storybook</code> exit 0. This PR's own CI exercises the new <code>build</code>/<code>storybook</code>/<code>playground</code> jobs. (Note: <code>.claude/CLAUDE.md</code> is gitignored, so its matrix update is local-only; <code>docs/testing.md</code> carries the tracked version.)</p>
+
+  <footer>Generated for branch <code>ci/expand-checks-and-playground</code> - plan: docs/planning/plans/2026-07-02-ci-checks-and-playground.md</footer>
+</div>
+</body>
+</html>
