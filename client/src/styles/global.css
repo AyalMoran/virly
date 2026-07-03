@@ -5030,6 +5030,33 @@ select {
   white-space: nowrap;
 }
 
+.payee-chip-row {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.payee-chip-action {
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.4);
+  color: var(--color-muted);
+  cursor: pointer;
+}
+
+.payee-chip-action:hover {
+  color: var(--color-primary);
+}
+
+.payee-chip-action svg {
+  width: 12px;
+  height: 12px;
+}
+
 .cheque-reviewnote,
 .cheque-successnote {
   display: grid;
