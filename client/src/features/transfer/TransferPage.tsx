@@ -1,4 +1,4 @@
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -13,7 +13,8 @@ import {
 import { useAuth } from "../auth/AuthProvider";
 import { useCurrency } from "../currency/CurrencyProvider";
 import { ApiError, api } from "../../lib/api";
-import { getQuickContacts } from "../../lib/contacts";
+import { getQuickContacts, mergeRecipientBook } from "../../lib/contacts";
+import { RecipientBook } from "./RecipientBook";
 import {
   CURRENCY_LABELS,
   SUPPORTED_DISPLAY_CURRENCIES,
@@ -23,6 +24,7 @@ import {
 import { formatCurrency } from "../../lib/format";
 import type {
   AccountSummary,
+  Contact,
   DisplayCurrency,
   TransferQuote,
   TransferResponse
@@ -115,6 +117,24 @@ export function TransferPage() {
   const recentCounterparties = useMemo(
     () => getQuickContacts(summary?.transactions ?? []),
     [summary?.transactions]
+  );
+
+  const [savedContacts, setSavedContacts] = useState<Contact[]>([]);
+
+  const loadContacts = useCallback(() => {
+    api
+      .contacts()
+      .then((response) => setSavedContacts(response.contacts))
+      .catch(() => setSavedContacts([]));
+  }, []);
+
+  useEffect(() => {
+    loadContacts();
+  }, [loadContacts]);
+
+  const recipientBook = useMemo(
+    () => mergeRecipientBook(savedContacts, recentCounterparties),
+    [savedContacts, recentCounterparties]
   );
 
   function validateDraft() {
@@ -312,28 +332,19 @@ export function TransferPage() {
                       quoted before you confirm.
                     </p>
                   ) : null}
-                  {recentCounterparties.length ? (
-                    <div className="cheque-payeebook" aria-label="Recent payees">
-                      <span className="cheque-microlabel">Recent payees</span>
-                      <div className="cheque-payeebook-grid">
-                        {recentCounterparties.map((contact) => (
-                          <button
-                            key={contact.email}
-                            type="button"
-                            className={
-                              recipientEmail === contact.email
-                                ? "cheque-payee-chip selected"
-                                : "cheque-payee-chip"
-                            }
-                            onClick={() => setRecipientEmail(contact.email)}
-                          >
-                            <span aria-hidden="true">{contact.avatar}</span>
-                            <strong>{contact.email}</strong>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  ) : null}
+                  <RecipientBook
+                    saved={recipientBook.saved}
+                    recent={recipientBook.recent}
+                    selectedEmail={recipientEmail}
+                    disabled={isSubmitting}
+                    onSelect={setRecipientEmail}
+                    onSave={(email) => {
+                      api.addContact({ email }).then(loadContacts).catch(() => {});
+                    }}
+                    onRemove={(contactId) => {
+                      api.deleteContact(contactId).then(loadContacts).catch(() => {});
+                    }}
+                  />
                   <div className="cheque-actions">
                     <Button type="submit" disabled={isSubmitting}>
                       {isSubmitting ? "Preparing quote…" : "Review cheque"}
