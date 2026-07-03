@@ -23,6 +23,7 @@ import {
   Send,
   Smile,
   Sparkles,
+  SquarePen,
   UserRound,
   X,
   Zap,
@@ -598,6 +599,19 @@ export function FloatingChatWidget() {
     await sendChatMessage(message.trim());
   }
 
+  function startNewChat() {
+    if (isSending) {
+      return;
+    }
+    // The old thread stays on the server under its conversationId (30-day TTL);
+    // clearing conversationId makes the next send mint a fresh thread server-side.
+    setConversationId(undefined);
+    setChatMessages([]);
+    setMessage("");
+    resizeChatTextarea(messageInputRef.current);
+    messageInputRef.current?.focus();
+  }
+
   async function handleConfirmationAction(
     messageId: string,
     confirmation: AiTransferConfirmation,
@@ -761,6 +775,16 @@ export function FloatingChatWidget() {
                     ))}
                   </SelectContent>
                 </Select>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="min-h-11 min-w-11 shrink-0 rounded-full hover:bg-background/50"
+                  onClick={startNewChat}
+                  disabled={isSending || (chatMessages.length === 0 && !conversationId)}
+                  aria-label="Start a new chat"
+                >
+                  <SquarePen className="h-4 w-4" />
+                </Button>
                 <Button
                   variant="ghost"
                   size="icon"
