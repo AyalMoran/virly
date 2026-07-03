@@ -86,3 +86,27 @@ jobs:
       # Stories are typechecked by tsc -b (the build job); this catches
       # story BUNDLING breakage (bad imports, addon config, fixtures).
       - run: npm run build-storybook --workspace client
+
+  playground:
+    name: playground presence (advisory)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for a branch playground page
+        env:
+          BRANCH: ${{ github.head_ref }}
+        run: |
+          case "$BRANCH" in
+            main|master|develop|dev|dependabot/*|renovate/*|release-please*)
+              echo "Infra branch '$BRANCH' - playground not expected."
+              exit 0
+              ;;
+          esac
+          slug="${BRANCH//\//--}"
+          dir="docs/playgrounds/${slug}"
+          if compgen -G "${dir}/*.html" > /dev/null; then
+            echo "Playground found at ${dir}/."
+          else
+            echo "::warning title=No playground for this branch::Branch '${BRANCH}' has no playground at '${dir}/'. Playgrounds are per-branch HTML explainers for reviewers (see docs/playgrounds/README.md). Advisory only - this check never fails."
+          fi
