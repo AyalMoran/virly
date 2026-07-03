@@ -1,0 +1,38 @@
+{"question": "What are the eligibility requirements to get a simulated loan from Virly?", "expectedSourceRefs": ["1gy6HNDqcbJHBif0IYmhEu80wQb5iw5R4"]}
+{"question": "What loan products does Virly offer and what are their typical APR ranges?", "expectedSourceRefs": ["1XFC2sGRo8Jvn8IfeIXqp5teGy7L4ta5_"]}
+{"question": "What is the minimum and maximum amount I can borrow on a Virly personal loan?", "expectedSourceRefs": ["1SQHyHZUekHuBUJrw424XFrjHB0GIyjnC"]}
+{"question": "Is there an early repayment fee on my Virly loan?", "expectedSourceRefs": ["1eI7VxlJwocHZn2v9sAGoi7XD40Q44tvS"]}
+{"question": "What can the Virly AI assistant do with my account, and what is it not allowed to do?", "expectedSourceRefs": ["1wZutamoTbHLThl68zW4pdokWgtR2ArUR"]}
+{"question": "How does Virly authenticate new customers when they sign up?", "expectedSourceRefs": ["1HY0_yRP-PS2gcUipBuqzRPFS9pdB634S"]}
+{"question": "Does Virly support two-factor or multi-factor authentication for logging in?", "expectedSourceRefs": ["1TsxReAyUKabdKdaMOlGnKfH5b7PdN7Ho"]}
+{"question": "What personal data can the Virly AI assistant access during a conversation?", "expectedSourceRefs": ["1eD_db8J_Jqq6VWoJegX_gGhqyS3J0mxK"]}
+{"question": "Can the Virly AI assistant send money without me reviewing it first?", "expectedSourceRefs": ["1hmjQay_vf_RTEv1FKGMjfITv397M4pVs"]}
+{"question": "How long does a Virly session last, and does the remember-me option extend it?", "expectedSourceRefs": ["1SP007IRlJXROAATjQO_LIbfN5Ez1mum2"]}
+{"question": "What types of transfers does Virly support in the current app?", "expectedSourceRefs": ["1XW9vKUhUNk9U2hfltezdspYDZ588IxFR"]}
+{"question": "What are the five account packages Virly offers?", "expectedSourceRefs": ["12lhHu2V4_wCzgHUKf8f-ezPO3DI8NOeV"]}
+{"question": "What information does the AI-prepared transfer confirmation card include before I confirm a payment?", "expectedSourceRefs": ["1EbkESPM3LGmBWt91W8D1zAvrDqQbnUTU"]}
+{"question": "What can the Virly assistant help me with, and what questions does it need live account data to answer?", "expectedSourceRefs": ["1bWvoyQdgKj6dFHD7i05wOy20tIbgW6I-"]}
+{"question": "My Virly login is not working - what are the common reasons and how should support handle it?", "expectedSourceRefs": ["1JSJThlGmKndXQZglIVy47rebmhkYJdtw"]}
+{"question": "Can I send a transfer in US dollars or euros using Virly?", "expectedSourceRefs": ["1ip1q86xK6cJRWOM_ZTmoQcPbmpcAxizz"]}
+{"question": "What debit card benefits come with the Virly account?", "expectedSourceRefs": ["140N4uMCQIXDy0Gi59qMtxjWAtV9Q2pkN"]}
+{"question": "How much does Virly charge to send money to another Virly user?", "expectedSourceRefs": ["1tJNd2AbFR3IMOjcoa2uwUSjEqTbrRNq6"]}
+{"question": "What is Virly and what are its most common FAQ answers for new customers?", "expectedSourceRefs": ["1QFhy8JdRhNCpL7O0Tee5kYcoklXFZOw3"]}
+{"question": "What are the monthly fees for each Virly account package?", "expectedSourceRefs": ["14KAdyh-H5-2xVvd9i-h73fQZLW_RuEB-"]}
+{"question": "What documents are available in the Virly knowledge base?", "expectedSourceRefs": ["1U6ucGkYmSBJnbgeG7DGCfZQs5y_aZZCZ"]}
+{"question": "Does Virly charge extra fees for sending USD or EUR transfers internationally?", "expectedSourceRefs": ["1evBWD9JU_sdjZCR7-trE4oHp4YFpH1Xi"]}
+{"question": "What features does the Virly Basic account package include?", "expectedSourceRefs": ["1R57cPelHb5DC5sywCCiE3NlK1yiEWjmz"]}
+{"question": "What does the Virly Business package offer for small business customers?", "expectedSourceRefs": ["1WP6RcZ86rnaKRu9MbRbQClN7th6YRsJR"]}
+{"question": "What benefits does the Virly Plus account package provide over Basic?", "expectedSourceRefs": ["1psFl02bm5IQp0QUi-8XFQmGidqy5sPEq"]}
+{"question": "What does Virly Premium offer that lower-tier packages do not?", "expectedSourceRefs": ["1SyXKB9tJIoeVuYU4owtKqf5ZarVn5wZ5"]}
+{"question": "Who is the Virly Student account package intended for?", "expectedSourceRefs": ["14SGjULMXECLxinoqlSHjFUao0npC_CUr"]}
+{"question": "What does a pending transfer confirmation card look like and when does it expire?", "expectedSourceRefs": ["1SylLr1PLoTYcK3wxSV9uQtXva0kZ9IDs"]}
+{"question": "What discounts does the Virly Premium package give on service fees like card replacement?", "expectedSourceRefs": ["1ANlrRNVm1LUClYn_LeK5yJul43p_XLKi"]}
+{"question": "Which knowledge base document maps common customer questions to the best policy source?", "expectedSourceRefs": ["18x436n2YqqpeMUedN8xq23lBY8B0yhjN"]}
+{"question": "How much does it cost to get a replacement debit card from Virly?", "expectedSourceRefs": ["1sKeo-K2VWAQy8aKaNsBKGDFGGOZk0_7F"]}
+{"question": "How should support agents handle a customer asking for private account data?", "expectedSourceRefs": ["1mQClitDdQscXvClAmd_uW_IuI0tTkntM"]}
+{"question": "What should I do if I notice suspicious activity or an unauthorized transfer on my Virly account?", "expectedSourceRefs": ["1-OaICqmf6Nou0Kdq2FBk7GsEVBWnK_aq"]}
+{"question": "Can I cancel a pending AI transfer before it goes through?", "expectedSourceRefs": ["1E4Vpn_Y8JQUvWHka9IDg2cttqCyVc290"]}
+{"question": "What is the platform fee for sending a Virly-to-Virly transfer?", "expectedSourceRefs": ["11KoeUnhl58QRmiu6pqRkkJPGSmfV7frF"]}
+{"question": "What is the maximum amount I can send in a single AI-assisted transfer?", "expectedSourceRefs": ["1Xv1OMYdasr0XqLK1eTJjwIZxzzyzvVrI"]}
+{"question": "Can I change the recipient or amount on a pending AI transfer before confirming it?", "expectedSourceRefs": ["1cUcKH_Bse_KEz98vyO0W4yGsVZXIG8lW"]}
+{"question": "Does the person I send money to need to be a registered Virly user?", "expectedSourceRefs": ["1xg4aIso6_XUaRhb1m-PRinRHDEqAqe93"]}
