@@ -23,6 +23,20 @@ and AI evals (live LLM, LangSmith).
 
 ---
 
+## CI jobs (`.github/workflows/ci.yml`)
+
+Five jobs run on every push and pull request (the `playground` job runs on pull requests only):
+
+| Job | What it runs | Blocking? |
+|---|---|---|
+| `unit` | Server typecheck (`npx tsc -p server/tsconfig.json --noEmit`), server unit tests, client unit tests | Yes |
+| `contract` | Contract suite against a pgvector Postgres service; Mongo cases self-skip when `CONTRACT_MONGO_URL` is absent | Yes |
+| `build` | `npm run build --workspace server` (compiles server to `dist/`) then `npm run build --workspace client` (`tsc -b` + `vite build`). This is the only place the client is typechecked in CI - Jest uses `@swc/jest` which strips types without checking them. | Yes |
+| `storybook` | `npm run build-storybook --workspace client`. Stories are typechecked by `tsc -b` in the `build` job; this job catches story bundling breakage (bad imports, addon config, fixture issues). | Yes |
+| `playground` | Checks that `docs/playgrounds/<branch-slug>/` contains at least one `.html` file. Emits a `::warning::` annotation when no playground is found; never fails. Infra branches (`main`, `dev`, `dependabot/*`, `renovate/*`, `release-please*`) are exempt. See `docs/playgrounds/README.md`. | No (advisory) |
+
+---
+
 ## Unit tests
 
 ### Runner
