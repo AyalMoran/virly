@@ -35,6 +35,7 @@ import {
   hasTransferConfirmationBlock,
   type TransferConfirmationCardStatus,
 } from "@/components/assistant/AssistantBlocks";
+import { ChatMessageActions } from "../assistant/ChatMessageActions";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -823,6 +824,16 @@ export function FloatingChatWidget() {
                       >
                         <p className="min-w-0 break-words">{chatMessage.content}</p>
                       </div>
+                      <ChatMessageActions
+                        disabled={isSending}
+                        onResend={() => {
+                          void sendChatMessage(chatMessage.content);
+                        }}
+                        onEdit={() => {
+                          setMessage(chatMessage.content);
+                          messageInputRef.current?.focus();
+                        }}
+                      />
                     </div>
                   </motion.div>
                 ) : (
