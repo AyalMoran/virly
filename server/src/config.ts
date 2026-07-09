@@ -307,6 +307,24 @@ export const config = {
       serviceAccountFile: getOptionalStringEnv("VIRLY_GOOGLE_APPLICATION_CREDENTIALS", {
         aliases: ["GOOGLE_APPLICATION_CREDENTIALS"]
       })
+    },
+    /** In-process scheduled Drive sync (a timer in the server process). */
+    sync: {
+      /** Opt-in: the server only schedules the sync when this is true. */
+      enabled: getBooleanEnv("VIRLY_RAG_SYNC_ENABLED", { defaultValue: false }),
+      /**
+       * How often the in-process scheduler runs rag:sync --source=drive.
+       * Default 6h. The 5-minute floor is deliberate: for near-real-time
+       * freshness use a Google Drive push webhook, do NOT shrink this
+       * (polling-for-real-time antipattern).
+       */
+      intervalMs: getIntEnv("VIRLY_RAG_SYNC_INTERVAL_MS", {
+        defaultValue: 6 * 60 * 60 * 1000,
+        min: 5 * 60 * 1000,
+        max: 7 * 24 * 60 * 60 * 1000
+      }),
+      /** Where a failed sync emails an alert. Falls back to console.error if unset. */
+      alertEmail: getOptionalStringEnv("VIRLY_RAG_SYNC_ALERT_EMAIL")
     }
   },
   fraud: {

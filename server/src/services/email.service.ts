@@ -128,3 +128,51 @@ export async function sendTransferHoldEmail(email: string, details: TransferHold
   }
   return { delivered: true };
 }
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
+/**
+ * Send an ops/admin alert via the given sender. Injectable for tests, mirroring
+ * sendVerificationEmailWithSender. Falls back to console.error (so the alert is
+ * never silently dropped) when there is no sender or no recipient configured.
+ */
+export async function sendOpsAlertEmailWithSender(
+  subject: string,
+  text: string,
+  to: string | undefined,
+  sender: EmailSender | null
+): Promise<{ delivered: boolean }> {
+  if (!sender || !to) {
+    console.error(`[ops-alert] ${subject}\n${text}`);
+    return { delivered: false };
+  }
+  const result = await sender.send({
+    from: config.email.from,
+    to,
+    subject,
+    text,
+    html: `<pre>${escapeHtml(text)}</pre>`
+  });
+  if (result.error) {
+    console.error("[ops-alert] email delivery failed.", result.error);
+    console.error(`[ops-alert] ${subject}\n${text}`);
+    return { delivered: false };
+  }
+  return { delivered: true };
+}
+
+/**
+ * Email an ops alert to VIRLY_RAG_SYNC_ALERT_EMAIL using Resend when configured.
+ * Used by the scheduled RAG sync on a failed run.
+ */
+export async function sendOpsAlertEmail(
+  subject: string,
+  text: string
+): Promise<{ delivered: boolean }> {
+  const sender = config.email.resendApiKey
+    ? createResendSender(config.email.resendApiKey)
+    : null;
+  return sendOpsAlertEmailWithSender(subject, text, config.rag.sync.alertEmail, sender);
+}

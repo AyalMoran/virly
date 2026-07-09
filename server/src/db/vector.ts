@@ -83,3 +83,40 @@ export async function closeAiPool(): Promise<void> {
   pool = null;
   db = null;
 }
+
+/**
+ * Try to take a session-level pgvector advisory lock on a dedicated pooled
+ * client. Returns a release function on success, or null when the lock is
+ * already held (e.g. another sync - in this process, another instance, or a
+ * manual `npm run rag:sync` - is running). The SAME client must hold and release
+ * the lock, so we check one out and keep it checked out until release.
+ *
+ * Used by the scheduled RAG sync to satisfy "skip if a sync is already running".
+ */
+export async function tryAcquireAiAdvisoryLock(
+  key: number
+): Promise<(() => Promise<void>) | null> {
+  getAiDb(); // ensure the pool is initialized
+  if (!pool) throw new Error("AI Postgres pool is not initialized.");
+  const client = await pool.connect();
+  try {
+    const result = await client.query<{ locked: boolean }>(
+      "SELECT pg_try_advisory_lock($1) AS locked",
+      [key]
+    );
+    if (!result.rows[0]?.locked) {
+      client.release();
+      return null;
+    }
+  } catch (error) {
+    client.release();
+    throw error;
+  }
+  return async () => {
+    try {
+      await client.query("SELECT pg_advisory_unlock($1)", [key]);
+    } finally {
+      client.release();
+    }
+  };
+}
