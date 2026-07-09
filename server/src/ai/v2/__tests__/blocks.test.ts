@@ -411,6 +411,63 @@ describe("buildBlocksFromResult — default / unrecognized tool", () => {
 });
 
 // ---------------------------------------------------------------------------
+// buildBlocksFromResult — getCounterpartySummary
+// ---------------------------------------------------------------------------
+
+describe("buildBlocksFromResult — getCounterpartySummary", () => {
+  test("builds a counterparty_summary block from totals data and metadata labels", () => {
+    const result = makeResult(
+      "getCounterpartySummary",
+      "ok",
+      {
+        recordCount: 7,
+        amount: -150,
+        counterpartyEmail: "dan@example.com",
+        maskedLabel: "d***@example.com",
+        displayName: "Dan Levi"
+      },
+      { totalSent: 400, totalReceived: 250, net: -150 }
+    );
+
+    const blocks = buildBlocksFromResult("getCounterpartySummary", result);
+
+    expect(blocks).toHaveLength(1);
+    const block = blocks[0];
+    expect(block.type).toBe("counterparty_summary");
+    if (block.type !== "counterparty_summary") {
+      return;
+    }
+    expect(block.counterpartyName.text).toBe("Dan Levi");
+    expect(block.counterpartyEmailMasked).toBe("d***@example.com");
+    expect(block.sentTotal).toEqual({ amount: 400, currency: "ILS" });
+    expect(block.receivedTotal).toEqual({ amount: 250, currency: "ILS" });
+    expect(block.net).toEqual({ amount: 150, currency: "ILS" });
+    expect(block.netDirection).toBe("sent");
+    expect(block.transactionCount).toBe(7);
+  });
+
+  test("falls back to the masked label when no display name exists", () => {
+    const result = makeResult(
+      "getCounterpartySummary",
+      "ok",
+      { recordCount: 2, maskedLabel: "d***@example.com" },
+      { totalSent: 10, totalReceived: 0, net: -10 }
+    );
+
+    const blocks = buildBlocksFromResult("getCounterpartySummary", result);
+    expect(blocks).toHaveLength(1);
+    if (blocks[0].type === "counterparty_summary") {
+      expect(blocks[0].counterpartyName.text).toBe("d***@example.com");
+    }
+  });
+
+  test("builds nothing when the result carries no totals (empty history)", () => {
+    const result = makeResult("getCounterpartySummary", "empty", { recordCount: 0 });
+    expect(buildBlocksFromResult("getCounterpartySummary", result)).toEqual([]);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // transferConfirmationBlock
 // ---------------------------------------------------------------------------
 

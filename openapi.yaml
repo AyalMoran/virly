@@ -1538,6 +1538,7 @@ components:
             - transaction_list
             - transaction_detail
             - transaction_stats
+            - counterparty_summary
             - pending_transfers
             - transfer_quote
             - transfer_confirmation
@@ -1549,6 +1550,46 @@ components:
         title:
           $ref: '#/components/schemas/AssistantLocalizedText'
       additionalProperties: true
+
+    AssistantMoneyValue:
+      type: object
+      required: [amount, currency]
+      properties:
+        amount:
+          type: number
+        currency:
+          type: string
+          example: ILS
+        formatted:
+          type: string
+          example: "₪400.00"
+
+    AssistantCounterpartySummaryBlock:
+      type: object
+      required: [id, type, counterpartyName, transactionCount]
+      properties:
+        id:
+          type: string
+        type:
+          type: string
+          enum: [counterparty_summary]
+        title:
+          $ref: '#/components/schemas/AssistantLocalizedText'
+        counterpartyName:
+          $ref: '#/components/schemas/AssistantLocalizedText'
+        counterpartyEmailMasked:
+          type: string
+        sentTotal:
+          $ref: '#/components/schemas/AssistantMoneyValue'
+        receivedTotal:
+          $ref: '#/components/schemas/AssistantMoneyValue'
+        net:
+          $ref: '#/components/schemas/AssistantMoneyValue'
+        netDirection:
+          type: string
+          enum: [sent, received, even]
+        transactionCount:
+          type: integer
 
     AssistantLocalizedText:
       type: object

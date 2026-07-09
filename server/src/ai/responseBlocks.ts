@@ -22,6 +22,7 @@ export const assistantResponseBlockTypeValues = [
   "transaction_list",
   "transaction_detail",
   "transaction_stats",
+  "counterparty_summary",
   "pending_transfers",
   "transfer_quote",
   "transfer_confirmation",
@@ -102,6 +103,17 @@ export type TransactionStatsBlock =
     receivedTotal?: AssistantMoneyValue;
     net?: AssistantMoneyValue;
     items?: AssistantKeyValueItem[];
+  };
+
+export type CounterpartySummaryBlock =
+  AssistantResponseBlockBase<"counterparty_summary"> & {
+    counterpartyName: LocalizedText;
+    counterpartyEmailMasked?: string;
+    sentTotal?: AssistantMoneyValue;
+    receivedTotal?: AssistantMoneyValue;
+    net?: AssistantMoneyValue;
+    netDirection?: "sent" | "received" | "even";
+    transactionCount: number;
   };
 
 export type PendingTransferItem = {
@@ -199,6 +211,7 @@ export type AssistantResponseBlock =
   | TransactionListBlock
   | TransactionDetailBlock
   | TransactionStatsBlock
+  | CounterpartySummaryBlock
   | PendingTransfersBlock
   | TransferQuoteBlock
   | TransferConfirmationBlock

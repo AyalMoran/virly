@@ -8,7 +8,9 @@ import {
   Clock,
   Info,
   ReceiptText,
+  Scale,
   ShieldCheck,
+  UsersRound,
   Video,
   Wallet,
 } from "lucide-react";
@@ -567,6 +569,92 @@ function TransactionStatsCard({
   );
 }
 
+function CounterpartySummaryCard({
+  block,
+  locale,
+}: {
+  block: Extract<AssistantResponseBlock, { type: "counterparty_summary" }>;
+  locale?: string;
+}) {
+  const netLabel =
+    block.netDirection === "sent"
+      ? "Net sent"
+      : block.netDirection === "received"
+        ? "Net received"
+        : "Even";
+
+  const tiles = [
+    ...(block.sentTotal
+      ? [
+          {
+            key: "sent",
+            label: "You sent",
+            icon: <ArrowUpRight className="h-3.5 w-3.5" />,
+            value: <MoneyValue value={block.sentTotal} locale={locale} />,
+          },
+        ]
+      : []),
+    ...(block.receivedTotal
+      ? [
+          {
+            key: "received",
+            label: "You received",
+            icon: <ArrowDownLeft className="h-3.5 w-3.5" />,
+            value: <MoneyValue value={block.receivedTotal} locale={locale} />,
+          },
+        ]
+      : []),
+    ...(block.net
+      ? [
+          {
+            key: "net",
+            label: netLabel,
+            icon: <Scale className="h-3.5 w-3.5" />,
+            value: <MoneyValue value={block.net} locale={locale} />,
+          },
+        ]
+      : []),
+    {
+      key: "count",
+      label: "Transactions",
+      icon: <ReceiptText className="h-3.5 w-3.5" />,
+      value: (
+        <span dir="ltr" className="font-semibold">
+          {block.transactionCount}
+        </span>
+      ),
+    },
+  ];
+
+  return (
+    <AssistantCard
+      title={block.title ?? block.counterpartyName}
+      subtitle={
+        block.counterpartyEmailMasked
+          ? { text: block.counterpartyEmailMasked, dir: "ltr" }
+          : undefined
+      }
+      icon={<UsersRound className="h-3.5 w-3.5" />}
+    >
+      <div className="grid grid-cols-2 gap-2 p-3">
+        {tiles.map((tile) => (
+          <div
+            key={tile.key}
+            className="flex min-w-0 flex-col gap-1 rounded-md border border-border/25 bg-background/60 px-2.5 py-2"
+            style={{ textAlign: "start", overflowWrap: "anywhere" }}
+          >
+            <span className="flex items-center gap-1 text-[11px] text-muted-foreground">
+              {tile.icon}
+              {tile.label}
+            </span>
+            <span className="text-[13px] font-semibold">{tile.value}</span>
+          </div>
+        ))}
+      </div>
+    </AssistantCard>
+  );
+}
+
 function TransferQuoteCard({
   block,
   locale,
@@ -1053,6 +1141,8 @@ function renderBlock(
       return <TransactionDetailCard block={block} locale={props.locale} />;
     case "transaction_stats":
       return <TransactionStatsCard block={block} locale={props.locale} />;
+    case "counterparty_summary":
+      return <CounterpartySummaryCard block={block} locale={props.locale} />;
     case "pending_transfers":
       return <PendingTransfersCard block={block} locale={props.locale} />;
     case "transfer_quote":
