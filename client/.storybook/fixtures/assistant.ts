@@ -127,6 +127,18 @@ export const assistantEmptyStateBlock: AssistantResponseBlock = {
   },
 };
 
+export const assistantCounterpartySummaryBlock: AssistantResponseBlock = {
+  id: "blk_counterparty_summary",
+  type: "counterparty_summary",
+  counterpartyName: { text: "Maya Cohen", dir: "ltr" },
+  counterpartyEmailMasked: "m***@virly.test",
+  sentTotal: { amount: 1240, currency: "ILS", formatted: "₪1,240.00" },
+  receivedTotal: { amount: 450, currency: "ILS", formatted: "₪450.00" },
+  net: { amount: 790, currency: "ILS", formatted: "₪790.00" },
+  netDirection: "sent",
+  transactionCount: 8,
+};
+
 /** A read-only showcase of several block types stacked together. */
 export const assistantShowcaseBlocks: AssistantResponseBlock[] = [
   assistantTextBlock,

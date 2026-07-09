@@ -160,6 +160,40 @@ export function buildBlocksFromResult(
       });
       break;
 
+    case "getCounterpartySummary": {
+      const data = result.data as
+        | { totalSent?: number; totalReceived?: number; net?: number }
+        | null
+        | undefined;
+      const hasTotals =
+        typeof data?.totalSent === "number" ||
+        typeof data?.totalReceived === "number" ||
+        typeof data?.net === "number";
+      if (!hasTotals) {
+        break;
+      }
+      const nameText =
+        meta.displayName ?? meta.maskedLabel ?? meta.counterpartyEmail ?? "this counterparty";
+      const net = typeof data?.net === "number" ? data.net : undefined;
+      blocks.push({
+        id: blockId("cpsummary"),
+        type: "counterparty_summary",
+        counterpartyName: { text: nameText },
+        ...(meta.maskedLabel ? { counterpartyEmailMasked: meta.maskedLabel } : {}),
+        ...(typeof data?.totalSent === "number" ? { sentTotal: money(data.totalSent) } : {}),
+        ...(typeof data?.totalReceived === "number"
+          ? { receivedTotal: money(data.totalReceived) }
+          : {}),
+        // Tool convention: net = totalReceived - totalSent, so positive = received more.
+        ...(net !== undefined ? { net: money(Math.abs(net)) } : {}),
+        ...(net !== undefined
+          ? { netDirection: net > 0 ? "received" : net < 0 ? "sent" : "even" }
+          : {}),
+        transactionCount: meta.recordCount ?? 0
+      });
+      break;
+    }
+
     case "getDailyTransferUsage":
       if (typeof meta.amount === "number") {
         blocks.push({

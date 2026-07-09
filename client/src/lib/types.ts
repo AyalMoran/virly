@@ -425,6 +425,7 @@ export type AssistantResponseBlockType =
   | "transaction_list"
   | "transaction_detail"
   | "transaction_stats"
+  | "counterparty_summary"
   | "pending_transfers"
   | "transfer_quote"
   | "transfer_confirmation"
@@ -514,6 +515,18 @@ export type AssistantResponseBlock =
       receivedTotal?: AssistantMoneyValue;
       net?: AssistantMoneyValue;
       items?: AssistantKeyValueItem[];
+    }
+  | {
+      id: string;
+      type: "counterparty_summary";
+      title?: LocalizedText;
+      counterpartyName: LocalizedText;
+      counterpartyEmailMasked?: string;
+      sentTotal?: AssistantMoneyValue;
+      receivedTotal?: AssistantMoneyValue;
+      net?: AssistantMoneyValue;
+      netDirection?: "sent" | "received" | "even";
+      transactionCount: number;
     }
   | {
       id: string;
