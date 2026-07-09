@@ -11,6 +11,7 @@ import {
   sortForTransactionMemory,
   getDirectionFromMessage,
   getTransactionLimit,
+  getTransactionLimitAllowingAll,
   buildTransactionFilterCriteria
 } from "../transactionHelpers.js";
 import type { SafeTransactionRow } from "../transactionHelpers.js";
@@ -403,5 +404,36 @@ describe("buildTransactionFilterCriteria", () => {
     const ctx = makeContext("oldest transactions");
     const result = buildTransactionFilterCriteria(ctx, { limit: 5, sort: "oldest" });
     expect(result.sort).toBe("oldest");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// getTransactionLimitAllowingAll
+// ---------------------------------------------------------------------------
+
+describe("getTransactionLimitAllowingAll", () => {
+  it("returns the max when the user asks for 'all'", () => {
+    const ctx = makeContext("show me all transactions with alice");
+    expect(getTransactionLimitAllowingAll(ctx, 10)).toBe(50);
+  });
+
+  it("returns the max for Hebrew 'הכל'", () => {
+    const ctx = makeContext("תראה לי את כל העסקאות עם אליס");
+    expect(getTransactionLimitAllowingAll(ctx, 10)).toBe(50);
+  });
+
+  it("still honors an explicit number", () => {
+    const ctx = makeContext("show me the last 20 transactions with alice");
+    expect(getTransactionLimitAllowingAll(ctx, 10)).toBe(20);
+  });
+
+  it("falls back to the default when no count and no 'all' are present", () => {
+    const ctx = makeContext("transactions with alice");
+    expect(getTransactionLimitAllowingAll(ctx, 10)).toBe(10);
+  });
+
+  it("does not treat the word 'completed' as an 'all' request", () => {
+    const ctx = makeContext("show completed transactions with alice");
+    expect(getTransactionLimitAllowingAll(ctx, 10)).toBe(10);
   });
 });

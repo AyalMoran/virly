@@ -2,7 +2,11 @@ import { getRepositories } from "../../repositories/index.js";
 import { toTransactionDto } from "../../utils/transaction-dto.js";
 import { createToolResult } from "../toolResults.js";
 import type { RuntimeToolResult, ToolContext } from "../state.js";
-import { transactionMemoryUpdatesFromRows } from "./transactionHelpers.js";
+import {
+  getTransactionLimitAllowingAll,
+  metadataFromTransactionRows,
+  transactionMemoryUpdatesFromRows
+} from "./transactionHelpers.js";
 
 export async function getTransactionsWithCounterparty(
   context: ToolContext
@@ -23,7 +27,7 @@ export async function getTransactionsWithCounterparty(
   const transactions = await getRepositories().transactions.recentWithCounterparty({
     ownerId: context.userId,
     counterpartyEmail: counterparty.email,
-    limit: 5
+    limit: getTransactionLimitAllowingAll(context, 10)
   });
 
   if (transactions.length === 0) {
@@ -81,7 +85,7 @@ export async function getTransactionsWithCounterparty(
       })
       .join("; ")}.`,
     metadata: {
-      recordCount: transactions.length,
+      ...metadataFromTransactionRows(summaries),
       counterpartyEmail: counterparty.email,
       maskedLabel: counterparty.maskedLabel
     },
