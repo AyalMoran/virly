@@ -1,6 +1,7 @@
 import { setRepositories, clearRepositories } from "../../../repositories/index.js";
 import { createMongoRepositories } from "../../../repositories/mongo/index.js";
 import { getTransactionsWithCounterparty } from "../getTransactionsWithCounterparty.js";
+import { buildBlocksFromResult } from "../../v2/blocks.js";
 import type { ToolContext } from "../../state.js";
 import type { TransactionRecord } from "../../../repositories/types.js";
 
@@ -32,7 +33,13 @@ function makeTxRecord(overrides: Partial<TransactionRecord> = {}): TransactionRe
   };
 }
 
-function makeRepos(transactions: TransactionRecord[]) {
+let lastCounterpartyLimit: number | undefined;
+
+beforeEach(() => {
+  lastCounterpartyLimit = undefined;
+});
+
+function makeRepos(all: TransactionRecord[]) {
   const base = createMongoRepositories();
   return {
     ...base,
@@ -46,7 +53,10 @@ function makeRepos(transactions: TransactionRecord[]) {
     },
     transactions: {
       ...base.transactions,
-      recentWithCounterparty: async () => transactions
+      recentWithCounterparty: async (input: { limit: number }) => {
+        lastCounterpartyLimit = input.limit;
+        return all.slice(0, input.limit);
+      }
     }
   };
 }
@@ -184,5 +194,106 @@ describe("getTransactionsWithCounterparty - transactions found", () => {
     const result = await getTransactionsWithCounterparty(ctx);
     const summaries = result.data as Array<{ reason: string | null }>;
     expect(summaries[0].reason).toBe("dinner");
+  });
+});
+
+describe("getTransactionsWithCounterparty - honors the requested count", () => {
+  const alice = {
+    email: "alice@example.com",
+    maskedLabel: "a***@example.com",
+    userLabel: "Alice",
+    firstMentionedAtTurn: 1,
+    lastReferencedAtTurn: 1
+  };
+
+  it("requests up to the max and returns all when the user asks for 'all'", async () => {
+    const ctx = makeContext({
+      message: "show me all transactions with alice",
+      resolvedCounterparty: alice
+    });
+    const txs = Array.from({ length: 12 }, (_, i) => makeTxRecord({ id: `tx${i + 1}` }));
+    setRepositories(makeRepos(txs) as ReturnType<typeof createMongoRepositories>);
+
+    const result = await getTransactionsWithCounterparty(ctx);
+
+    expect(lastCounterpartyLimit).toBe(50);
+    const meta = (result.displayData as { metadata: { recordCount: number } }).metadata;
+    expect(meta.recordCount).toBe(12);
+  });
+
+  it("defaults to 10 when no count is specified", async () => {
+    const ctx = makeContext({
+      message: "transactions with alice",
+      resolvedCounterparty: alice
+    });
+    const txs = Array.from({ length: 12 }, (_, i) => makeTxRecord({ id: `tx${i + 1}` }));
+    setRepositories(makeRepos(txs) as ReturnType<typeof createMongoRepositories>);
+
+    await getTransactionsWithCounterparty(ctx);
+
+    expect(lastCounterpartyLimit).toBe(10);
+  });
+
+  it("honors an explicit smaller number", async () => {
+    const ctx = makeContext({
+      message: "show me the last 3 transactions with alice",
+      resolvedCounterparty: alice
+    });
+    const txs = Array.from({ length: 12 }, (_, i) => makeTxRecord({ id: `tx${i + 1}` }));
+    setRepositories(makeRepos(txs) as ReturnType<typeof createMongoRepositories>);
+
+    await getTransactionsWithCounterparty(ctx);
+
+    expect(lastCounterpartyLimit).toBe(3);
+  });
+});
+
+describe("getTransactionsWithCounterparty - transaction_list card", () => {
+  const alice = {
+    email: "alice@example.com",
+    maskedLabel: "a***@example.com",
+    userLabel: "Alice",
+    firstMentionedAtTurn: 1,
+    lastReferencedAtTurn: 1
+  };
+
+  it("populates metadata.transactions so a transaction_list card renders every row", async () => {
+    const ctx = makeContext({
+      message: "show me all transactions with alice",
+      resolvedCounterparty: alice
+    });
+    const txs = [
+      makeTxRecord({ id: "tx1", type: "debit", amount: 100 }),
+      makeTxRecord({ id: "tx2", type: "credit", amount: 75 })
+    ];
+    setRepositories(makeRepos(txs) as ReturnType<typeof createMongoRepositories>);
+
+    const result = await getTransactionsWithCounterparty(ctx);
+
+    const meta = (result.displayData as { metadata: { transactions?: unknown[] } }).metadata;
+    expect(meta.transactions).toHaveLength(2);
+
+    const blocks = buildBlocksFromResult("getTransactionsWithCounterparty", result);
+    const list = blocks.find((block) => block.type === "transaction_list") as
+      | { type: "transaction_list"; summary: { totalCount: number } }
+      | undefined;
+    expect(list).toBeDefined();
+    expect(list?.summary.totalCount).toBe(2);
+  });
+
+  it("keeps counterparty emails masked in the card rows", async () => {
+    const ctx = makeContext({
+      message: "show me all transactions with alice",
+      resolvedCounterparty: alice
+    });
+    setRepositories(makeRepos([makeTxRecord({ id: "tx1" })]) as ReturnType<typeof createMongoRepositories>);
+
+    const result = await getTransactionsWithCounterparty(ctx);
+    const meta = (result.displayData as {
+      metadata: { transactions?: Array<{ counterpartyLabel?: string }> };
+    }).metadata;
+
+    expect(meta.transactions?.[0].counterpartyLabel).toBe("a***@example.com");
+    expect(JSON.stringify(meta.transactions)).not.toContain("alice@example.com");
   });
 });
