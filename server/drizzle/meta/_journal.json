@@ -36,6 +36,13 @@
       "when": 1782932133732,
       "tag": "0004_nappy_cammi",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1783080582286,
+      "tag": "0005_contacts",
+      "breakpoints": true
     }
   ]
 }

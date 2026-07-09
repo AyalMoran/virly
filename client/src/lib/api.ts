@@ -11,6 +11,8 @@ import type {
   AgentVideoSession,
   CommunicationProfileResponse,
   CommunicationProfileUserInput,
+  Contact,
+  ContactsResponse,
   CreateVideoSessionRequest,
   DisplayCurrency,
   ExchangeRatesResponse,
@@ -475,5 +477,19 @@ export const api = {
         method: "POST"
       }
     );
+  },
+  contacts() {
+    return request<ContactsResponse>("/api/contacts");
+  },
+  addContact(payload: { email: string; displayName?: string }) {
+    return request<{ contact: Contact }>("/api/contacts", {
+      method: "POST",
+      body: JSON.stringify(payload)
+    });
+  },
+  deleteContact(id: string) {
+    return request<void>(`/api/contacts/${encodeURIComponent(id)}`, {
+      method: "DELETE"
+    });
   }
 };

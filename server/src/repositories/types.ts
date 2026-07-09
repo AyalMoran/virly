@@ -214,6 +214,26 @@ export type VerificationTokenRecord = {
   updatedAt: Date;
 };
 
+export type ContactRecord = {
+  id: string;
+  ownerId: string;
+  email: string;
+  displayName: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export interface ContactRepository {
+  /** Idempotent save: returns the existing contact for (ownerId, email) if present. */
+  upsertForOwner(
+    input: { ownerId: string; email: string; displayName?: string | null },
+    tx?: TxContext
+  ): Promise<ContactRecord>;
+  listForOwner(ownerId: string, tx?: TxContext): Promise<ContactRecord[]>;
+  /** Returns false when no row matched (wrong id or wrong owner). */
+  deleteForOwner(input: { ownerId: string; id: string }, tx?: TxContext): Promise<boolean>;
+}
+
 // ---- Repository interfaces ----------------------------------------------------
 // NOTE to implementer: each interface below lists ONLY the methods used by a
 // current call site. When refactoring a consumer (Stage B), if you find a usage
@@ -393,5 +413,6 @@ export interface Repositories {
   videoSessions: VideoSessionRepository;
   videoAuditLogs: VideoAuditLogRepository;
   verificationTokens: VerificationTokenRepository;
+  contacts: ContactRepository;
   runInTransaction<T>(fn: (tx: TxContext) => Promise<T>): Promise<T>;
 }

@@ -14,6 +14,7 @@ import { mongoAiAuditLogRepository } from "./aiAuditLog.repository.js";
 import { mongoVideoSessionRepository } from "./videoSession.repository.js";
 import { mongoVideoAuditLogRepository } from "./videoAuditLog.repository.js";
 import { mongoVerificationTokenRepository } from "./verificationToken.repository.js";
+import { mongoContactRepository } from "./contact.repository.js";
 
 export function createMongoRepositories(): Repositories {
   return {
@@ -28,6 +29,7 @@ export function createMongoRepositories(): Repositories {
     videoSessions: mongoVideoSessionRepository,
     videoAuditLogs: mongoVideoAuditLogRepository,
     verificationTokens: mongoVerificationTokenRepository,
+    contacts: mongoContactRepository,
     runInTransaction,
   };
 }

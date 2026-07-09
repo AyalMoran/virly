@@ -14,8 +14,9 @@ import { postgresAiAuditLogRepository } from "./aiAuditLog.repository.js";
 import { postgresVideoSessionRepository } from "./videoSession.repository.js";
 import { postgresVideoAuditLogRepository } from "./videoAuditLog.repository.js";
 import { postgresVerificationTokenRepository } from "./verificationToken.repository.js";
+import { postgresContactRepository } from "./contact.repository.js";
 
-/** Build the full Postgres-backed {@link Repositories} (all 10 entities). */
+/** Build the full Postgres-backed {@link Repositories} (all 11 entities). */
 export function createPostgresRepositories(_db?: PgDatabase): Repositories {
   return {
     users: postgresUserRepository,
@@ -29,6 +30,7 @@ export function createPostgresRepositories(_db?: PgDatabase): Repositories {
     videoSessions: postgresVideoSessionRepository,
     videoAuditLogs: postgresVideoAuditLogRepository,
     verificationTokens: postgresVerificationTokenRepository,
+    contacts: postgresContactRepository,
     runInTransaction
   };
 }

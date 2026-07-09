@@ -194,6 +194,22 @@ export const communicationProfiles = pgTable("communication_profiles", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const contacts = pgTable(
+  "contacts",
+  {
+    id: char("id", { length: 24 }).primaryKey(),
+    ownerId: char("owner_id", { length: 24 }).notNull(),
+    email: text("email").notNull(),
+    displayName: text("display_name"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull()
+  },
+  (t) => [
+    uniqueIndex("contacts_owner_email_uq").on(t.ownerId, t.email),
+    index("contacts_owner_idx").on(t.ownerId)
+  ]
+);
+
 export const videoAuditLogs = pgTable("video_audit_logs", {
   id: id(),
   event: text("event").notNull(),

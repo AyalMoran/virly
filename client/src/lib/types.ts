@@ -743,3 +743,14 @@ export type ApiErrorBody = {
   details?: string[];
   issues?: ApiIssue[];
 };
+
+export type Contact = {
+  id: string;
+  email: string;
+  displayName: string | null;
+  createdAt: string;
+};
+
+export type ContactsResponse = {
+  contacts: Contact[];
+};
