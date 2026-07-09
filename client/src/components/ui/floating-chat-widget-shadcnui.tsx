@@ -23,6 +23,7 @@ import {
   Send,
   Smile,
   Sparkles,
+  SquarePen,
   UserRound,
   X,
   Zap,
@@ -35,6 +36,7 @@ import {
   hasTransferConfirmationBlock,
   type TransferConfirmationCardStatus,
 } from "@/components/assistant/AssistantBlocks";
+import { ChatMessageActions } from "../assistant/ChatMessageActions";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -597,6 +599,19 @@ export function FloatingChatWidget() {
     await sendChatMessage(message.trim());
   }
 
+  function startNewChat() {
+    if (isSending) {
+      return;
+    }
+    // The old thread stays on the server under its conversationId (30-day TTL);
+    // clearing conversationId makes the next send mint a fresh thread server-side.
+    setConversationId(undefined);
+    setChatMessages([]);
+    setMessage("");
+    resizeChatTextarea(messageInputRef.current);
+    messageInputRef.current?.focus();
+  }
+
   async function handleConfirmationAction(
     messageId: string,
     confirmation: AiTransferConfirmation,
@@ -764,6 +779,16 @@ export function FloatingChatWidget() {
                   variant="ghost"
                   size="icon"
                   className="min-h-11 min-w-11 shrink-0 rounded-full hover:bg-background/50"
+                  onClick={startNewChat}
+                  disabled={isSending || (chatMessages.length === 0 && !conversationId)}
+                  aria-label="Start a new chat"
+                >
+                  <SquarePen className="h-4 w-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="min-h-11 min-w-11 shrink-0 rounded-full hover:bg-background/50"
                   onClick={() => setIsOpen(false)}
                   aria-label="Close chat"
                 >
@@ -823,6 +848,16 @@ export function FloatingChatWidget() {
                       >
                         <p className="min-w-0 break-words">{chatMessage.content}</p>
                       </div>
+                      <ChatMessageActions
+                        disabled={isSending}
+                        onResend={() => {
+                          void sendChatMessage(chatMessage.content);
+                        }}
+                        onEdit={() => {
+                          setMessage(chatMessage.content);
+                          messageInputRef.current?.focus();
+                        }}
+                      />
                     </div>
                   </motion.div>
                 ) : (
