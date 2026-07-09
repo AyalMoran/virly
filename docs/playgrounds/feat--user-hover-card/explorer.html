@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Feature: counterparty hover card</title>
+<style>
+  :root{--bg:#f7f9f3;--fg:#173d42;--mut:#4a6a6c;--bd:#cfe0d8;--pri:#2f8f86;--card:#fff;--code:#eef3ee;--radius:12px;}
+  *{box-sizing:border-box;min-width:0;} html,body{margin:0;padding:0;}
+  body{background:var(--bg);color:var(--fg);line-height:1.55;font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif;-webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1000px;margin:0 auto;padding:2.2rem 1.25rem 4rem;}
+  .kicker{color:var(--mut);font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;}
+  h1{font-size:1.8rem;margin:.3rem 0 .6rem;} h2{font-size:1.15rem;margin:2rem 0 .7rem;border-bottom:1px solid var(--bd);padding-bottom:.3rem;}
+  .lede{color:var(--mut);max-width:70ch;}
+  .chips{display:flex;gap:.5rem;flex-wrap:wrap;margin:1rem 0 0;}
+  .chip{background:#e7f2ee;color:var(--pri);border:1px solid var(--bd);border-radius:999px;padding:.15rem .7rem;font-size:.78rem;font-weight:600;}
+  code{background:var(--code);border-radius:4px;padding:.08rem .35rem;font-size:.85em;}
+  .card{background:var(--card);border:1px solid var(--bd);border-radius:var(--radius);padding:1.1rem 1.25rem;margin:.8rem 0;}
+  ul{padding-left:1.2rem;} li{margin:.25rem 0;}
+  .win{color:var(--pri);font-weight:700;}
+  footer{margin-top:3rem;color:var(--mut);font-size:.8rem;border-top:1px solid var(--bd);padding-top:1rem;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <p class="kicker">Branch playground - feat/user-hover-card</p>
+  <h1>Counterparty hover card</h1>
+  <p class="lede">Todoist <code>6h24RpJcM2XCJH2M</code>: hovering or keyboard-focusing a counterparty email link pops a small card - display name, net balance, you-sent / you-received, transaction count - fetched lazily and cached, with a "View full profile" link.</p>
+  <div class="chips">
+    <span class="chip">client / React 18</span>
+    <span class="chip">Radix HoverCard</span>
+    <span class="chip">lazy + cached fetch</span>
+    <span class="chip">a11y: hover + focus + Escape</span>
+  </div>
+
+  <h2>Design</h2>
+  <div class="card">
+    <p>A <code>CounterpartyLink</code> wraps the existing <code>&lt;Link&gt;</code> in a Radix <code>HoverCard</code>. On open it lazily fetches <code>GET /api/users/:email/profile</code> (the same endpoint the full profile page uses - no backend change) through a memoized module cache so repeat hovers don't refetch. The card body is a pure, hook-free <code>UserHoverCardContent</code> (unit-testable in the <code>renderToStaticMarkup</code> harness), driven by a pure <code>summarizeRelationship</code> helper. <code>TransactionList</code> swaps its inline counterparty link for <code>CounterpartyLink</code>.</p>
+  </div>
+
+  <h2>What landed</h2>
+  <ul>
+    <li>Pure <code>summarizeRelationship</code> helper (net sent/received/even) + tests.</li>
+    <li>Pure <code>UserHoverCardContent</code> (loading / error / loaded) + tests.</li>
+    <li>Memoized <code>fetchUserProfileCached</code> (dedupes per email, doesn't cache failures) + test.</li>
+    <li><code>CounterpartyLink</code> Radix wrapper + Storybook story (in <code>__stories__/</code>, <code>@storybook/react-vite</code> CSF).</li>
+    <li>Adopted in <code>TransactionList</code>; the row's <code>closest("a")</code> guard keeps the trigger from firing row selection.</li>
+    <li>Dependency added: <code>@radix-ui/react-hover-card</code>.</li>
+  </ul>
+
+  <h2>Verification</h2>
+  <ul>
+    <li>TDD for the pure pieces; <code>npm run test:client</code> <span class="win">648/648</span> (52 suites, +3 files / +8 tests).</li>
+    <li><code>cd client &amp;&amp; npx tsc -b</code> clean (the only client typecheck; also checks the story).</li>
+    <li>QuickContacts adoption deferred (it would need a <code>CurrencyProvider</code> in its test harness) - matches the plan's open question.</li>
+  </ul>
+
+  <footer>Generated for branch <code>feat/user-hover-card</code> - plan: docs/planning/plans/2026-06-26-user-hover-card.md</footer>
+</div>
+</body>
+</html>

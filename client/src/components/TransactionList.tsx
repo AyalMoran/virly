@@ -1,6 +1,7 @@
 import { ArrowDownLeft, ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useCurrency } from "../features/currency/CurrencyProvider";
+import { CounterpartyLink } from "./CounterpartyLink";
 import { formatRelativeDate } from "../lib/format";
 import type { Pagination, Transaction } from "../lib/types";
 import { Button, EmptyState } from "./Primitives";
@@ -71,13 +72,7 @@ export function TransactionList({
             </div>
             <div className="transaction-main">
               <strong>
-                <Link
-                  className="counterparty-link"
-                  to={`/users/${encodeURIComponent(transaction.counterpartyEmail)}`}
-                  aria-label={`View ${transaction.counterpartyEmail}'s profile`}
-                >
-                  {transaction.counterpartyEmail}
-                </Link>
+                <CounterpartyLink email={transaction.counterpartyEmail} />
               </strong>
               <span>{transaction.reason || formatRelativeDate(transaction.date)}</span>
             </div>

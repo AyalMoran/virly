@@ -1241,6 +1241,94 @@ h2 {
   font-variant-numeric: tabular-nums;
 }
 
+/* ---- User Hover Card ---- */
+
+.user-hover-card-popover {
+  z-index: 50;
+  filter: drop-shadow(0 4px 14px rgba(15, 28, 30, 0.22));
+  outline: none;
+}
+
+.user-hover-card-arrow {
+  fill: var(--color-surface);
+}
+
+.user-hover-card {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-card);
+  background: var(--color-surface);
+  padding: 14px 16px;
+  min-width: 220px;
+  max-width: 280px;
+}
+
+.user-hover-card.loading,
+.user-hover-card.error {
+  font-size: 0.85rem;
+  color: var(--color-muted);
+  padding: 12px 14px;
+}
+
+.user-hover-card-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.user-hover-card-head strong {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.user-hover-card-head svg {
+  width: 14px;
+  height: 14px;
+  color: var(--color-primary);
+  flex-shrink: 0;
+}
+
+.user-hover-card-stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px 14px;
+  margin: 0 0 12px;
+}
+
+.user-hover-card-stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.user-hover-card-stats dt {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-muted);
+}
+
+.user-hover-card-stats dd {
+  font-size: 0.88rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+
+.user-hover-card-link {
+  display: block;
+  font-size: 0.8rem;
+  text-align: right;
+  color: var(--color-primary);
+  text-decoration: none;
+}
+
+.user-hover-card-link:hover {
+  text-decoration: underline;
+}
+
+/* ---- end User Hover Card ---- */
+
 .relationship-meta-list {
   display: grid;
   gap: 10px;
