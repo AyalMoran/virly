@@ -18,6 +18,12 @@ services:
   mongo:
     image: mongo:7
     command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    # mongod needs >= 64000 open files; Docker 25+ stopped raising the default
+    # soft limit (1024), and WiredTiger panics (exit 14) once it hits that cap.
+    ulimits:
+      nofile:
+        soft: 64000
+        hard: 64000
     ports: ["27018:27017"]
     healthcheck:
       test: ["CMD", "mongosh", "--quiet", "--eval", "try { rs.status() } catch (e) { rs.initiate() }"]
