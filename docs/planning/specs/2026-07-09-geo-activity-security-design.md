@@ -116,7 +116,8 @@ The fraud service precomputes three primitive geo signals from the user's recent
 
 - New endpoint: `GET /api/users/me/activity`, user-scoped, read-only, cursor-paginated (`before` + `limit`).
 - New "Security" area in `client/src/features/settings/`: a recent-activity list (kind, city, relative time, a marker on events that contributed risk reasons) alongside a map of the same events.
-- Map library: `react-leaflet` v5 (built for React 19) with OSM raster tiles and attribution, loaded as a lazy route chunk.
+- Map library: `react-leaflet` v4 with OSM raster tiles and attribution, loaded as a lazy route chunk.
+  (Corrected during planning: the client is on React 18.3 per `client/package.json`, so react-leaflet v4 is the compatible major, not v5.)
 - Client harness constraint: tests render via `renderToStaticMarkup` with no jsdom, and Leaflet needs a real DOM.
   The map is therefore an isolated leaf component that renders a placeholder when `window` is absent; the list and data plumbing live in separately testable components; the map gets a Storybook story instead of a markup test.
 - Realtime: when a login event lands with a new-country or impossible-travel signal, the server emits a Socket.IO event to the user's other active sessions and the client shows a "New login from Paris, France" toast.
