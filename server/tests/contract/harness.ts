@@ -10,7 +10,7 @@ export type ContractCtx = { repos: Repositories };
 export type ContractCase = (ctx: ContractCtx) => Promise<void>;
 
 const PG_TABLES = [
-  "video_audit_logs", "video_sessions", "ai_audit_logs", "ai_pending_transfers",
+  "contacts", "video_audit_logs", "video_sessions", "ai_audit_logs", "ai_pending_transfers",
   "ai_conversations", "exchange_rates", "personal_details", "transactions", "users",
   "communication_profiles"
 ];

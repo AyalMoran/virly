@@ -192,6 +192,11 @@ export function makeRepos(
       save: noop as Repositories["communicationProfile"]["save"],
       deleteByUserId: noop as Repositories["communicationProfile"]["deleteByUserId"]
     },
+    contacts: {
+      upsertForOwner: noop as Repositories["contacts"]["upsertForOwner"],
+      listForOwner: async () => [],
+      deleteForOwner: noop as Repositories["contacts"]["deleteForOwner"]
+    },
     runInTransaction: async (fn) => fn(undefined),
     ...overrides
   };

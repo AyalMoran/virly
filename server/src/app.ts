@@ -21,6 +21,7 @@ import userProfileRoutes from "./routes/userProfile.routes.js";
 import videoSessionRoutes, {
   adminVideoSessionRoutes
 } from "./routes/videoSession.routes.js";
+import contactsRoutes from "./routes/contacts.routes.js";
 
 export const app = express();
 
@@ -95,6 +96,7 @@ app.use("/api/accounts", userRoutes);
 app.use("/api/accounts", communicationProfileRoutes);
 app.use("/api/users", userProfileRoutes);
 app.use("/api/transactions", transactionRoutes);
+app.use("/api/contacts", contactsRoutes);
 app.use("/api/exchange-rates", exchangeRateRoutes);
 app.use("/api/ai", aiLimiter, aiRoutes);
 app.use("/api/video-sessions", videoSessionRoutes);
