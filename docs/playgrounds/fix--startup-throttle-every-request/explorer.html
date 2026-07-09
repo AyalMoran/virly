@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Fix: dev throttle delayed every API call</title>
+<style>
+  :root{
+    --background:40 33% 98%; --foreground:222 31% 12%; --card:0 0% 100%;
+    --primary:168 76% 34%; --muted:180 14% 91%; --muted-fg:218 12% 42%;
+    --border:180 14% 84%; --amber:38 78% 42%; --danger:5 55% 46%; --radius:0.75rem;
+    --bg:hsl(var(--background)); --fg:hsl(var(--foreground)); --cardc:hsl(var(--card));
+    --pri:hsl(var(--primary)); --pri-soft:hsl(168 60% 96%); --mut:hsl(var(--muted));
+    --mutfg:hsl(var(--muted-fg)); --bd:hsl(var(--border)); --amb:hsl(var(--amber));
+    --dng:hsl(var(--danger));
+  }
+  *{box-sizing:border-box;min-width:0;}
+  html,body{margin:0;padding:0;}
+  body{background:var(--bg);color:var(--fg);line-height:1.55;
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:1000px;margin:0 auto;padding:2.2rem 1.25rem 4rem;}
+  .kicker{color:var(--mutfg);font-size:.8rem;letter-spacing:.08em;text-transform:uppercase;}
+  h1{font-size:1.9rem;margin:.3rem 0 .6rem;}
+  h2{font-size:1.2rem;margin:2.2rem 0 .8rem;border-bottom:1px solid var(--bd);padding-bottom:.35rem;}
+  .lede{color:var(--mutfg);max-width:70ch;}
+  .chips{display:flex;gap:.5rem;flex-wrap:wrap;margin:1rem 0 0;}
+  .chip{background:var(--pri-soft);color:var(--pri);border:1px solid var(--bd);border-radius:999px;padding:.15rem .7rem;font-size:.78rem;font-weight:600;}
+  .chip.dng{color:var(--dng);background:hsl(5 60% 96%);}
+  code{background:var(--mut);border-radius:4px;padding:.08rem .35rem;font-size:.85em;}
+  pre{background:#0f1c1d;color:#d7e6e4;border-radius:var(--radius);padding:1rem 1.1rem;overflow:auto;font-size:.82rem;line-height:1.5;}
+  table{border-collapse:collapse;width:100%;font-size:.9rem;margin:.4rem 0;}
+  th,td{border:1px solid var(--bd);padding:.5rem .65rem;text-align:left;}
+  th{background:var(--mut);}
+  .num{font-variant-numeric:tabular-nums;text-align:right;}
+  .card{background:var(--cardc);border:1px solid var(--bd);border-radius:var(--radius);padding:1.1rem 1.25rem;margin:.8rem 0;}
+  .win{color:var(--pri);font-weight:700;}
+  .bad{color:var(--dng);font-weight:700;}
+  ul{padding-left:1.2rem;} li{margin:.25rem 0;}
+  footer{margin-top:3rem;color:var(--mutfg);font-size:.8rem;border-top:1px solid var(--bd);padding-top:1rem;}
+  a{color:var(--pri);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="kicker">Branch playground - fix/startup-throttle-every-request</p>
+  <h1>The "startup throttle" delayed every API call</h1>
+  <p class="lede">
+    Todoist <code>6h2Rpwm7rQG9XH76</code>: "the throttle at the start affects every api call; every page takes seconds to load."
+    It did - a dev latency simulator was left switched on, and it was never startup-only.
+  </p>
+  <div class="chips">
+    <span class="chip dng">bug: 6s on every request</span>
+    <span class="chip">server-only</span>
+    <span class="chip">+ production kill-switch</span>
+    <span class="chip">PR #32</span>
+  </div>
+
+  <h2>Root cause</h2>
+  <div class="card">
+    <p>
+      <code>server/.env</code> carried a stale <code>VIRLY_THROTTLE_MS=6000</code>, and the inline middleware in
+      <code>server/src/app.ts</code> applied it to <span class="bad">every</span> request - registered before all
+      <code>/api/*</code> routes, with no production guard. A trivial <code>GET /api/health</code> (no DB, no auth) measured
+      <span class="bad">6.01 s</span>. The task called it a "startup" throttle; the implementation was always global.
+    </p>
+<pre>// BEFORE - server/src/app.ts
+const throttleMs = Number(process.env.VIRLY_THROTTLE_MS) || 0;
+if (throttleMs > 0) {
+  app.use((_req, _res, next) =&gt; { setTimeout(next, throttleMs); });  // every request, no guard
+}</pre>
+  </div>
+
+  <h2>The fix</h2>
+  <ul>
+    <li><code>server/src/middleware/devThrottle.ts</code> (new): <code>resolveDevThrottleMs</code> centralizes the env read and
+      <strong>returns 0 when <code>NODE_ENV=production</code></strong> - a leftover value can never slow real traffic.
+      <code>warnDevThrottleActive</code> logs a loud boot warning while active. Unit-tested (5 cases).</li>
+    <li><code>app.ts</code> routes through the guarded module, in the same middleware position.</li>
+    <li>Deleted the live <code>VIRLY_THROTTLE_MS=6000</code> from local <code>server/.env</code>; documented the real
+      semantics in <code>server/.env.example</code> and <code>docs/configuration.md</code>.</li>
+  </ul>
+<pre>// AFTER
+const throttleMs = resolveDevThrottleMs({
+  VIRLY_THROTTLE_MS: process.env.VIRLY_THROTTLE_MS,
+  NODE_ENV: process.env.NODE_ENV
+});
+if (throttleMs &gt; 0) {
+  warnDevThrottleActive(throttleMs);
+  app.use(devThrottleMiddleware(throttleMs));
+}</pre>
+
+  <h2>Proof (timing GET /api/health)</h2>
+  <table>
+    <tr><th>Condition</th><th class="num">/api/health</th><th>Boot warning</th></tr>
+    <tr><td>Baseline (before fix)</td><td class="num bad">6013 ms</td><td>-</td></tr>
+    <tr><td>Throttle unset (after fix)</td><td class="num win">2-3 ms</td><td>none</td></tr>
+    <tr><td><code>VIRLY_THROTTLE_MS=1500</code></td><td class="num">~1503 ms</td><td>printed</td></tr>
+    <tr><td><code>NODE_ENV=production</code> + <code>=1500</code></td><td class="num win">2-3 ms</td><td>none (guard)</td></tr>
+  </table>
+  <p class="lede">
+    tsc clean; server suite 1804 passed (3 failures are pre-existing local-<code>.env</code> RAG config, green in CI);
+    client 640/640. No <code>docker-compose</code> file sets the variable - the trap has no other door.
+  </p>
+
+  <h2>Reference</h2>
+  <ul>
+    <li>Plan: <code>docs/planning/plans/2026-07-02-startup-throttle-fix.md</code></li>
+    <li>Config doc: <code>docs/configuration.md</code> (the <code>VIRLY_THROTTLE_MS</code> row)</li>
+  </ul>
+
+  <footer>Generated for branch <code>fix/startup-throttle-every-request</code> - 2026-07-02.</footer>
+</div>
+</body>
+</html>

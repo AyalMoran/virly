@@ -148,7 +148,7 @@ Added in PR #6 (RAG_PLAN.md M4). Risk scoring is always on (best-effort, post-co
 | `VIRLY_SERVER_URL` (`SERVER_URL`) | No | `http://localhost:3000` | `config.ts:206` | Used to construct verification email links and held-transfer confirmation links (`routes/transaction.routes.ts`) |
 | `VIRLY_CLIENT_URL` (`CLIENT_URL`) | No | `http://localhost:5173` | `config.ts:38`, `app.ts` | CORS origin; multiple comma-separated URLs are accepted |
 | `VIRLY_COOKIE_SAME_SITE` (`COOKIE_SAME_SITE`) | No | `none` in production, `lax` otherwise | `config.ts:23` | Uses the derived default; throws at boot if set to an invalid value |
-| `VIRLY_THROTTLE_MS` | No | — (off) | `app.ts:71` | Read directly from `process.env` (not via `config.ts`). When set to a positive integer, a dev middleware delays **every** response by that many ms — handy for previewing the client boot/loading splash against a slow API. Off unless present |
+| `VIRLY_THROTTLE_MS` | No | — (off) | `app.ts` | Read directly from `process.env` (not via `config.ts`). When set to a positive integer, a dev middleware delays **every** API response by that many ms - not only at boot, but on every request. Completely ignored when `NODE_ENV=production`. While active, the server prints a `[virly] VIRLY_THROTTLE_MS=... is active` warning at boot. Leave unset for normal development. |
 | `VIRLY_MCP_OPERATOR` | No | falls back to `USER`, then `"unknown"` | `mcp/support.ts:280` | Read directly from `process.env` (not via `config.ts`). Labels each entry in the Support MCP server's stderr audit log so customer-data reads are attributable to an operator. Only relevant when running `npm run mcp:support` |
 
 ---
@@ -253,6 +253,7 @@ The repo has **two** example files, with different roles:
 
 The required-variable acceptance criterion is satisfied by `server/.env.example`, which carries both required vars (`VIRLY_JWT_SECRET`, `VIRLY_POSTGRES_URL`).
 
-Optional variables omitted from `server/.env.example` (acceptable — all have safe defaults): `VIRLY_AI_GRAPH_VERSION`, `VIRLY_AI_DEBUG_TRACE`, `VIRLY_FX_PROVIDER`, `VIRLY_FX_API_KEY`, `VIRLY_FX_BASE_URL`, `VIRLY_FX_CACHE_TTL_HOURS`, `VIRLY_THROTTLE_MS` (dev-only latency simulator), and `VIRLY_MCP_OPERATOR` (Support MCP audit-log label). No variable present in either example file is unread by `server/src` runtime code.
+Optional variables omitted from `server/.env.example` (acceptable - all have safe defaults): `VIRLY_AI_GRAPH_VERSION`, `VIRLY_AI_DEBUG_TRACE`, `VIRLY_FX_PROVIDER`, `VIRLY_FX_API_KEY`, `VIRLY_FX_BASE_URL`, `VIRLY_FX_CACHE_TTL_HOURS`, and `VIRLY_MCP_OPERATOR` (Support MCP audit-log label).
+No variable present in either example file is unread by `server/src` runtime code.
 
 > Note: eval-only variables (`VIRLY_AI_EVAL_*`, `LANGSMITH_API_KEY`) are intentionally excluded from both example files because they are not part of the running server; they belong in CI or developer-local override files.
