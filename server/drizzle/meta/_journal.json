@@ -43,6 +43,13 @@
       "when": 1783080582286,
       "tag": "0005_contacts",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1788608108377,
+      "tag": "0006_activity_events",
+      "breakpoints": true
     }
   ]
 }

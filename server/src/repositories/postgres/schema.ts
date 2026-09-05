@@ -210,6 +210,21 @@ export const contacts = pgTable(
   ]
 );
 
+export const activityEvents = pgTable("activity_events", {
+  id: id(),
+  userId: char("user_id", { length: 24 }).notNull(),
+  kind: text("kind").notNull(), // "login" | "transfer" (CHECK in migration)
+  at: timestamp("at", { withTimezone: true }).notNull(),
+  ip: text("ip"),
+  geo: jsonb("geo"),
+  transactionId: char("transaction_id", { length: 24 }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt()
+}, (t) => [
+  index("activity_events_user_at_idx").on(t.userId, t.at)
+]);
+
 export const videoAuditLogs = pgTable("video_audit_logs", {
   id: id(),
   event: text("event").notNull(),

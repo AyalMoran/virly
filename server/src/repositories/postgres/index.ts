@@ -15,8 +15,9 @@ import { postgresVideoSessionRepository } from "./videoSession.repository.js";
 import { postgresVideoAuditLogRepository } from "./videoAuditLog.repository.js";
 import { postgresVerificationTokenRepository } from "./verificationToken.repository.js";
 import { postgresContactRepository } from "./contact.repository.js";
+import { postgresActivityEventRepository } from "./activityEvent.repository.js";
 
-/** Build the full Postgres-backed {@link Repositories} (all 11 entities). */
+/** Build the full Postgres-backed {@link Repositories} (all 12 entities). */
 export function createPostgresRepositories(_db?: PgDatabase): Repositories {
   return {
     users: postgresUserRepository,
@@ -31,6 +32,7 @@ export function createPostgresRepositories(_db?: PgDatabase): Repositories {
     videoAuditLogs: postgresVideoAuditLogRepository,
     verificationTokens: postgresVerificationTokenRepository,
     contacts: postgresContactRepository,
+    activityEvents: postgresActivityEventRepository,
     runInTransaction
   };
 }
