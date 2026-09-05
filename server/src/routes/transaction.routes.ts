@@ -318,7 +318,8 @@ router.post("/held/confirm", heldLimiter, async (req, res, next) => {
     if (!id || !token) {
       return res.status(400).type("html").send(htmlPage("Invalid", "<p>Missing id or token.</p>"));
     }
-    const result = await confirmHold(id, token);
+    const origin = resolveRequestOrigin(req);
+    const result = await confirmHold(id, token, { origin });
     const page = (code: number, title: string, msg: string) =>
       res.status(code).type("html").send(htmlPage(title, `<p>${esc(msg)}</p>`));
     switch (result.status) {

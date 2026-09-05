@@ -14,6 +14,7 @@ import { sql } from "drizzle-orm";
 
 import { config } from "../config.js";
 import { getAiDb } from "../db/vector.js";
+import type { RequestOrigin } from "../geo/types.js";
 import { newObjectId } from "../repositories/postgres/id.js";
 import { executeTransfer } from "../services/transfer.service.js";
 import type { RiskLevel } from "./risk.js";
@@ -33,6 +34,7 @@ export type TransferExecutor = (input: {
   amount: number;
   reason?: string | null;
   fx?: unknown;
+  origin?: RequestOrigin | null;
 }) => Promise<{ newBalance: number; transaction: { id?: string } }>;
 
 export type CreateHoldInput = {
@@ -187,7 +189,7 @@ export type ConfirmResult =
 export async function confirmHold(
   id: string,
   token: string,
-  opts: { execute?: TransferExecutor } = {}
+  opts: { execute?: TransferExecutor; origin?: RequestOrigin | null } = {}
 ): Promise<ConfirmResult> {
   await setupHoldsTable();
   const db = getAiDb();
@@ -228,7 +230,8 @@ export async function confirmHold(
       recipientEmail: claimed.recipient_email,
       amount: claimed.amount,
       reason: claimed.reason,
-      fx: coerceFx(claimed.fx)
+      fx: coerceFx(claimed.fx),
+      origin: opts.origin ?? null
     });
     executed = true;
     txId = result.transaction?.id ?? null;
