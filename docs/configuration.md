@@ -126,6 +126,7 @@ Added in the geo-activity-security spec (2026-07-09). Simulation resolves geo fr
 | `VIRLY_GEOIP_DB_PATH` | No | — (optional) | `config.ts` | Path to the local GeoLite2-City MaxMind database file |
 | `VIRLY_GEOIP_SIMULATION` | No | `false` | `config.ts` | Dev-only simulation of geo lookups from a request header; throws at boot if set in production |
 | `VIRLY_ACTIVITY_RETENTION_DAYS` | No | `180` (>= 1) | `config.ts` | How long activity/location records are retained; throws if less than 1 |
+| `VIRLY_MAXMIND_LICENSE_KEY` | No | — (unset) | `geo:sync` script only | Script-only: used only by `npm run geo:sync`, not read by `config.ts` |
 
 ### FX / Exchange rates
 
