@@ -754,3 +754,19 @@ export type Contact = {
 export type ContactsResponse = {
   contacts: Contact[];
 };
+
+export type ActivityEventDto = {
+  id: string;
+  kind: "login" | "transfer";
+  at: string;
+  city: string | null;
+  country: string | null;
+  lat: number | null;
+  lng: number | null;
+  transactionId: string | null;
+};
+
+export type ActivityResponse = {
+  events: ActivityEventDto[];
+  nextBefore: string | null;
+};
