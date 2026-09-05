@@ -33,6 +33,14 @@ export type ScoreTransferInput = {
   now?: Date;
   /** True when scoring AFTER the transfer's debit row already exists (post-commit). */
   alreadyExecuted?: boolean;
+  /**
+   * Id of THIS transfer's debit transaction, when it already exists (post-commit).
+   * The transfer's own activity event carries the same id and is the newest row in
+   * the user's history, so it must be excluded from the geo history — otherwise the
+   * transfer is compared against itself (travel speed ~0, its own country already
+   * "seen", home baseline polluted) and geo signals can never fire.
+   */
+  transactionId?: string;
   /** Request origin (IP + geo) for the geo-based fraud rules; absent -> geo rules stay silent. */
   origin?: RequestOrigin | null;
 };
@@ -48,7 +56,8 @@ const GEO_EVENT_LIMIT = 100;
 async function buildGeoSignals(
   userId: string,
   origin: RequestOrigin | null | undefined,
-  now: Date
+  now: Date,
+  excludeTransactionId?: string
 ): Promise<GeoRiskSignals | undefined> {
   if (!origin?.geo) return undefined;
   const windowStart = new Date(now.getTime() - GEO_WINDOW_DAYS * 24 * 60 * 60 * 1000);
@@ -59,7 +68,14 @@ async function buildGeoSignals(
     return undefined; // fail open: geo history unavailable
   }
   const located: LocatedEvent[] = events
-    .filter((e) => e.geo !== null && e.at >= windowStart && e.at <= now)
+    .filter(
+      (e) =>
+        e.geo !== null &&
+        e.at >= windowStart &&
+        e.at <= now &&
+        // Drop the event captured for THIS transfer (post-commit scoring).
+        !(excludeTransactionId !== undefined && e.transactionId === excludeTransactionId)
+    )
     .map((e) => ({ geo: e.geo!, at: e.at }));
   const current = { geo: origin.geo, at: now };
   const prev = located[0] ?? null; // listRecentByUser is newest-first
@@ -92,7 +108,7 @@ export async function scoreTransfer(input: ScoreTransferInput): Promise<RiskResu
     repos.transactions.hasDebitToCounterparty({ ownerId, counterpartyEmail }),
     repos.transactions.getDailyDebitUsage({ ownerId, ...dayWindow(now) }),
     repos.transactions.recentForOwner({ ownerId, type: "debit", limit: RECENT_DEBIT_LIMIT }),
-    buildGeoSignals(ownerId, input.origin, now)
+    buildGeoSignals(ownerId, input.origin, now, input.transactionId)
   ]);
 
   // When scoring post-commit, the newest debit IS this transfer — drop it so it
@@ -148,7 +164,7 @@ async function setupFlagsTable(): Promise<void> {
  * null if scoring itself failed.
  */
 export async function recordTransferRiskFlag(
-  input: ScoreTransferInput & { transactionId?: string }
+  input: ScoreTransferInput
 ): Promise<RiskResult | null> {
   let result: RiskResult;
   try {
