@@ -13,6 +13,7 @@
     "rag:generate": "drizzle-kit generate --config=drizzle.ai.config.ts",
     "rag:migrate": "tsx -e \"import('./src/db/vector.js').then(m => m.runAiMigrations()).then(() => process.exit(0))\"",
     "rag:sync": "tsx scripts/sync-knowledge-base.ts",
+    "geo:sync": "tsx scripts/geo-sync.ts",
     "eval:policy-rag": "tsx scripts/eval-policy-rag.ts",
     "mcp:support": "tsx scripts/mcp-support-server.ts",
     "fraud:ingest": "tsx scripts/fraud-ingest.ts",

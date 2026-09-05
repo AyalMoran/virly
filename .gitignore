@@ -14,6 +14,9 @@ client/vite.config.d.ts
 # Generated ML artifacts (scaler/model weights are fit from the user's dataset)
 server/artifacts/
 
+# Generated database files (GeoLite2-City.mmdb is downloaded via geo:sync)
+server/data/
+
 # Generated Graphify artifacts (graphify is a CLI tool for generating graph data about the codebase)
 graphify*
 
