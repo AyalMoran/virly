@@ -10,6 +10,7 @@ import { resolveRequestOrigin } from "../geo/request.js";
 import { recordActivityEventSafe } from "../services/activityEvent.service.js";
 import { evaluateLoginAlert } from "../services/loginAlert.js";
 import { getRepositories } from "../repositories/index.js";
+import type { ActivityEventRecord } from "../repositories/types.js";
 import { getRealtime } from "../realtime/registry.js";
 
 //#region Type Definitions
@@ -112,7 +113,15 @@ router.post("/login", async (req, res, next) => {
     // exclude - the just-logged-in tab hasn't connected its socket yet when
     // the emit fires, so in practice only other sessions see it.
     void (async () => {
-      const history = await getRepositories().activityEvents.listRecentByUser(user.id, { limit: 100 });
+      // The history read only feeds the alert heuristic; if it fails we still
+      // MUST write the event (spec: events are always written), so degrade to
+      // an empty history rather than skipping capture.
+      let history: ActivityEventRecord[] = [];
+      try {
+        history = await getRepositories().activityEvents.listRecentByUser(user.id, { limit: 100 });
+      } catch (error) {
+        console.error("login alert: activity history read failed", error);
+      }
       const at = new Date();
       await recordActivityEventSafe({ userId: user.id, kind: "login", origin, now: at });
       const reasons = evaluateLoginAlert({ geo: origin.geo, at }, history);

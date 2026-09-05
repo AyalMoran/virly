@@ -222,7 +222,11 @@ export const activityEvents = pgTable("activity_events", {
   createdAt: createdAt(),
   updatedAt: updatedAt()
 }, (t) => [
-  index("activity_events_user_at_idx").on(t.userId, t.at)
+  index("activity_events_user_at_idx").on(t.userId, t.at),
+  // Drives the retention sweep; declared here so a future drizzle-kit generate
+  // does not emit a migration dropping the index created by 0006.
+  index("activity_events_expires_at_idx").on(t.expiresAt),
+  check("activity_events_kind_check", sql`${t.kind} in ('login','transfer')`)
 ]);
 
 export const videoAuditLogs = pgTable("video_audit_logs", {
