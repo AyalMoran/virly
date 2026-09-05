@@ -33,9 +33,75 @@ export function realtimeUrl(): string {
   return import.meta.env?.VITE_API_BASE_URL ?? "http://localhost:3000";
 }
 
-export function connectRealtime(handlers: RealtimeHandlers): () => void {
+/**
+ * Subscriber registry, shared by every `connectRealtime` caller.
+ *
+ * socket.io multiplexes same-origin connections onto ONE underlying Socket, so
+ * a per-caller `socket.close()` used to tear down the connection for the whole
+ * app (visiting the dashboard killed the AppShell security toasts). The registry
+ * fans one frame out to all live subscribers and ref-counts the transport:
+ * it opens on the first subscriber and closes only when the last one leaves.
+ * Exported for tests; the socket factory is injectable so the registry logic is
+ * testable without a real transport.
+ */
+export type RealtimeTransport = {
+  on: (event: string, listener: (payload: unknown) => void) => void;
+  close: () => void;
+};
+
+/** One entry per `connectRealtime` call, so two callers passing the same handler
+ *  object still count as two subscribers. */
+type Subscription = { handlers: RealtimeHandlers };
+
+const subscribers = new Set<Subscription>();
+let transport: RealtimeTransport | null = null;
+
+function fanOut(event: string): (payload: unknown) => void {
+  // Snapshot: a handler may unsubscribe (or subscribe) while we dispatch.
+  return (payload) => {
+    for (const entry of [...subscribers]) {
+      if (subscribers.has(entry)) dispatchRealtimeEvent(event, payload, entry.handlers);
+    }
+  };
+}
+
+function defaultTransport(): RealtimeTransport {
   const socket: Socket = io(realtimeUrl(), { withCredentials: true });
-  socket.on("transfer:received", (p) => dispatchRealtimeEvent("transfer:received", p, handlers));
-  socket.on("security:new-login", (p) => dispatchRealtimeEvent("security:new-login", p, handlers));
-  return () => socket.close();
+  return {
+    on: (event, listener) => socket.on(event, listener),
+    close: () => socket.close()
+  };
+}
+
+/**
+ * Subscribe to realtime frames. Returns an unsubscribe function; the underlying
+ * socket is closed only once the last subscriber has unsubscribed.
+ */
+export function connectRealtime(
+  handlers: RealtimeHandlers,
+  createTransport: () => RealtimeTransport = defaultTransport
+): () => void {
+  const entry: Subscription = { handlers };
+  subscribers.add(entry);
+  if (!transport) {
+    transport = createTransport();
+    transport.on("transfer:received", fanOut("transfer:received"));
+    transport.on("security:new-login", fanOut("security:new-login"));
+  }
+  let done = false;
+  return () => {
+    if (done) return; // idempotent: a double-unsubscribe must not drop the refcount twice
+    done = true;
+    subscribers.delete(entry);
+    if (subscribers.size === 0 && transport) {
+      transport.close();
+      transport = null;
+    }
+  };
+}
+
+/** Test-only: drop all subscribers and the transport. */
+export function resetRealtimeForTests(): void {
+  subscribers.clear();
+  transport = null;
 }
