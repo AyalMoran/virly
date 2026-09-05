@@ -16,3 +16,26 @@ test("ignores unknown events", () => {
     dispatchRealtimeEvent("nope" as never, {}, { onTransferReceived: () => {} })
   ).not.toThrow();
 });
+
+test("security:new-login reaches its handler", () => {
+  const seen: unknown[] = [];
+  dispatchRealtimeEvent(
+    "security:new-login",
+    { city: "Paris", country: "FR", at: "2026-07-01T10:30:00.000Z", reasons: ["First activity from France."] },
+    {
+      onTransferReceived: () => {},
+      onSecurityNewLogin: (p) => seen.push(p)
+    }
+  );
+  expect(seen).toHaveLength(1);
+});
+
+test("security:new-login is a no-op when the handler is not provided", () => {
+  expect(() =>
+    dispatchRealtimeEvent(
+      "security:new-login",
+      { city: null, country: null, at: "2026-07-01T10:30:00.000Z", reasons: [] },
+      { onTransferReceived: () => {} }
+    )
+  ).not.toThrow();
+});

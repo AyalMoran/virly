@@ -3,6 +3,12 @@ import { io, type Socket } from "socket.io-client";
 
 export type RealtimeHandlers = {
   onTransferReceived: (payload: { amount: number; reason: string | null }) => void;
+  onSecurityNewLogin?: (payload: {
+    city: string | null;
+    country: string | null;
+    at: string;
+    reasons: string[];
+  }) => void;
 };
 
 /** Pure router so event dispatch is unit-testable without a live socket. */
@@ -13,6 +19,10 @@ export function dispatchRealtimeEvent(
 ): void {
   if (event === "transfer:received") {
     handlers.onTransferReceived(payload as { amount: number; reason: string | null });
+  } else if (event === "security:new-login") {
+    handlers.onSecurityNewLogin?.(
+      payload as { city: string | null; country: string | null; at: string; reasons: string[] }
+    );
   }
 }
 
@@ -26,5 +36,6 @@ export function realtimeUrl(): string {
 export function connectRealtime(handlers: RealtimeHandlers): () => void {
   const socket: Socket = io(realtimeUrl(), { withCredentials: true });
   socket.on("transfer:received", (p) => dispatchRealtimeEvent("transfer:received", p, handlers));
+  socket.on("security:new-login", (p) => dispatchRealtimeEvent("security:new-login", p, handlers));
   return () => socket.close();
 }

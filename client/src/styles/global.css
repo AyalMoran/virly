@@ -1508,6 +1508,20 @@ textarea::placeholder {
   color: var(--color-primary-deep);
 }
 
+.toast-stack {
+  position: fixed;
+  bottom: 1rem;
+  right: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  z-index: 50;
+}
+
+.toast {
+  box-shadow: var(--shadow, 0 4px 16px rgb(0 0 0 / 0.15));
+}
+
 .button {
   display: inline-flex;
   align-items: center;

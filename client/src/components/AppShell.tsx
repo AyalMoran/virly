@@ -17,11 +17,34 @@ import {
   Video
 } from "lucide-react";
 import { useAuth } from "../features/auth/AuthProvider";
+import { connectRealtime } from "../lib/realtime";
 import { hasAuthTransition } from "../lib/route-transition";
 import { getDisplayName, getUserAvatarUrl } from "../lib/user-avatar";
 import { FloatingChatWidget } from "./ui/floating-chat-widget-shadcnui";
 import { UserProfileSidebar } from "./ui/menu";
 import { ShellTopbar } from "./ShellTopbar";
+import { ToastHost, useToasts } from "./ToastHost";
+
+/**
+ * Lives INSIDE ToastHost so it can call useToasts(); mounted once per shell so
+ * the new-login alert fires on every authenticated page, not just Dashboard.
+ */
+function SecurityAlerts() {
+  const { pushToast } = useToasts();
+
+  useEffect(() => {
+    const disconnect = connectRealtime({
+      onTransferReceived: () => {},
+      onSecurityNewLogin: (payload) => {
+        const where = [payload.city, payload.country].filter(Boolean).join(", ") || "an unknown location";
+        pushToast(`New login from ${where}`, payload.reasons.join(" "));
+      }
+    });
+    return disconnect;
+  }, [pushToast]);
+
+  return null;
+}
 
 /**
  * Captures the outlet element at mount so the exiting copy keeps rendering
@@ -174,17 +197,20 @@ export function AppShell() {
           enteredFromAuth={enteredFromAuth}
         />
         <main className="page-frame">
-          <AnimatePresence mode="wait" initial={false}>
-            <motion.div
-              key={location.pathname}
-              initial={routeTransition.initial}
-              animate={routeTransition.animate}
-              exit={routeTransition.exit}
-              transition={routeTransition.transition}
-            >
-              <AnimatedOutlet />
-            </motion.div>
-          </AnimatePresence>
+          <ToastHost>
+            <SecurityAlerts />
+            <AnimatePresence mode="wait" initial={false}>
+              <motion.div
+                key={location.pathname}
+                initial={routeTransition.initial}
+                animate={routeTransition.animate}
+                exit={routeTransition.exit}
+                transition={routeTransition.transition}
+              >
+                <AnimatedOutlet />
+              </motion.div>
+            </AnimatePresence>
+          </ToastHost>
         </main>
       </motion.div>
 
