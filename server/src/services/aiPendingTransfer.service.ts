@@ -16,6 +16,7 @@ import {
   assertAiTransferWithinLimits,
   executeTransferWithSession,
   notifyTransferReceived,
+  recordTransferActivity,
   type ExecuteTransferResult
 } from "./transfer.service.js";
 import type { AiPendingTransferRecord, TxContext } from "../repositories/types.js";
@@ -773,6 +774,14 @@ export async function respondToAiPendingTransfer(
   // Post-commit, best-effort fraud flag + realtime notify — only when a transfer
   // actually executed (flag.value is set only on the money-moving path, never held).
   if (flag.value) {
+    // Capture FIRST (post-commit, outside the money tx) so the risk flag below
+    // scores against a history that already contains this transfer's event —
+    // which scoreTransfer excludes by transactionId.
+    await recordTransferActivity({
+      senderId: input.userId,
+      origin: input.origin,
+      transactionId: flag.value.transactionId ?? null
+    });
     await recordTransferRiskFlag({
       userId: input.userId,
       recipientEmail: flag.value.recipientEmail,

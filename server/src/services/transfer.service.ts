@@ -149,18 +149,39 @@ export async function executeTransferWithSession(
     throw new Error("Transfer failed.");
   }
 
-  if (input.origin) {
-    await recordActivityEventSafe(
-      { userId: sender.id, kind: "transfer", origin: input.origin, transactionId: senderTransaction.id },
-      tx
-    );
-  }
-
   return {
     message: "Transfer completed successfully.",
     newBalance: newSenderBalance,
     transaction: toTransactionDto(senderTransaction)
   };
+}
+
+/**
+ * Best-effort, POST-COMMIT capture of the sender's transfer activity event.
+ *
+ * Deliberately runs OUTSIDE the money transaction: on Postgres a failed insert
+ * aborts the enclosing transaction, so writing the (best-effort, swallowed)
+ * event with the money `tx` could silently turn a COMMIT into a ROLLBACK while
+ * the route still reported success. Every money-moving path calls this right
+ * after its transaction resolves, so capture stays at the transaction-boundary
+ * choke points and never alters the transfer result.
+ */
+export async function recordTransferActivity(input: {
+  senderId: string;
+  origin?: RequestOrigin | null;
+  transactionId?: string | null;
+}): Promise<void> {
+  if (!input.origin) return;
+  try {
+    await recordActivityEventSafe({
+      userId: input.senderId,
+      kind: "transfer",
+      origin: input.origin,
+      transactionId: input.transactionId ?? null
+    });
+  } catch {
+    /* best-effort: activity capture must never affect a completed transfer */
+  }
 }
 
 /**
@@ -194,6 +215,11 @@ export async function executeTransfer(
   const result = await getRepositories().runInTransaction(async (tx) =>
     executeTransferWithSession(input, tx)
   );
+  await recordTransferActivity({
+    senderId: input.senderId,
+    origin: input.origin,
+    transactionId: result.transaction.id
+  });
   await notifyTransferReceived(input);
   return result;
 }
