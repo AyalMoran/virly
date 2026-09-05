@@ -22,7 +22,7 @@ Snapshot date: **2026-07-02**. Regenerate the "Status" column from Todoist + `gi
 | `6h24RpJcM2XCJH2M` | Make users clickable with hover balloon / user card | `plans/2026-06-26-user-hover-card.md` | **Delivered** (PR #34, merged 2026-07-09) |
 | `6h24jj9pcF5FRVw3` | Author `policy-rag.examples.jsonl` for RAG recall eval | `plans/2026-07-01-policy-rag-eval-dataset.md` | **Delivered** (PR #38, merged 2026-07-09; recall@5 = 38/38) |
 | `6h249JvMvfXqrqvM` | "All transactions from a counterparty" returns only 3, not all | `plans/2026-07-01-counterparty-all-transactions-cap.md` | **Delivered** (PR #33, merged 2026-07-09) - root cause was `getTransactionsWithCounterparty` hardcoding `limit: 5` + omitting `metadata.transactions` |
-| `6h249Qj89VXWqGJv` | Emails masked only for the LLM, not for the user | - | Needs plan (design first) - masking is an intentional PII seam woven through the tool layer |
+| `6h249Qj89VXWqGJv` | Emails masked only for the LLM, not for the user | `plans/2026-07-01-user-facing-email-unmask.md` | **Planned** - unmask at the `streamAssistantV2` seam; the LLM-side leak is tracked separately as suggestion `6h2fFw9FVXh6rFX6` |
 | `6h249mpF4hMf9GFM` | Nicer summary card for counterparty summary (bento) | `plans/2026-07-02-counterparty-summary-block.md` | **Delivered** (PR #35, merged 2026-07-09) - new `counterparty_summary` block type + client bento card; no tool change |
 | `6h24Rj94qFXr7jHM` | SSE stream in Hebrew/English matching user language/persona | - | Needs plan (design first) - overlaps the language-switcher task |
 | `6h24RprvGp9m692v` | Add retry / stream arrival guarantee | - | Needs plan (design first) - also in `backlog.md` |
@@ -36,6 +36,7 @@ Snapshot date: **2026-07-02**. Regenerate the "Status" column from Todoist + `gi
 | `6gwM3WVJXHcX57Fv` | Add language switcher (Hebrew/English, whole site) | - | Needs plan (design first) - task itself asks to brainstorm scope (exclude heavy placeholder components?) |
 | `6gfGpV4GVwGxhjPM` | Add contacts and "recent" (להוסיף אנשי קשר ו-recent) | `plans/2026-07-02-saved-contacts.md` | **Delivered** (PR #40, merged 2026-07-09) - full repository-seam contacts (both drivers + contract tests) + transfer-page recipient book; recents stay derived |
 | `6gfGpmqghHHR55qM` | Add an option to request funds | - | Needs plan (design first) - new transfer direction; touches money-movement + HITL |
+| `6h4MgRp722JHXVhc` | Add geo activity security (GIS integration) | `plans/2026-07-09-geo-activity-security.md` | **Planned** - spec in `specs/2026-07-09-geo-activity-security-design.md`; 4 independently shippable phases |
 
 ## Study (section `study`, `6h2Vr7Qq6X5Q372c`)
 
@@ -59,9 +60,9 @@ Snapshot date: **2026-07-02**. Regenerate the "Status" column from Todoist + `gi
 
 ## Rollup
 
-- 19 tasks total: **10 delivered** (9 of them merged 2026-07-09 via PRs #32-#40), **7 need a plan**, **2 non-code**.
+- 20 tasks total: **10 delivered** (9 of them merged 2026-07-09 via PRs #32-#40), **2 planned** (email unmask, geo activity security), **6 need a plan**, **2 non-code**.
 - Only one "ready" task still lacks a plan: presentation docs (`6h2GwjjChx2vrxFc`).
-- "Design first" tasks (email masking, TOON, SSE language, retry guarantee, language switcher, request funds) should each get a `superpowers:brainstorming` spec in `specs/` before a plan.
+- "Design first" tasks (TOON, SSE language, retry guarantee, language switcher, request funds) should each get a `superpowers:brainstorming` spec in `specs/` before a plan.
 
 ## Suggestions
 
