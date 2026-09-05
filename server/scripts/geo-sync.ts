@@ -4,7 +4,7 @@
 // Requires VIRLY_MAXMIND_LICENSE_KEY (free MaxMind account). The tarball
 // contains a dated folder; we extract just the .mmdb into place.
 import { execFileSync } from "node:child_process";
-import { mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -33,7 +33,7 @@ async function main() {
   if (!extracted) throw new Error("Unexpected tarball layout: no GeoLite2-City_* folder.");
   const target = join(process.cwd(), "data");
   mkdirSync(target, { recursive: true });
-  renameSync(join(work, extracted, "GeoLite2-City.mmdb"), join(target, "GeoLite2-City.mmdb"));
+  copyFileSync(join(work, extracted, "GeoLite2-City.mmdb"), join(target, "GeoLite2-City.mmdb"));
   rmSync(work, { recursive: true, force: true });
   console.log(`Done: ${join(target, "GeoLite2-City.mmdb")}`);
   console.log("Set VIRLY_GEOIP_DB_PATH=./data/GeoLite2-City.mmdb in server/.env");
