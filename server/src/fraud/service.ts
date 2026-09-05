@@ -11,10 +11,20 @@ import { sql } from "drizzle-orm";
 
 import { config } from "../config.js";
 import { getAiDb } from "../db/vector.js";
+import type { RequestOrigin } from "../geo/types.js";
 import { getRepositories } from "../repositories/index.js";
 import { newObjectId } from "../repositories/postgres/id.js";
 import { knnAnomalyScore } from "./anomaly.js";
-import { computeRisk, type RiskResult } from "./risk.js";
+import {
+  GEO_WINDOW_DAYS,
+  HOME_MIN_EVENTS,
+  haversineKm,
+  homeBaseline,
+  isNewCountry,
+  travelSpeedKmh,
+  type LocatedEvent
+} from "./geo.js";
+import { computeRisk, type GeoRiskSignals, type RiskResult } from "./risk.js";
 
 export type ScoreTransferInput = {
   userId: string;
@@ -23,9 +33,46 @@ export type ScoreTransferInput = {
   now?: Date;
   /** True when scoring AFTER the transfer's debit row already exists (post-commit). */
   alreadyExecuted?: boolean;
+  /** Request origin (IP + geo) for the geo-based fraud rules; absent -> geo rules stay silent. */
+  origin?: RequestOrigin | null;
 };
 
 const RECENT_DEBIT_LIMIT = 50;
+const GEO_EVENT_LIMIT = 100;
+
+/**
+ * Derive geo-risk signals from the caller's origin + the user's recent located
+ * activity history. Fail-open: any repo error or missing/null origin geo
+ * returns undefined, and computeRisk treats an absent `geo` as "no signal".
+ */
+async function buildGeoSignals(
+  userId: string,
+  origin: RequestOrigin | null | undefined,
+  now: Date
+): Promise<GeoRiskSignals | undefined> {
+  if (!origin?.geo) return undefined;
+  const windowStart = new Date(now.getTime() - GEO_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+  let events;
+  try {
+    events = await getRepositories().activityEvents.listRecentByUser(userId, { limit: GEO_EVENT_LIMIT });
+  } catch {
+    return undefined; // fail open: geo history unavailable
+  }
+  const located: LocatedEvent[] = events
+    .filter((e) => e.geo !== null && e.at >= windowStart && e.at <= now)
+    .map((e) => ({ geo: e.geo!, at: e.at }));
+  const current = { geo: origin.geo, at: now };
+  const prev = located[0] ?? null; // listRecentByUser is newest-first
+  const home = homeBaseline(located, HOME_MIN_EVENTS);
+  return {
+    travelSpeedKmh: prev ? travelSpeedKmh(prev, current) : null,
+    distanceFromPrevKm: prev ? haversineKm(prev.geo, current.geo) : null,
+    minutesSincePrev: prev ? (now.getTime() - prev.at.getTime()) / 60_000 : null,
+    isNewCountry: isNewCountry(origin.geo.country, located),
+    distanceFromHomeKm: home ? haversineKm(home, current.geo) : null,
+    country: origin.geo.country
+  };
+}
 
 /** UTC day window [start, end) around `now` for the daily-usage signal. */
 function dayWindow(now: Date): { dayStart: Date; dayEnd: Date } {
@@ -41,10 +88,11 @@ export async function scoreTransfer(input: ScoreTransferInput): Promise<RiskResu
   const ownerId = input.userId;
   const counterpartyEmail = input.recipientEmail.trim().toLowerCase();
 
-  const [hasDebit, daily, recent] = await Promise.all([
+  const [hasDebit, daily, recent, geo] = await Promise.all([
     repos.transactions.hasDebitToCounterparty({ ownerId, counterpartyEmail }),
     repos.transactions.getDailyDebitUsage({ ownerId, ...dayWindow(now) }),
-    repos.transactions.recentForOwner({ ownerId, type: "debit", limit: RECENT_DEBIT_LIMIT })
+    repos.transactions.recentForOwner({ ownerId, type: "debit", limit: RECENT_DEBIT_LIMIT }),
+    buildGeoSignals(ownerId, input.origin, now)
   ]);
 
   // When scoring post-commit, the newest debit IS this transfer — drop it so it
@@ -65,7 +113,8 @@ export async function scoreTransfer(input: ScoreTransferInput): Promise<RiskResu
     dailyLimit: config.ai.dailyTransferLimit,
     projectedDailyTotal,
     recentDebitAmounts,
-    anomalyScore
+    anomalyScore,
+    geo
   });
 }
 

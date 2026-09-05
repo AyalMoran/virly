@@ -559,7 +559,8 @@ export async function respondToAiPendingTransfer(
           userId: input.userId,
           recipientEmail: owned.recipientEmail,
           amount: owned.amount,
-          alreadyExecuted: false
+          alreadyExecuted: false,
+          origin: input.origin
         });
         const sender = await repos.users.findById(input.userId);
         if (shouldHold(risk.level) && sender) {
@@ -777,7 +778,8 @@ export async function respondToAiPendingTransfer(
       recipientEmail: flag.value.recipientEmail,
       amount: flag.value.amount,
       transactionId: flag.value.transactionId,
-      alreadyExecuted: true
+      alreadyExecuted: true,
+      origin: input.origin
     });
     await notifyTransferReceived({
       recipientEmail: flag.value.recipientEmail,

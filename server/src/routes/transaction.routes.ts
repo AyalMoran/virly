@@ -20,6 +20,7 @@ import { sendTransferHoldEmail } from "../services/email.service.js";
 import { getRepositories } from "../repositories/index.js";
 import { config } from "../config.js";
 import { resolveRequestOrigin } from "../geo/request.js";
+import type { RequestOrigin } from "../geo/types.js";
 import { transactionQueryService } from "../services/transactionQuery.service.js";
 import { getPaginationMeta, parsePagination } from "../utils/pagination.js";
 import { toTransactionDto } from "../utils/transaction-dto.js";
@@ -175,7 +176,7 @@ router.post("/", requireAuth, async (req, res, next) => {
     // instead of executing it now. Scoring/holding failures degrade to a normal
     // (flagged) transfer — infra problems must never block a legitimate send.
     if (config.fraud.holdLevel !== "off") {
-      const held = await tryHoldTransfer(req.userId, parsed, amountIls, currency, fx);
+      const held = await tryHoldTransfer(req.userId, parsed, amountIls, currency, fx, origin);
       if (held) return res.status(202).json(held);
     }
 
@@ -194,7 +195,8 @@ router.post("/", requireAuth, async (req, res, next) => {
       recipientEmail: parsed.recipientEmail,
       amount: amountIls,
       transactionId: result.transaction.id,
-      alreadyExecuted: true
+      alreadyExecuted: true,
+      origin
     });
 
     return res.status(201).json(result);
@@ -213,7 +215,8 @@ async function tryHoldTransfer(
   parsed: z.infer<typeof transferSchema>,
   amountIls: number,
   currency: SupportedCurrency,
-  fx: TransferFxMetadata | null | undefined
+  fx: TransferFxMetadata | null | undefined,
+  origin: RequestOrigin | null
 ): Promise<Record<string, unknown> | null> {
   let risk;
   try {
@@ -221,7 +224,8 @@ async function tryHoldTransfer(
       userId,
       recipientEmail: parsed.recipientEmail,
       amount: amountIls,
-      alreadyExecuted: false
+      alreadyExecuted: false,
+      origin
     });
   } catch (error) {
     // Fail-open + logged: scoring failure degrades to a normal send (never block).
