@@ -194,6 +194,13 @@ if (fraudHoldLevel !== "off" && !aiPgUrl) {
   );
 }
 
+// Geo activity security (spec 2026-07-09). Simulation resolves geo from a dev
+// request header, so it MUST never be live in production.
+const geoSimulationEnabled = getBooleanEnv("VIRLY_GEOIP_SIMULATION", { defaultValue: false });
+if (isProduction && geoSimulationEnabled) {
+  throw new Error("VIRLY_GEOIP_SIMULATION must be off in production.");
+}
+
 export const config = {
   port: getIntEnv("VIRLY_PORT", {
     defaultValue: 3000,
@@ -336,5 +343,11 @@ export const config = {
       min: 1,
       max: 24 * 7
     })
+  },
+  geo: {
+    enabled: getBooleanEnv("VIRLY_GEO_ENABLED", { defaultValue: true }),
+    geoipDbPath: getOptionalStringEnv("VIRLY_GEOIP_DB_PATH"),
+    simulationEnabled: geoSimulationEnabled,
+    retentionDays: getIntEnv("VIRLY_ACTIVITY_RETENTION_DAYS", { defaultValue: 180, min: 1 })
   }
 };

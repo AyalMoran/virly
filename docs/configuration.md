@@ -116,6 +116,17 @@ Added in PR #6 (RAG_PLAN.md M4). Risk scoring is always on (best-effort, post-co
 | `VIRLY_FRAUD_HOLD_LEVEL` | No | `off` | `config.ts:182`, `routes/transaction.routes.ts`, `fraud/holds.ts` | `off` = flag only (no hold). `high`/`medium` = hold transfers at that risk level and above for email confirmation. Throws at boot on an invalid value, or when enabled with no AI Postgres URL |
 | `VIRLY_FRAUD_HOLD_EXPIRY_HOURS` | No | `24` (1–168) | `config.ts:316`, `fraud/holds.ts` | A held transfer's email-confirmation link stays valid for 24h; throws if outside `[1, 168]` |
 
+### Geo activity security
+
+Added in the geo-activity-security spec (2026-07-09). Simulation resolves geo from a dev request header, so it must never be live in production; boot throws if it is.
+
+| Variable | Required? | Default | Used by | Fails how if missing |
+|---|---|---|---|---|
+| `VIRLY_GEO_ENABLED` | No | `true` | `config.ts` | Feature flag for geo activity security |
+| `VIRLY_GEOIP_DB_PATH` | No | — (optional) | `config.ts` | Path to the local GeoLite2-City MaxMind database file |
+| `VIRLY_GEOIP_SIMULATION` | No | `false` | `config.ts` | Dev-only simulation of geo lookups from a request header; throws at boot if set in production |
+| `VIRLY_ACTIVITY_RETENTION_DAYS` | No | `180` (>= 1) | `config.ts` | How long activity/location records are retained; throws if less than 1 |
+
 ### FX / Exchange rates
 
 | Variable (aliases) | Required? | Default | Used by | Fails how if missing |
