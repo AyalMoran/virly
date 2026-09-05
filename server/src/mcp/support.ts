@@ -27,7 +27,7 @@ import type {
 } from "../ai/state.js";
 
 export type SupportToolDeps = {
-  repos: Pick<Repositories, "users">;
+  repos: Pick<Repositories, "users" | "activityEvents">;
   executors: AssistantToolExecutors;
   retrieve: typeof retrievePolicyDocs;
   listFraudFlags: typeof listFraudFlags;
@@ -187,6 +187,31 @@ export function createSupportTools(deps: SupportToolDeps): SupportTool[] {
             .join("\n")
         );
       }
+    },
+    {
+      name: "get_recent_activity",
+      description:
+        "List a customer's recent account activity (logins/transfers) with origin city/country, " +
+        "newest first. Read-only; for security triage.",
+      inputSchema: {
+        customerEmail: z.string().describe("The customer's email."),
+        limit: z.number().int().min(1).max(50).optional()
+      },
+      handler: async ({ customerEmail, limit }) =>
+        withCustomer(customerEmail, async (userId) => {
+          const events = await deps.repos.activityEvents.listRecentByUser(userId, {
+            limit: typeof limit === "number" ? limit : 20
+          });
+          if (events.length === 0) return ok("No recorded activity for this customer.");
+          return ok(
+            events
+              .map((e) => {
+                const where = e.geo ? [e.geo.city, e.geo.country].filter(Boolean).join(", ") : "unknown location";
+                return `${e.at.toISOString()} [${e.kind}] ${where}${e.transactionId ? ` tx=${e.transactionId}` : ""}`;
+              })
+              .join("\n")
+          );
+        })
     },
     {
       name: "list_held_transfers",
