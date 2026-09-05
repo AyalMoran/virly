@@ -6,6 +6,8 @@ import { personalDetailsService } from "../services/personalDetails.service.js";
 import { toAuthUserDto } from "../utils/personal-details.js";
 import { clearAuthCookies, setAuthCookies } from "../utils/session.js";
 import { requireAuth } from "../middleware/auth.js";
+import { resolveRequestOrigin } from "../geo/request.js";
+import { recordActivityEventSafe } from "../services/activityEvent.service.js";
 
 //#region Type Definitions
 
@@ -98,6 +100,10 @@ router.post("/login", async (req, res, next) => {
     const user = await authService.login({ email, password });
 
     const csrfToken = setAuthCookies(res, user.id, { rememberMe });
+
+    const origin = resolveRequestOrigin(req);
+    void recordActivityEventSafe({ userId: user.id, kind: "login", origin });
+
     return res.json(await createAuthResponse(user, csrfToken));
   } catch (error) {
     next(error);
