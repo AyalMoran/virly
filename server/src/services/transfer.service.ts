@@ -1,9 +1,11 @@
 import { config } from "../config.js";
+import type { RequestOrigin } from "../geo/types.js";
 import { getRepositories } from "../repositories/index.js";
 import { getRealtime } from "../realtime/registry.js";
 import type { TransactionRecord, TxContext } from "../repositories/types.js";
 import { AppError } from "../utils/app-error.js";
 import { toTransactionDto } from "../utils/transaction-dto.js";
+import { recordActivityEventSafe } from "./activityEvent.service.js";
 
 export type TransferFxMetadata = {
   enteredCurrency: "USD" | "EUR";
@@ -19,6 +21,7 @@ export type ExecuteTransferInput = {
   amount: number;
   reason?: string | null;
   fx?: TransferFxMetadata | null;
+  origin?: RequestOrigin | null;
 };
 
 export type ExecuteTransferResult = {
@@ -144,6 +147,13 @@ export async function executeTransferWithSession(
   const senderTransaction: TransactionRecord | undefined = createdTransactions[0];
   if (!senderTransaction) {
     throw new Error("Transfer failed.");
+  }
+
+  if (input.origin) {
+    await recordActivityEventSafe(
+      { userId: sender.id, kind: "transfer", origin: input.origin, transactionId: senderTransaction.id },
+      tx
+    );
   }
 
   return {

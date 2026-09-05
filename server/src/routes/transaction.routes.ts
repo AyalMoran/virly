@@ -19,6 +19,7 @@ import { cancelHold, confirmHold, createHold, shouldHold } from "../fraud/holds.
 import { sendTransferHoldEmail } from "../services/email.service.js";
 import { getRepositories } from "../repositories/index.js";
 import { config } from "../config.js";
+import { resolveRequestOrigin } from "../geo/request.js";
 import { transactionQueryService } from "../services/transactionQuery.service.js";
 import { getPaginationMeta, parsePagination } from "../utils/pagination.js";
 import { toTransactionDto } from "../utils/transaction-dto.js";
@@ -156,6 +157,7 @@ router.post("/", requireAuth, async (req, res, next) => {
       return res.status(401).json({ message: "Authentication required." });
     }
 
+    const origin = resolveRequestOrigin(req);
     const parsed = transferSchema.parse(req.body);
     const currency = assertSupportedCurrency(parsed.currency ?? "ILS");
 
@@ -182,7 +184,8 @@ router.post("/", requireAuth, async (req, res, next) => {
       recipientEmail: parsed.recipientEmail,
       amount: amountIls,
       reason: parsed.reason,
-      fx
+      fx,
+      origin
     });
 
     // Best-effort fraud flag (post-commit; never affects the transfer).

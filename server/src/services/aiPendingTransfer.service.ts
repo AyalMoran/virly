@@ -1,5 +1,6 @@
 import { getRepositories } from "../repositories/index.js";
 import { config } from "../config.js";
+import type { RequestOrigin } from "../geo/types.js";
 import { recordTransferRiskFlag, scoreTransfer } from "../fraud/service.js";
 import { cancelHold, createHold, shouldHold } from "../fraud/holds.js";
 import { sendTransferHoldEmail } from "./email.service.js";
@@ -480,6 +481,7 @@ export async function respondToAiPendingTransfer(
     action: AiConfirmationAction;
     version: number;
     idempotencyKey?: string;
+    origin?: RequestOrigin | null;
   }
 ): Promise<AiConfirmationResult> {
   const repos = getRepositories();
@@ -691,7 +693,8 @@ export async function respondToAiPendingTransfer(
         senderId: input.userId,
         recipientEmail: owned.recipientEmail,
         amount: owned.amount,
-        reason: owned.reason
+        reason: owned.reason,
+        origin: input.origin ?? null
       },
       tx
     );

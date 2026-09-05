@@ -15,6 +15,7 @@ import type { LangGraphRunnableConfig } from "@langchain/langgraph";
 
 import { maskEmail } from "../counterpartyMemory.js";
 import type { CommunicationProfile } from "../../domain/communicationProfile.js";
+import type { RequestOrigin } from "../../geo/types.js";
 import { getToolDisplayData } from "../toolResults.js";
 import type { AssistantId } from "../assistants.js";
 import type { AssistantResponseBlock } from "../responseBlocks.js";
@@ -65,6 +66,7 @@ export type V2Configurable = {
     action: "confirm" | "deny";
     version: number;
     idempotencyKey?: string;
+    origin?: RequestOrigin | null;
   }) => Promise<unknown>;
   /** The active pending confirmation card from memory, if a transfer is in flight. */
   pendingConfirmation?: PendingConfirmationMemory | null;
@@ -74,6 +76,8 @@ export type V2Configurable = {
   knownCounterparties: Array<{ email: string; label: string; aliases: string[] }>;
   /** Per-user communication style profile; undefined if not yet loaded or feature off. */
   communicationProfile?: CommunicationProfile;
+  /** Request origin (IP/geo) for the confirming request; threaded to activity capture (spec 2026-07-09). */
+  origin?: RequestOrigin | null;
 };
 
 export function getConfigurable(

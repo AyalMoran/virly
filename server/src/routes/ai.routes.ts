@@ -11,6 +11,7 @@ import {
   streamAssistantV2
 } from "../ai/v2/hitl.js";
 import { createConfiguredAssistantLlmProvider } from "../ai/llm.js";
+import { resolveRequestOrigin } from "../geo/request.js";
 import {
   buildVideoSessionCtaBlock,
   detectVideoSessionRequest
@@ -257,6 +258,7 @@ router.post("/confirmations/:id", requireAuth, async (req, res, next) => {
     const idempotencyHeader = req.header("idempotency-key")?.trim();
     const pendingTransferId = confirmationIdSchema.parse(req.params.id);
     const idempotencyKey = payload.idempotencyKey ?? idempotencyHeader;
+    const origin = resolveRequestOrigin(req);
 
     // v2: resume the checkpointed graph with the user's Confirm/Deny (the only
     // path to money execution). Falls back to the direct service if no paused
@@ -272,7 +274,8 @@ router.post("/confirmations/:id", requireAuth, async (req, res, next) => {
               action: payload.action,
               version: payload.version,
               idempotencyKey
-            }
+            },
+            origin
           });
           if (resumed) {
             return res.json(resumed);
@@ -295,7 +298,8 @@ router.post("/confirmations/:id", requireAuth, async (req, res, next) => {
       pendingTransferId,
       action: payload.action,
       version: payload.version,
-      idempotencyKey
+      idempotencyKey,
+      origin
     });
 
     return res.json(result);
