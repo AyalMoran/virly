@@ -17,8 +17,9 @@ import { useCurrency } from "../currency/CurrencyProvider";
 import type { PersonalDetails } from "../../lib/types";
 import { validateDateOfBirth, validateRequiredText } from "../../lib/validation";
 import { CommunicationProfileTab } from "./CommunicationProfileTab";
+import { SecurityTab } from "./SecurityTab";
 
-type SettingsTab = "profile" | "ai";
+type SettingsTab = "profile" | "ai" | "security";
 
 type DetailsForm = {
   firstName: string;
@@ -258,9 +259,19 @@ export function SettingsPage() {
         >
           AI Assistant
         </button>
+        <button
+          type="button"
+          className={`settings-tab${tab === "security" ? " settings-tab--active" : ""}`}
+          aria-current={tab === "security" ? "page" : undefined}
+          onClick={() => setTab("security")}
+        >
+          Security
+        </button>
       </nav>
       {tab === "ai" ? (
         <CommunicationProfileTab />
+      ) : tab === "security" ? (
+        <SecurityTab />
       ) : (
         <ResponsiveGrid className="settings-grid" variant="sidebar">
           <Card className="settings-details-card">

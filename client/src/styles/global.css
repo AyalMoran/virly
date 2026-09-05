@@ -2473,6 +2473,21 @@ textarea::placeholder {
   gap: 18px;
 }
 
+.security-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 18px;
+  align-items: start;
+}
+
+.map-placeholder {
+  border: 1px dashed var(--color-border);
+  border-radius: 8px;
+  padding: 24px;
+  color: var(--color-muted);
+  text-align: center;
+}
+
 .settings-card-header {
   display: flex;
   align-items: start;
@@ -2884,6 +2899,7 @@ dd {
   .video-layout,
   .agent-video-layout,
   .settings-grid,
+  .security-grid,
   .auth-page {
     grid-template-columns: 1fr;
   }
@@ -3222,7 +3238,8 @@ select {
 .transfer-layout,
 .video-layout,
 .agent-video-layout,
-.settings-grid {
+.settings-grid,
+.security-grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: var(--section-gap);
@@ -3758,7 +3775,8 @@ select {
 @media (min-width: 900px) {
   .responsive-grid-sidebar,
   .transfer-layout,
-  .settings-grid {
+  .settings-grid,
+  .security-grid {
     grid-template-columns: minmax(0, 1fr) minmax(280px, 340px);
   }
 
