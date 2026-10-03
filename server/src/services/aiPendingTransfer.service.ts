@@ -1,5 +1,6 @@
 import { getRepositories } from "../repositories/index.js";
 import { config } from "../config.js";
+import type { RequestOrigin } from "../geo/types.js";
 import { recordTransferRiskFlag, scoreTransfer } from "../fraud/service.js";
 import { cancelHold, createHold, shouldHold } from "../fraud/holds.js";
 import { sendTransferHoldEmail } from "./email.service.js";
@@ -15,6 +16,7 @@ import {
   assertAiTransferWithinLimits,
   executeTransferWithSession,
   notifyTransferReceived,
+  recordTransferActivity,
   type ExecuteTransferResult
 } from "./transfer.service.js";
 import type { AiPendingTransferRecord, TxContext } from "../repositories/types.js";
@@ -480,6 +482,7 @@ export async function respondToAiPendingTransfer(
     action: AiConfirmationAction;
     version: number;
     idempotencyKey?: string;
+    origin?: RequestOrigin | null;
   }
 ): Promise<AiConfirmationResult> {
   const repos = getRepositories();
@@ -557,7 +560,8 @@ export async function respondToAiPendingTransfer(
           userId: input.userId,
           recipientEmail: owned.recipientEmail,
           amount: owned.amount,
-          alreadyExecuted: false
+          alreadyExecuted: false,
+          origin: input.origin
         });
         const sender = await repos.users.findById(input.userId);
         if (shouldHold(risk.level) && sender) {
@@ -691,7 +695,8 @@ export async function respondToAiPendingTransfer(
         senderId: input.userId,
         recipientEmail: owned.recipientEmail,
         amount: owned.amount,
-        reason: owned.reason
+        reason: owned.reason,
+        origin: input.origin ?? null
       },
       tx
     );
@@ -769,12 +774,21 @@ export async function respondToAiPendingTransfer(
   // Post-commit, best-effort fraud flag + realtime notify — only when a transfer
   // actually executed (flag.value is set only on the money-moving path, never held).
   if (flag.value) {
+    // Capture FIRST (post-commit, outside the money tx) so the risk flag below
+    // scores against a history that already contains this transfer's event —
+    // which scoreTransfer excludes by transactionId.
+    await recordTransferActivity({
+      senderId: input.userId,
+      origin: input.origin,
+      transactionId: flag.value.transactionId ?? null
+    });
     await recordTransferRiskFlag({
       userId: input.userId,
       recipientEmail: flag.value.recipientEmail,
       amount: flag.value.amount,
       transactionId: flag.value.transactionId,
-      alreadyExecuted: true
+      alreadyExecuted: true,
+      origin: input.origin
     });
     await notifyTransferReceived({
       recipientEmail: flag.value.recipientEmail,

@@ -1,6 +1,6 @@
 import { createSupportTools, type SupportToolDeps } from "../support.js";
 import type { RuntimeToolResult, ToolContext } from "../../ai/state.js";
-import type { UserRecord } from "../../repositories/types.js";
+import type { ActivityEventRecord, UserRecord } from "../../repositories/types.js";
 
 function user(overrides: Partial<UserRecord> = {}): UserRecord {
   return {
@@ -34,6 +34,9 @@ function makeDeps(overrides: Partial<SupportToolDeps> = {}): {
       users: {
         findByEmail: async (email: string) => (email === "dan@example.com" ? user() : null),
         findById: async () => user()
+      },
+      activityEvents: {
+        listRecentByUser: async () => [] as ActivityEventRecord[]
       }
     } as unknown as SupportToolDeps["repos"],
     executors: new Proxy(
@@ -130,6 +133,43 @@ describe("support MCP tools", () => {
     });
     await tool(deps, "list_fraud_flags").handler({ customerEmail: "dan@example.com" });
     expect(received.userId).toBe("507f1f77bcf86cd799439011");
+  });
+
+  test("get_recent_activity resolves the customer and formats located events", async () => {
+    const { deps } = makeDeps({
+      repos: {
+        users: {
+          findByEmail: async (email: string) => (email === "dan@example.com" ? user() : null),
+          findById: async () => user()
+        },
+        activityEvents: {
+          listRecentByUser: async (userId: string, opts: { limit: number }) => {
+            expect(userId).toBe("507f1f77bcf86cd799439011");
+            expect(opts.limit).toBe(5);
+            return [
+              {
+                id: "6867f00000000000000000aa",
+                userId,
+                kind: "login" as const,
+                at: new Date("2026-07-01T10:00:00Z"),
+                ip: "203.0.113.7",
+                geo: { country: "IL", city: "Tel Aviv", lat: 32.0853, lng: 34.7818 },
+                transactionId: null,
+                expiresAt: new Date("2027-01-01T00:00:00Z"),
+                createdAt: new Date("2026-07-01T10:00:00Z"),
+                updatedAt: new Date("2026-07-01T10:00:00Z")
+              }
+            ];
+          }
+        }
+      } as unknown as SupportToolDeps["repos"]
+    });
+    const out = await tool(deps, "get_recent_activity").handler({
+      customerEmail: "dan@example.com",
+      limit: 5
+    });
+    expect(out.isError).toBeUndefined();
+    expect(out.content[0].text).toMatch(/\[login\] Tel Aviv, IL/);
   });
 
   test("list_held_transfers reports an empty result cleanly", async () => {

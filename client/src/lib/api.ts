@@ -1,5 +1,6 @@
 import type {
   AccountSummary,
+  ActivityResponse,
   AiConfirmationAction,
   AiConfirmationResponse,
   AiChatRequest,
@@ -491,5 +492,11 @@ export const api = {
     return request<void>(`/api/contacts/${encodeURIComponent(id)}`, {
       method: "DELETE"
     });
+  },
+  activity(params: { limit?: number; before?: string } = {}) {
+    const search = new URLSearchParams();
+    search.set("limit", String(params.limit ?? 20));
+    if (params.before) search.set("before", params.before);
+    return request<ActivityResponse>(`/api/users/me/activity?${search.toString()}`);
   }
 };

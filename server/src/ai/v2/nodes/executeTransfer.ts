@@ -28,7 +28,8 @@ export async function executeTransferNode(
     pendingTransferId: card.id,
     action: "confirm",
     version: state.resumeMeta?.version ?? card.version,
-    idempotencyKey: state.resumeMeta?.idempotencyKey
+    idempotencyKey: state.resumeMeta?.idempotencyKey,
+    origin: cfg.origin
   });
 
   // A high-risk transfer is held for email confirmation rather than executed —

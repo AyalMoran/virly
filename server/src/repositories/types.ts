@@ -214,6 +214,38 @@ export type VerificationTokenRecord = {
   updatedAt: Date;
 };
 
+export type ActivityEventGeo = {
+  country: string; // ISO 3166-1 alpha-2
+  city: string | null;
+  lat: number;
+  lng: number;
+};
+
+export type ActivityEventKind = "login" | "transfer";
+
+export type ActivityEventRecord = {
+  id: string;
+  userId: string;
+  kind: ActivityEventKind;
+  at: Date;
+  ip: string | null;
+  geo: ActivityEventGeo | null;
+  transactionId: string | null;
+  expiresAt: Date;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type ActivityEventCreateInput = {
+  userId: string;
+  kind: ActivityEventKind;
+  at: Date;
+  ip: string | null;
+  geo: ActivityEventGeo | null;
+  transactionId?: string | null;
+  expiresAt: Date;
+};
+
 export type ContactRecord = {
   id: string;
   ownerId: string;
@@ -401,6 +433,18 @@ export interface VerificationTokenRepository {
   deleteExpired(now: Date, tx?: TxContext): Promise<number>;
 }
 
+export interface ActivityEventRepository {
+  create(input: ActivityEventCreateInput, tx?: TxContext): Promise<ActivityEventRecord>;
+  /** Newest first by (at, id). `before` returns events strictly older than that instant. */
+  listRecentByUser(
+    userId: string,
+    opts: { limit: number; before?: Date },
+    tx?: TxContext
+  ): Promise<ActivityEventRecord[]>;
+  /** Delete all events with expiresAt < now; returns the count removed. */
+  deleteExpired(now: Date, tx?: TxContext): Promise<number>;
+}
+
 export interface Repositories {
   users: UserRepository;
   transactions: TransactionRepository;
@@ -414,5 +458,6 @@ export interface Repositories {
   videoAuditLogs: VideoAuditLogRepository;
   verificationTokens: VerificationTokenRepository;
   contacts: ContactRepository;
+  activityEvents: ActivityEventRepository;
   runInTransaction<T>(fn: (tx: TxContext) => Promise<T>): Promise<T>;
 }

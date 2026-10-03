@@ -210,6 +210,25 @@ export const contacts = pgTable(
   ]
 );
 
+export const activityEvents = pgTable("activity_events", {
+  id: id(),
+  userId: char("user_id", { length: 24 }).notNull(),
+  kind: text("kind").notNull(), // "login" | "transfer" (CHECK in migration)
+  at: timestamp("at", { withTimezone: true }).notNull(),
+  ip: text("ip"),
+  geo: jsonb("geo"),
+  transactionId: char("transaction_id", { length: 24 }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: createdAt(),
+  updatedAt: updatedAt()
+}, (t) => [
+  index("activity_events_user_at_idx").on(t.userId, t.at),
+  // Drives the retention sweep; declared here so a future drizzle-kit generate
+  // does not emit a migration dropping the index created by 0006.
+  index("activity_events_expires_at_idx").on(t.expiresAt),
+  check("activity_events_kind_check", sql`${t.kind} in ('login','transfer')`)
+]);
+
 export const videoAuditLogs = pgTable("video_audit_logs", {
   id: id(),
   event: text("event").notNull(),

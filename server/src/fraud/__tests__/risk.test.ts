@@ -1,4 +1,4 @@
-import { computeRisk, type RiskSignals } from "../risk.js";
+import { computeRisk, type RiskSignals, type GeoRiskSignals } from "../risk.js";
 
 function signals(overrides: Partial<RiskSignals> = {}): RiskSignals {
   return {
@@ -55,5 +55,73 @@ describe("computeRisk", () => {
     expect(r.score).toBeLessThanOrEqual(1);
     expect(r.score).toBeGreaterThanOrEqual(0);
     expect(r.level).toBe("high");
+  });
+});
+
+function geo(overrides: Partial<GeoRiskSignals> = {}): GeoRiskSignals {
+  return {
+    travelSpeedKmh: null,
+    isNewCountry: null,
+    distanceFromHomeKm: null,
+    distanceFromPrevKm: null,
+    minutesSincePrev: null,
+    country: null,
+    ...overrides
+  };
+}
+
+describe("computeRisk geo signals", () => {
+  test("no geo block leaves the score untouched (fail-open)", () => {
+    const r = computeRisk(signals());
+    expect(r.flags.impossibleTravel).toBe(false);
+    expect(r.flags.newCountry).toBe(false);
+    expect(r.flags.farFromHome).toBe(false);
+  });
+
+  test("all-null geo signals contribute nothing (fail-open)", () => {
+    const r = computeRisk(signals({ geo: geo() }));
+    expect(r.score).toBe(0);
+    expect(r.level).toBe("low");
+  });
+
+  test("impossible travel alone is medium with a distance/time reason", () => {
+    const r = computeRisk(
+      signals({ geo: geo({ travelSpeedKmh: 6580, distanceFromPrevKm: 3290, minutesSincePrev: 30 }) })
+    );
+    expect(r.flags.impossibleTravel).toBe(true);
+    expect(r.score).toBeCloseTo(0.45, 5);
+    expect(r.level).toBe("medium");
+    expect(r.reasons.some((m) => /~3,290 km/.test(m) && /30 minutes/.test(m))).toBeTruthy();
+  });
+
+  test("impossible travel + new country reaches high (hold threshold)", () => {
+    const r = computeRisk(
+      signals({
+        geo: geo({
+          travelSpeedKmh: 6580,
+          distanceFromPrevKm: 3290,
+          minutesSincePrev: 30,
+          isNewCountry: true,
+          country: "FR"
+        })
+      })
+    );
+    expect(r.score).toBeGreaterThanOrEqual(0.7);
+    expect(r.level).toBe("high");
+    expect(r.reasons.some((m) => /First activity from France|First activity from FR/.test(m))).toBeTruthy();
+  });
+
+  test("plausible flight speed does not flag", () => {
+    const r = computeRisk(signals({ geo: geo({ travelSpeedKmh: 700 }) }));
+    expect(r.flags.impossibleTravel).toBe(false);
+    expect(r.score).toBe(0);
+  });
+
+  test("far from home is a mild signal", () => {
+    const r = computeRisk(signals({ geo: geo({ distanceFromHomeKm: 800 }) }));
+    expect(r.flags.farFromHome).toBe(true);
+    expect(r.score).toBeCloseTo(0.1, 5);
+    expect(r.level).toBe("low");
+    expect(r.reasons.some((m) => /usual area/i.test(m))).toBeTruthy();
   });
 });

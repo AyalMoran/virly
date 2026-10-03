@@ -40,6 +40,7 @@ import type {
 
 import { config } from "../../config.js";
 import type { CommunicationProfile } from "../../domain/communicationProfile.js";
+import type { RequestOrigin } from "../../geo/types.js";
 import { communicationProfileService } from "../../services/communicationProfile.service.js";
 import { detectExplicitSignal, extractCommunicationSignal } from "./communicationProfileLearn.js";
 import { buildAgentNode } from "./agent.js";
@@ -446,6 +447,7 @@ export async function resumeV2Confirmation(
     userId: string;
     conversationId: string;
     payload: TransferResumePayload;
+    origin?: RequestOrigin | null;
   },
   graph: ResumableGraph = getResumableGraph()
 ): Promise<unknown> {
@@ -461,7 +463,8 @@ export async function resumeV2Confirmation(
     executors: readOnlyToolExecutors,
     transferResponseService: respondToAiPendingTransfer,
     turnOutcome: { uiBlocks: [] },
-    knownCounterparties: []
+    knownCounterparties: [],
+    origin: args.origin ?? null
   };
 
   // No post-turn learning here: resumeV2Confirmation carries an empty message

@@ -197,6 +197,11 @@ export function makeRepos(
       listForOwner: async () => [],
       deleteForOwner: noop as Repositories["contacts"]["deleteForOwner"]
     },
+    activityEvents: {
+      create: noop as Repositories["activityEvents"]["create"],
+      listRecentByUser: async () => [],
+      deleteExpired: noop as Repositories["activityEvents"]["deleteExpired"]
+    },
     runInTransaction: async (fn) => fn(undefined),
     ...overrides
   };

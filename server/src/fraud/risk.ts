@@ -20,6 +20,21 @@ export type RiskSignals = {
   recentDebitAmounts: number[];
   /** Unsupervised anomaly score in [0, 1] from knnAnomalyScore. */
   anomalyScore: number;
+  /** Optional geo-derived signals (spec 2026-07-09); absent/null fields fail open. */
+  geo?: GeoRiskSignals;
+};
+
+export type GeoRiskSignals = {
+  /** km/h vs the previous located event; null when unknown. */
+  travelSpeedKmh: number | null;
+  /** Country not seen in the trailing window; null when unknown/no history. */
+  isNewCountry: boolean | null;
+  /** km from the learned home; null when home undefined or location unknown. */
+  distanceFromHomeKm: number | null;
+  /** Display fields for reason copy. */
+  distanceFromPrevKm: number | null;
+  minutesSincePrev: number | null;
+  country: string | null;
 };
 
 export type RiskResult = {
@@ -34,6 +49,9 @@ export type RiskResult = {
     amountSpike: boolean;
     oddHour: boolean;
     anomalous: boolean;
+    impossibleTravel: boolean;
+    newCountry: boolean;
+    farFromHome: boolean;
   };
 };
 
@@ -42,12 +60,23 @@ const NEAR_DAILY_FRACTION = 0.9; // of the daily limit
 const SPIKE_SIGMAS = 3; // amount > mean + 3*std of recent debits
 const ODD_HOURS = new Set([0, 1, 2, 3, 4, 5]);
 const ANOMALY_FLAG_THRESHOLD = 0.6;
+// Duplicated from geo.ts on purpose: risk.ts stays pure/dependency-free and
+// must not import geo.ts. Keep these two constants in sync with geo.ts.
+const IMPOSSIBLE_TRAVEL_KMH = 900;
+const FAR_FROM_HOME_KM = 500;
 
 function mean(xs: number[]): number {
   return xs.reduce((s, x) => s + x, 0) / xs.length;
 }
 function std(xs: number[], m: number): number {
   return Math.sqrt(xs.reduce((s, x) => s + (x - m) * (x - m), 0) / xs.length);
+}
+function regionName(code: string): string {
+  try {
+    return new Intl.DisplayNames(["en"], { type: "region" }).of(code) ?? code;
+  } catch {
+    return code;
+  }
 }
 
 export function computeRisk(signals: RiskSignals): RiskResult {
@@ -100,6 +129,29 @@ export function computeRisk(signals: RiskSignals): RiskResult {
     reasons.push(`Pattern is unlike this user's normal transfers (anomaly ${signals.anomalyScore.toFixed(2)}).`);
   }
 
+  const g = signals.geo;
+  const impossibleTravel = (g?.travelSpeedKmh ?? 0) > IMPOSSIBLE_TRAVEL_KMH;
+  if (impossibleTravel && g) {
+    score += 0.45;
+    const km =
+      g.distanceFromPrevKm !== null ? `~${Math.round(g.distanceFromPrevKm).toLocaleString("en-US")} km` : "far";
+    const mins = g.minutesSincePrev !== null ? `${Math.round(g.minutesSincePrev)} minutes` : "moments";
+    reasons.push(`This transfer originates ${km} from your activity ${mins} ago.`);
+  }
+
+  const newCountry = g?.isNewCountry === true;
+  if (newCountry && g) {
+    score += 0.25;
+    const name = g.country ? regionName(g.country) : "a new country";
+    reasons.push(`First activity from ${name}.`);
+  }
+
+  const farFromHome = (g?.distanceFromHomeKm ?? 0) > FAR_FROM_HOME_KM;
+  if (farFromHome) {
+    score += 0.1;
+    reasons.push("Far from your usual area.");
+  }
+
   score = Math.min(1, Math.max(0, score));
   const level: RiskLevel = score >= 0.7 ? "high" : score >= 0.4 ? "medium" : "low";
 
@@ -107,6 +159,17 @@ export function computeRisk(signals: RiskSignals): RiskResult {
     score: Number(score.toFixed(4)),
     level,
     reasons,
-    flags: { newCounterparty, highAmount, nearDailyLimit, overDailyLimit, amountSpike, oddHour, anomalous }
+    flags: {
+      newCounterparty,
+      highAmount,
+      nearDailyLimit,
+      overDailyLimit,
+      amountSpike,
+      oddHour,
+      anomalous,
+      impossibleTravel,
+      newCountry,
+      farFromHome
+    }
   };
 }

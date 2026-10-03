@@ -1,6 +1,8 @@
 import { Router } from "express";
+import { z } from "zod";
 import { requireAuth } from "../middleware/auth.js";
 import { accountService } from "../services/account.service.js";
+import { listActivityForUser } from "../services/activityEvent.service.js";
 import { personalDetailsService } from "../services/personalDetails.service.js";
 import { transactionQueryService } from "../services/transactionQuery.service.js";
 import { getPaginationMeta, parsePagination } from "../utils/pagination.js";
@@ -13,6 +15,37 @@ import {
 } from "../utils/user-profile-dto.js";
 
 const router = Router();
+
+//#region Schemas
+const activityQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(50).default(20),
+  before: z.coerce.date().optional()
+});
+//#endregion
+
+// NOTE: registered ABOVE the `/:userId/*` routes below so `me` is matched
+// literally here and never swallowed by the `:userId` param routes.
+router.get("/me/activity", requireAuth, async (req, res, next) => {
+  try {
+    const { limit, before } = activityQuerySchema.parse(req.query);
+    const events = await listActivityForUser(req.userId!, { limit, before });
+    return res.json({
+      events: events.map((e) => ({
+        id: e.id,
+        kind: e.kind,
+        at: e.at.toISOString(),
+        city: e.geo?.city ?? null,
+        country: e.geo?.country ?? null,
+        lat: e.geo?.lat ?? null,
+        lng: e.geo?.lng ?? null,
+        transactionId: e.transactionId
+      })),
+      nextBefore: events.length === limit ? events[events.length - 1]!.at.toISOString() : null
+    });
+  } catch (error) {
+    next(error);
+  }
+});
 
 router.get("/:userId/profile", requireAuth, async (req, res, next) => {
   try {

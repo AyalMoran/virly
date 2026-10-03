@@ -107,6 +107,11 @@ export const SEARCH_POLICY_DOCS_DESC =
   "citations; ground your answer in them and cite by [number]. If nothing relevant " +
   "comes back, say you don't have that in the knowledge base — do NOT invent terms.";
 
+export const GET_RECENT_ACTIVITY_DESC =
+  "List the user's recent account activity (logins and transfers) with the city/country " +
+  "each originated from, newest first. Use for 'any logins from unusual places?', " +
+  "'where was I when I sent that transfer?', 'recent logins'. Read-only.";
+
 export const CANCEL_PENDING_TRANSFER_DESC =
   "Discard the active pending confirmation card (the user changed their mind before " +
   "confirming). Use for 'cancel that', 'never mind', 'תבטל'. This only drops the draft " +

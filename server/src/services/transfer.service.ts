@@ -1,9 +1,11 @@
 import { config } from "../config.js";
+import type { RequestOrigin } from "../geo/types.js";
 import { getRepositories } from "../repositories/index.js";
 import { getRealtime } from "../realtime/registry.js";
 import type { TransactionRecord, TxContext } from "../repositories/types.js";
 import { AppError } from "../utils/app-error.js";
 import { toTransactionDto } from "../utils/transaction-dto.js";
+import { recordActivityEventSafe } from "./activityEvent.service.js";
 
 export type TransferFxMetadata = {
   enteredCurrency: "USD" | "EUR";
@@ -19,6 +21,7 @@ export type ExecuteTransferInput = {
   amount: number;
   reason?: string | null;
   fx?: TransferFxMetadata | null;
+  origin?: RequestOrigin | null;
 };
 
 export type ExecuteTransferResult = {
@@ -154,6 +157,34 @@ export async function executeTransferWithSession(
 }
 
 /**
+ * Best-effort, POST-COMMIT capture of the sender's transfer activity event.
+ *
+ * Deliberately runs OUTSIDE the money transaction: on Postgres a failed insert
+ * aborts the enclosing transaction, so writing the (best-effort, swallowed)
+ * event with the money `tx` could silently turn a COMMIT into a ROLLBACK while
+ * the route still reported success. Every money-moving path calls this right
+ * after its transaction resolves, so capture stays at the transaction-boundary
+ * choke points and never alters the transfer result.
+ */
+export async function recordTransferActivity(input: {
+  senderId: string;
+  origin?: RequestOrigin | null;
+  transactionId?: string | null;
+}): Promise<void> {
+  if (!input.origin) return;
+  try {
+    await recordActivityEventSafe({
+      userId: input.senderId,
+      kind: "transfer",
+      origin: input.origin,
+      transactionId: input.transactionId ?? null
+    });
+  } catch {
+    /* best-effort: activity capture must never affect a completed transfer */
+  }
+}
+
+/**
  * Best-effort, post-commit realtime notify of the recipient. Shared by every
  * money-moving path (UI route, fraud-hold release, AI-confirmed) so notification
  * coverage is centralized. A realtime failure must never affect the transfer.
@@ -184,6 +215,11 @@ export async function executeTransfer(
   const result = await getRepositories().runInTransaction(async (tx) =>
     executeTransferWithSession(input, tx)
   );
+  await recordTransferActivity({
+    senderId: input.senderId,
+    origin: input.origin,
+    transactionId: result.transaction.id
+  });
   await notifyTransferReceived(input);
   return result;
 }

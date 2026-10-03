@@ -352,6 +352,46 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /api/users/me/activity:
+    get:
+      tags:
+        - Account
+      summary: List the current user's recent activity (logins and transfers)
+      description: |
+        Cursor-paginated audit trail of the authenticated user's own login and
+        transfer events, newest first. City-level geo only - the raw IP
+        address is never returned.
+      security:
+        - cookieAuth: []
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 50
+            default: 20
+          description: Maximum number of events to return
+        - in: query
+          name: before
+          schema:
+            type: string
+            format: date-time
+          description: Return events strictly older than this instant (from the previous page's `nextBefore`)
+      responses:
+        '200':
+          description: Recent activity events
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityResponse'
+        '401':
+          description: Missing or invalid auth cookie
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /api/transactions:
     get:
       tags:
@@ -1349,6 +1389,71 @@ components:
             $ref: '#/components/schemas/Transaction'
         pagination:
           $ref: '#/components/schemas/Pagination'
+
+    ActivityEvent:
+      type: object
+      required:
+        - id
+        - kind
+        - at
+        - city
+        - country
+        - lat
+        - lng
+        - transactionId
+      properties:
+        id:
+          type: string
+          example: 6630c4b2e93e5f6c8a321099
+        kind:
+          type: string
+          enum:
+            - login
+            - transfer
+          example: login
+        at:
+          type: string
+          format: date-time
+          example: "2026-07-09T08:00:00.000Z"
+        city:
+          type: string
+          nullable: true
+          example: Tel Aviv
+        country:
+          type: string
+          nullable: true
+          description: ISO country code
+          example: IL
+        lat:
+          type: number
+          format: double
+          nullable: true
+          example: 32.0853
+        lng:
+          type: number
+          format: double
+          nullable: true
+          example: 34.7818
+        transactionId:
+          type: string
+          nullable: true
+          example: null
+
+    ActivityResponse:
+      type: object
+      required:
+        - events
+        - nextBefore
+      properties:
+        events:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityEvent'
+        nextBefore:
+          type: string
+          format: date-time
+          nullable: true
+          description: Pass as `before` to fetch the next page; null when there are no more events.
 
     TransferRequest:
       type: object
