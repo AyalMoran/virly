@@ -1,5 +1,9 @@
 # Virly
 
+<p align="center">
+  <img src="docs/assets/virly-logo-website-hires.png" alt="Virly logo with the website's shader background" width="600" />
+</p>
+
 **A full-stack banking MVP with an AI assistant that can actually move your money.**
 
 Virly is a React + Express monorepo that looks and behaves like a modern fintech app — complete with a LangGraph-powered AI agent, FX-aware transfers, Jitsi video sessions, and a human-in-the-loop confirmation flow before any transfer executes.
